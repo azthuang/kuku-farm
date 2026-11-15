@@ -106,7 +106,8 @@ export function startApp(root: HTMLElement): void {
   }
 
   async function onAnswer(value: number): Promise<void> {
-    if (busy || game.mode === null) {
+    if (busy) return; // feedback is showing; the next showQuestion unlocks the numpad
+    if (game.mode === null) {
       panel.numpad.setLocked(false);
       return;
     }
@@ -117,30 +118,36 @@ export function startApp(root: HTMLElement): void {
     }
     busy = true;
     const my = epoch;
-    save();
-
-    if (r.kind === 'correct') {
-      const product = r.q.a * r.q.b;
-      panel.showCorrect(r.q, product);
-      say(chantText(r.q.a, r.q.b));
-      await scene.playHarvest(r);
-      if (my !== epoch) return;
-      layout.updateHud(game.state);
-      layout.bumpCrop(r.crop);
-      if (r.unlockedRow !== null) {
-        say('解鎖了！');
-        layout.toast(`🎉 解鎖了！${CROP_BY_ROW[r.unlockedRow].emoji} ${CROP_BY_ROW[r.unlockedRow].name}`);
-        await scene.playUnlock(r.unlockedRow);
+    try {
+      save();
+      if (r.kind === 'correct') {
+        const product = r.q.a * r.q.b;
+        panel.showCorrect(r.q, product);
+        say(chantText(r.q.a, r.q.b));
+        await scene.playHarvest(r);
+        if (my !== epoch) return;
+        layout.updateHud(game.state);
+        if (r.amount > 0) layout.bumpCrop(r.crop);
+        if (r.unlockedRow !== null) {
+          say('解鎖了！');
+          layout.toast(`🎉 解鎖了！${CROP_BY_ROW[r.unlockedRow].emoji} ${CROP_BY_ROW[r.unlockedRow].name}`);
+          await scene.playUnlock(r.unlockedRow);
+          if (my !== epoch) return;
+        }
+      } else {
+        panel.showWrong(r.q, r.correctAnswer);
+        say('是' + chantText(r.q.a, r.q.b));
+        await Promise.all([scene.playWrong(r.q), delay(WRONG_PAUSE_MS)]);
         if (my !== epoch) return;
       }
-    } else {
-      panel.showWrong(r.q, r.correctAnswer);
-      say('是' + chantText(r.q.a, r.q.b));
-      await Promise.all([scene.playWrong(r.q), delay(WRONG_PAUSE_MS)]);
-      if (my !== epoch) return;
+    } catch (e) {
+      console.error(e); // fall through and restore the UI below
+    } finally {
+      // Exit/import reset busy themselves and bump the epoch; don't clobber a newer round.
+      if (my === epoch) busy = false;
     }
+    if (my !== epoch) return;
 
-    busy = false;
     scene.render(game);
     if (game.mode === null) {
       const { total } = game.progress();

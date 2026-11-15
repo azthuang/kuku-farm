@@ -116,7 +116,7 @@ export class FieldScene extends Phaser.Scene {
     for (let a = 1; a <= 9; a++) {
       const open = this.revealed.has(a);
       const d = this.rows[a];
-      this.tweens.killTweensOf(d.lock);
+      this.tweens.killTweensOf([d.lock, d.label]);
       d.lock.setVisible(!open).setAlpha(1).setScale(INV).setAngle(0);
       d.label.setAlpha(open ? 1 : 0.45);
     }
