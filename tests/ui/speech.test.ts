@@ -154,6 +154,19 @@ describe('createSpeech', () => {
     expect(await state(p)).toBe('done');
   });
 
+  it('sayAndWait restarts its maxMs window when the utterance actually starts (cold engine)', async () => {
+    vi.useFakeTimers();
+    const fake = fakeSynth([{ lang: 'zh-TW', name: 'c' }]);
+    const sp = createSpeech(fake as any, true);
+    const p = sp.sayAndWait('九九八十一', 3000);
+    vi.advanceTimersByTime(2000);                 // engine slow to start
+    fake.last().onstart?.();
+    vi.advanceTimersByTime(2999);                 // 4999ms after speak(), 2999ms after start
+    expect(await state(p)).toBe('pending');
+    vi.advanceTimersByTime(1);
+    expect(await state(p)).toBe('done');
+  });
+
   it('sayAndWait resolves immediately when disabled, without a synth, or without a voice', async () => {
     const off = fakeSynth([{ lang: 'zh-TW', name: 'c' }]);
     expect(await state(createSpeech(off as any, false).sayAndWait('x', 3000))).toBe('done');

@@ -1,4 +1,4 @@
-import { CROP_BY_ROW, unlockedRows, type CropId } from '../core/levels';
+import { CROP_BY_ROW, LEVEL_ORDER, unlockedRows, type CropId } from '../core/levels';
 import type { GameState } from '../core/state';
 
 /** Save files are a few KB; anything this large is not ours. */
@@ -83,7 +83,8 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
       counts.set(c.id, n);
     }
     cropsEl.scrollLeft = scrollLeft;
-    levelEl.textContent = `Lv.${st.unlocked}`;
+    const newest = LEVEL_ORDER[st.unlocked - 1];
+    levelEl.textContent = newest === 1 ? '教學' : `${newest} 級`;
     speech.checked = st.settings.speech;
   }
 

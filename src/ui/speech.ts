@@ -90,9 +90,15 @@ export function createSpeech(synth: SpeechSynthesis | undefined, enabled: boolea
       live.delete(u);
       onDone(ok);
     };
-    const timer = setTimeout(() => finish(false), maxMs);
+    let timer = setTimeout(() => finish(false), maxMs);
     live.add(u);
-    u.onstart = () => { unlocked = true; if (doneOnStart) finish(true); };
+    u.onstart = () => {
+      unlocked = true;
+      if (doneOnStart) { finish(true); return; }
+      // A cold speech engine can take seconds to start; give the utterance its full time from
+      // when it actually starts speaking so chants are not cut off on the first answers.
+      if (!finished) { clearTimeout(timer); timer = setTimeout(() => finish(false), maxMs); }
+    };
     u.onend = () => finish(true);
     u.onerror = () => finish(false);
     return () => finish(false);
