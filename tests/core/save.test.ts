@@ -3,6 +3,7 @@ import { createNewState } from '../../src/core/state';
 import {
   SAVE_KEY, CORRUPT_KEY, serialize, parseSave, loadFrom, saveTo, exportFileName,
 } from '../../src/core/save';
+import { Game } from '../../src/core/game';
 
 function memoryStorage() {
   const m = new Map<string, string>();
@@ -71,6 +72,18 @@ describe('save', () => {
     mem.setItem(SAVE_KEY, '{broken');
     expect(loadFrom(mem)).toBeNull();
     expect(mem.getItem(CORRUPT_KEY)).toBe('{broken');
+  });
+
+  it('deduplicates cleared lists so repeated entries cannot unlock a row', () => {
+    const s = createNewState(0);
+    (s.cleared as Record<number, number[]>)[1] = [1, 1, 1, 1, 1, 1, 1, 1, 1];
+    const r = parseSave(serialize(s));
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.state.cleared[1]).toEqual([1]);
+    const g = new Game(r.state, { now: () => 0 }, () => 0.99);
+    g.startBasic(1);
+    expect(g.answer(1)).toMatchObject({ kind: 'correct', unlockedRow: null });
+    expect(g.state.unlocked).toBe(1);
   });
 
   it('loadFrom never throws', () => {

@@ -26,4 +26,25 @@ describe('field', () => {
     expect(rebaseClock(t, 5_000)).toBe(false);
     expect(t.lastSeenAt).toBe(5_000);
   });
+
+  it('clamps far-future growing timestamps so a cell ripens within one regrow', () => {
+    const now = 1_000_000;
+    const tenYears = 10 * 365 * 24 * 3600 * 1000;
+    const s = createNewState(now);
+    s.growing['3,4'] = now + tenYears;
+    refreshGrowing(s, now);
+    expect(s.growing['3,4']).toBe(now + 300_000);
+    expect(isRipe(s, 3, 4, now + 300_000)).toBe(true);
+  });
+
+  it('rebaseClock also clamps far-future timestamps', () => {
+    const s = createNewState(10_000);
+    s.lastSeenAt = 10_000;
+    s.growing['1,1'] = 10_000 + 10 * 365 * 24 * 3600 * 1000;
+    rebaseClock(s, 4_000);
+    expect(msUntilRipe(s, 1, 1, 4_000)).toBe(300_000);
+    s.growing['1,2'] = 5_000 + 10 * 365 * 24 * 3600 * 1000;
+    rebaseClock(s, 5_000); // clock did not go backwards
+    expect(msUntilRipe(s, 1, 2, 5_000)).toBe(300_000);
+  });
 });

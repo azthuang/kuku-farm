@@ -96,4 +96,25 @@ describe('Game', () => {
     t = 4_000 + 300_000; g.resume();
     expect(g.state.growing['1,1']).toBeUndefined();
   });
+  it('resume 會把遠在未來的生長時間拉回 5 分鐘內', () => {
+    const t = 50_000;
+    const g = new Game(createNewState(t), { now: () => t }, () => 0.99);
+    g.state.growing['1,1'] = t + 10 * 365 * 24 * 3600 * 1000;
+    g.resume();
+    expect(g.msUntilNextRipe(1)).toBe(0); // other cells are ripe
+    expect(isRipe(g.state, 1, 1, t + 300_000)).toBe(true);
+  });
+  it('第 9 級是最後一級：清完最後一列不再解鎖', () => {
+    const g = newGame();
+    g.state.unlocked = 9;
+    expect(g.startBasic(9)).toEqual({ a: 9, b: 1 });
+    let last: ReturnType<Game['answer']> = null;
+    for (let b = 1; b <= 9; b++) {
+      last = g.answer(9 * b);
+      expect(last).toMatchObject({ kind: 'correct', unlockedRow: null });
+    }
+    expect(g.state.cleared[9]).toHaveLength(9);
+    expect(g.state.unlocked).toBe(9);
+    expect(last).toMatchObject({ next: null });
+  });
 });

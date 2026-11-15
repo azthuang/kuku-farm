@@ -71,7 +71,7 @@ function validate(data: unknown): GameState {
     const v = cIn[k];
     if (!ROW_KEY.test(k) || !Array.isArray(v)) fail();
     if (!v.every((x) => isIntIn(x, 1, 9))) fail();
-    cleared[Number(k)] = [...(v as number[])];
+    cleared[Number(k)] = [...new Set(v as number[])]; // duplicates must not count toward unlocking
   }
 
   const sIn = rec(o.settings);

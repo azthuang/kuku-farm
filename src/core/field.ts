@@ -14,9 +14,11 @@ export function harvestCell(s: GameState, a: number, b: number, now: number): vo
   s.growing[cellKey(a, b)] = now + REGROW_MS;
 }
 
+/** Drops ripe cells; clamps any timestamp beyond one regrow from now (bad import, clock jump). */
 export function refreshGrowing(s: GameState, now: number): void {
   for (const key of Object.keys(s.growing)) {
     if (now >= s.growing[key]) delete s.growing[key];
+    else s.growing[key] = Math.min(s.growing[key], now + REGROW_MS);
   }
 }
 
@@ -26,6 +28,9 @@ export function rebaseClock(s: GameState, now: number): boolean {
   if (rewound) {
     const diff = s.lastSeenAt - now;
     for (const key of Object.keys(s.growing)) s.growing[key] -= diff;
+  }
+  for (const key of Object.keys(s.growing)) {
+    s.growing[key] = Math.min(s.growing[key], now + REGROW_MS);
   }
   s.lastSeenAt = now;
   return rewound;
