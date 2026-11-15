@@ -1,6 +1,9 @@
 import { CROP_BY_ROW, unlockedRows, type CropId } from '../core/levels';
 import type { GameState } from '../core/state';
 
+/** Save files are a few KB; anything this large is not ours. */
+const MAX_IMPORT_BYTES = 1024 * 1024;
+
 export interface Layout {
   stage: HTMLElement;
   panel: HTMLElement;
@@ -42,7 +45,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
           <label class="set-row"><span>🔊 語音</span><input type="checkbox" class="set-speech" /></label>
           <button type="button" class="set-btn set-export">💾 匯出存檔</button>
           <label class="set-btn set-import">📂 匯入存檔
-            <input type="file" accept="application/json" class="set-file" hidden />
+            <input type="file" accept=".json,application/json" class="set-file" hidden />
           </label>
           <button type="button" class="set-btn set-close">關閉</button>
         </div>
@@ -63,6 +66,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   const counts = new Map<CropId, HTMLElement>();
 
   function updateHud(st: GameState): void {
+    const scrollLeft = cropsEl.scrollLeft; // replaceChildren() would snap the strip back to the start
     cropsEl.replaceChildren();
     counts.clear();
     for (const r of unlockedRows(st.unlocked)) {
@@ -78,6 +82,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
       cropsEl.appendChild(item);
       counts.set(c.id, n);
     }
+    cropsEl.scrollLeft = scrollLeft;
     levelEl.textContent = `Lv.${st.unlocked}`;
     speech.checked = st.settings.speech;
   }
@@ -85,6 +90,8 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   function bumpCrop(id: CropId): void {
     const n = counts.get(id);
     if (!n) return;
+    // The strip scrolls at narrow widths: bring the counter into view first.
+    n.parentElement?.scrollIntoView?.({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
     n.classList.remove('bump');
     void n.offsetWidth;
     n.classList.add('bump');
@@ -109,8 +116,15 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   file.addEventListener('change', async () => {
     const f = file.files?.[0];
     if (!f) return;
-    const text = await f.text();
-    file.value = '';
+    // '' fails validation, so read errors and oversized files get the same 「檔案無法讀取」 toast.
+    let text = '';
+    try {
+      if (f.size <= MAX_IMPORT_BYTES) text = await f.text();
+    } catch {
+      text = '';
+    } finally {
+      file.value = ''; // allow picking the same file again
+    }
     importCb(text);
   });
 
