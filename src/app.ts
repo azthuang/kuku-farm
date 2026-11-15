@@ -7,6 +7,7 @@ import { exportFileName, loadFrom, parseSave, saveTo, serialize } from './core/s
 import { systemClock, systemRng } from './core/clock';
 import { chantText, questionText } from './core/chant';
 import { createLayout } from './ui/layout';
+import { createSpeech } from './ui/speech';
 import { createPanel } from './ui/panel';
 import { formatMs } from './ui/format';
 import { FieldScene, VIEW } from './scenes/FieldScene';
@@ -26,12 +27,19 @@ export function startApp(root: HTMLElement): void {
   const clock = systemClock;
   const rng = systemRng;
 
-  // Speech seam: Task 9 replaces this no-op with the zh-TW speech module.
-  const say = (_text: string): void => {};
-
   const store = storage();
   let game = new Game((store && loadFrom(store)) ?? createNewState(clock.now()), clock, rng);
   game.resume();
+
+  const speech = createSpeech(
+    typeof window !== 'undefined' ? window.speechSynthesis : undefined,
+    game.state.settings.speech,
+  );
+  const say = (text: string): void => speech.say(text);
+  // Browsers only allow speech after a user gesture: unlock on the first tap.
+  document.addEventListener('pointerdown', () => speech.unlock(), { once: true, passive: true });
+  // Ask the browser not to evict our save data; ignore the outcome.
+  try { void navigator.storage?.persist?.()?.catch(() => {}); } catch { /* ignore */ }
 
   const layout = createLayout(root, game.state);
   const panel = createPanel(layout.panel);
@@ -184,6 +192,7 @@ export function startApp(root: HTMLElement): void {
 
   layout.onSpeechToggle(on => {
     game.state.settings.speech = on;
+    speech.setEnabled(on);
     save();
   });
 
@@ -211,6 +220,7 @@ export function startApp(root: HTMLElement): void {
     busy = false;
     game = new Game(r.state, clock, rng);
     game.resume();
+    speech.setEnabled(game.state.settings.speech);
     save();
     scene.render(game);
     layout.updateHud(game.state);
