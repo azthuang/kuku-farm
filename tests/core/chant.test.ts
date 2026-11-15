@@ -3,7 +3,9 @@ import { questionText, chantText, toChineseNumber } from '../../src/core/chant';
 
 describe('chant', () => {
   it('questionText', () => {
-    expect(questionText(2, 3)).toBe('二乘三');
+    // 「乘」是破音字，語音引擎常念成 shèng；朗讀文字改用同音的「成」
+    expect(questionText(2, 3)).toBe('二成三');
+    expect(questionText(9, 9)).not.toContain('乘');
   });
   it('chantText', () => {
     expect(chantText(1, 1)).toBe('一一得一');

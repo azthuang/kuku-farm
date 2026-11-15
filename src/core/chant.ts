@@ -9,8 +9,12 @@ export function toChineseNumber(n: number): string {
   return DIGITS[tens] + '十' + DIGITS[ones];
 }
 
+/**
+ * Spoken question. 乘 is a polyphone that TTS voices often read as shèng, so the spoken
+ * text uses the homophone 成 (chéng). Only for speech; never display this string.
+ */
 export function questionText(a: number, b: number): string {
-  return `${toChineseNumber(a)}乘${toChineseNumber(b)}`;
+  return `${toChineseNumber(a)}成${toChineseNumber(b)}`;
 }
 
 export function chantText(a: number, b: number): string {
