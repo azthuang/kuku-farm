@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Game, type AnswerResult, type Question } from './core/game';
+import { CHALLENGE_MAX, Game, type AnswerResult, type Question } from './core/game';
 import { createNewState } from './core/state';
 import { CROP_BY_ROW, unlockedRows } from './core/levels';
 import type { Mode } from './core/mastery';
@@ -14,6 +14,11 @@ import { FieldScene, VIEW } from './scenes/FieldScene';
 import { ASSET_RES } from './scenes/assets';
 
 const WRONG_PAUSE_MS = 2500;
+/** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
+const CHANT_WAIT_MS = 3000;
+const WRONG_CHANT_WAIT_MS = 3500;
+/** Exported blob URLs stay valid long enough for slow mobile download sheets. */
+const EXPORT_URL_TTL_MS = 40_000;
 const HINT: Record<Mode, string> = { basic: '點一列開始', challenge: '準備好了就開始！' };
 
 const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -36,8 +41,16 @@ export function startApp(root: HTMLElement): void {
     game.state.settings.speech,
   );
   const say = (text: string): void => speech.say(text);
-  // Browsers only allow speech after a user gesture: unlock on the first tap.
-  document.addEventListener('pointerdown', () => speech.unlock(), { once: true, passive: true });
+  // Browsers only allow speech after a user gesture. A touch pointerdown is not a user
+  // activation on iOS, so unlock on pointerup / touchend / click, and keep trying on later
+  // gestures until an utterance has actually started.
+  const UNLOCK_EVENTS = ['pointerup', 'touchend', 'click'] as const;
+  const tryUnlock = (): void => {
+    void speech.unlock().then(done => {
+      if (done) UNLOCK_EVENTS.forEach(t => document.removeEventListener(t, tryUnlock, true));
+    });
+  };
+  UNLOCK_EVENTS.forEach(t => document.addEventListener(t, tryUnlock, { capture: true, passive: true }));
   // Ask the browser not to evict our save data; ignore the outcome.
   try { void navigator.storage?.persist?.()?.catch(() => {}); } catch { /* ignore */ }
 
@@ -131,21 +144,29 @@ export function startApp(root: HTMLElement): void {
       if (r.kind === 'correct') {
         const product = r.q.a * r.q.b;
         panel.showCorrect(r.q, product);
-        say(chantText(r.q.a, r.q.b));
-        await scene.playHarvest(r);
+        // Let the chant finish before the next question's say() cancels it.
+        await Promise.all([
+          scene.playHarvest(r),
+          speech.sayAndWait(chantText(r.q.a, r.q.b), CHANT_WAIT_MS),
+        ]);
         if (my !== epoch) return;
         layout.updateHud(game.state);
         if (r.amount > 0) layout.bumpCrop(r.crop);
         if (r.unlockedRow !== null) {
-          say('解鎖了！');
           layout.toast(`🎉 解鎖了！${CROP_BY_ROW[r.unlockedRow].emoji} ${CROP_BY_ROW[r.unlockedRow].name}`);
-          await scene.playUnlock(r.unlockedRow);
+          await Promise.all([
+            scene.playUnlock(r.unlockedRow),
+            speech.sayAndWait('解鎖了！', CHANT_WAIT_MS),
+          ]);
           if (my !== epoch) return;
         }
       } else {
         panel.showWrong(r.q, r.correctAnswer);
-        say('是' + chantText(r.q.a, r.q.b));
-        await Promise.all([scene.playWrong(r.q), delay(WRONG_PAUSE_MS)]);
+        await Promise.all([
+          scene.playWrong(r.q),
+          delay(WRONG_PAUSE_MS),
+          speech.sayAndWait('是' + chantText(r.q.a, r.q.b), WRONG_CHANT_WAIT_MS),
+        ]);
         if (my !== epoch) return;
       }
     } catch (e) {
@@ -170,6 +191,7 @@ export function startApp(root: HTMLElement): void {
     game.endRound();
     epoch++;
     busy = false;
+    speech.cancel();
     scene.render(game);
     layout.updateHud(game.state);
     showIdle();
@@ -187,7 +209,12 @@ export function startApp(root: HTMLElement): void {
   });
   panel.onStartChallenge(() => {
     if (busy || game.mode !== null) return;
-    if (!beginRound(game.startChallenge())) layout.toast('作物還在長大');
+    if (!beginRound(game.startChallenge())) {
+      layout.toast('作物還在長大');
+    } else if (game.progress().total < CHALLENGE_MAX) {
+      // Spec 5.5: a short challenge round still starts, but tell the child why it is short.
+      layout.toast('作物還在長大');
+    }
   });
 
   layout.onSpeechToggle(on => {
@@ -206,7 +233,7 @@ export function startApp(root: HTMLElement): void {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), EXPORT_URL_TTL_MS);
   });
 
   layout.onImport(text => {
@@ -218,6 +245,7 @@ export function startApp(root: HTMLElement): void {
     if (game.mode !== null) game.endRound();
     epoch++;
     busy = false;
+    speech.cancel();
     game = new Game(r.state, clock, rng);
     game.resume();
     speech.setEnabled(game.state.settings.speech);

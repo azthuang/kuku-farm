@@ -11,7 +11,7 @@ export type AnswerResult =
       golden: boolean; points: number; unlockedRow: number | null; next: Question | null }
   | { kind: 'wrong'; q: Question; correctAnswer: number; next: Question };
 
-const CHALLENGE_MAX = 10;
+export const CHALLENGE_MAX = 10;
 
 function localDateKey(ms: number): string {
   const d = new Date(ms);
