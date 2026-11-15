@@ -144,14 +144,15 @@ export function startApp(root: HTMLElement): void {
       if (r.kind === 'correct') {
         const product = r.q.a * r.q.b;
         panel.showCorrect(r.q, product);
-        // Let the chant finish before the next question's say() cancels it.
-        await Promise.all([
-          scene.playHarvest(r),
-          speech.sayAndWait(chantText(r.q.a, r.q.b), CHANT_WAIT_MS),
-        ]);
+        // Let the chant finish before the next question's say() cancels it, but bump the HUD as
+        // soon as the crop lands. Same end time as Promise.all([playHarvest, chant]).
+        const chantDone = speech.sayAndWait(chantText(r.q.a, r.q.b), CHANT_WAIT_MS);
+        await scene.playHarvest(r);
         if (my !== epoch) return;
         layout.updateHud(game.state);
         if (r.amount > 0) layout.bumpCrop(r.crop);
+        await chantDone;
+        if (my !== epoch) return;
         if (r.unlockedRow !== null) {
           layout.toast(`🎉 解鎖了！${CROP_BY_ROW[r.unlockedRow].emoji} ${CROP_BY_ROW[r.unlockedRow].name}`);
           await Promise.all([
