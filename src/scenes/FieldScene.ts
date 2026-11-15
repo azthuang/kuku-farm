@@ -16,11 +16,18 @@ const GRID_X = 56;
 const GRID_Y = 56;
 const INV = 1 / ASSET_RES;
 const CROP_SCALE = INV * 0.86;
-const SPROUT_SCALE = INV * 0.85;
 const BASE_DY = 12;       // crop pivot (its base) below the cell centre
 const CROP_DY = -19;      // crop image centre above its pivot
-const SPROUT_DY = -15;
-const BOTTOM_DY = 19;     // stars / countdown line below the cell centre
+const BOTTOM_DY = 19;     // ripe cells: stars line below the cell centre
+const STAR_SCALE = INV * 0.8;
+const STAR_GAP = 16;
+// Growing cells show sprout, m:ss and small stars together (spec 5.6: every cell shows its stars).
+const SPROUT_SCALE = INV * 0.72;
+const SPROUT_DY = -22;    // sprout sits higher to make room for the two lines below
+const GROW_TIMER_DY = 6;  // m:ss line, below the cell centre
+const GROW_STAR_DY = 23;  // small stars line, at the bottom of the plot
+const GROW_STAR_SCALE = INV * 0.66;
+const GROW_STAR_GAP = 13;
 const GOLD = 0xffc83d;
 const FAINT = 0xfff3d6;
 const FONT = '"Arial Rounded MT Bold","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
@@ -151,6 +158,7 @@ export class FieldScene extends Phaser.Scene {
 
     // The cell is already harvested in the state: swap to a sprout that pops up.
     this.setView(c, 'growing');
+    this.setStars(c, starsOf(r.points));
     this.syncTimer(c);
     c.wrap.setScale(0);
     this.tweens.add({ targets: c.wrap, scaleX: 1, scaleY: 1, delay: 380, duration: 420, ease: 'Back.Out' });
@@ -327,7 +335,7 @@ export class FieldScene extends Phaser.Scene {
         this.sparkles.explode(5, c.x, c.baseY + CROP_DY);
       }
     }
-    if (view === 'ripe') {
+    if (view !== 'locked') {
       const stars = starsOf(s.mastery[cellKey(c.a, c.b)] ?? 0);
       if (stars !== c.starCount || view !== prev) this.setStars(c, stars);
     }
@@ -361,12 +369,16 @@ export class FieldScene extends Phaser.Scene {
     if (view === 'ripe') {
       c.crop.setTexture(ASSETS.crop[CROP_BY_ROW[c.a].id]).setScale(CROP_SCALE).setY(CROP_DY);
       c.timer.setVisible(false);
-      for (const st of c.stars) st.setVisible(true);
+      this.placeStars(c, BOTTOM_DY, STAR_GAP, STAR_SCALE);
     } else {
       c.crop.setTexture(ASSETS.sprout).setScale(SPROUT_SCALE).setY(SPROUT_DY);
-      c.timer.setVisible(true);
-      for (const st of c.stars) st.setVisible(false);
+      c.timer.setY(c.y + GROW_TIMER_DY).setVisible(true);
+      this.placeStars(c, GROW_STAR_DY, GROW_STAR_GAP, GROW_STAR_SCALE);
     }
+  }
+
+  private placeStars(c: Cell, dy: number, gap: number, scale: number): void {
+    c.stars.forEach((st, i) => st.setPosition(c.x + (i - 1) * gap, c.y + dy).setScale(scale).setVisible(true));
   }
 
   private setStars(c: Cell, n: number): void {
@@ -416,8 +428,8 @@ export class FieldScene extends Phaser.Scene {
         const crop = this.add.image(0, CROP_DY, ASSETS.sprout).setScale(CROP_SCALE);
         const wrap = this.add.container(x, baseY, [crop]).setDepth(2).setVisible(false);
         const stars = [-1, 0, 1].map(i =>
-          this.add.image(x + i * 16, cy + BOTTOM_DY, ASSETS.star).setScale(INV * 0.8).setDepth(3).setVisible(false));
-        const timer = this.add.text(x, cy + BOTTOM_DY, '', textStyle(17, '#ffffff', '#6b4226', 4))
+          this.add.image(x + i * STAR_GAP, cy + BOTTOM_DY, ASSETS.star).setScale(STAR_SCALE).setDepth(3).setVisible(false));
+        const timer = this.add.text(x, cy + GROW_TIMER_DY, '', textStyle(17, '#ffffff', '#6b4226', 4))
           .setOrigin(0.5).setDepth(3).setVisible(false);
         this.cells[a][b] = {
           a, b, x, y: cy, baseY, plot, wrap, crop, stars, timer,
