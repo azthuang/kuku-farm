@@ -90,7 +90,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 
 /* Stage */
 .stage-wrap { flex: 1 1 0; min-height: 0; position: relative; display: flex; }
-.stage { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--grass); }
+.stage { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--grass); }
+.stage canvas { display: block; touch-action: manipulation; }
 .stage-wrap.show-ranch .stage { visibility: hidden; }
 .ranch {
   position: absolute; inset: 0;
