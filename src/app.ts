@@ -442,6 +442,10 @@ export function startApp(root: HTMLElement): void {
       ranchChanged();
       sfx.play('cluck');
     },
+    onIdleCluck: () => {
+      // The scene only runs on the ranch tab; the guard also covers a hidden page.
+      if (tab === 'ranch' && document.visibilityState === 'visible') sfx.ambient('cluck');
+    },
   });
   ranchScene.render(game.state.ranch);
   ranchUi.update(game.state);

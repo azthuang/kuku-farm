@@ -2,17 +2,26 @@ export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope';
 
 export interface Sfx {
   play(name: SfxName): void;
+  /**
+   * A soft background sound (an idle cluck). Only on an already running context: never creates
+   * one, and never queues up while suspended to burst out together on resume.
+   */
+  ambient(name: SfxName): void;
   unlock(): void;
   setEnabled(on: boolean): void;
 }
 
 const MAX_GAIN = 0.15;
+/** Ambient sounds play at this fraction of the normal level. */
+const AMBIENT_LEVEL = 0.35;
 
 /** Short synthesized WebAudio sounds. Silent (never throws) without audio or when disabled. */
 export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolean): Sfx {
   let on = enabled;
   let ctx: AudioContext | null = null;
   let tried = false;
+  /** Gain multiplier for the sound being played (1, or AMBIENT_LEVEL). */
+  let level = 1;
 
   function getCtx(): AudioContext | null {
     if (!on) return null;
@@ -34,7 +43,7 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
     osc.frequency.setValueAtTime(f0, t);
     if (f1 !== f0) osc.frequency.linearRampToValueAtTime(f1, t + dur);
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(gain, t + 0.015);
+    g.gain.linearRampToValueAtTime(gain * level, t + 0.015);
     g.gain.linearRampToValueAtTime(0, t + dur);
     osc.connect(g);
     g.connect(c.destination);
@@ -55,7 +64,7 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
     filt.frequency.linearRampToValueAtTime(2600, t + 0.22);
     const g = c.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.1, t + 0.06);
+    g.gain.linearRampToValueAtTime(0.1 * level, t + 0.06);
     g.gain.linearRampToValueAtTime(0, t + 0.24);
     src.connect(filt);
     filt.connect(g);
@@ -71,6 +80,18 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
   function play(name: SfxName): void {
     const c = getCtx();
     if (!c) return;
+    level = 1;
+    emit(c, name);
+  }
+
+  function ambient(name: SfxName): void {
+    if (!on || !ctx || (ctx.state as string) !== 'running') return;
+    level = AMBIENT_LEVEL;
+    emit(ctx, name);
+    level = 1;
+  }
+
+  function emit(c: AudioContext, name: SfxName): void {
     try {
       const t = c.currentTime;
       switch (name) {
@@ -114,6 +135,7 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
 
   return {
     play,
+    ambient,
     unlock,
     setEnabled(v: boolean) {
       on = v;

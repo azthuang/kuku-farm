@@ -76,6 +76,29 @@ describe('createSfx', () => {
     expect(calls.maxGain).toBeLessThanOrEqual(0.2);
   });
 
+  it('ambient plays softly, only on a running context, and never creates one', () => {
+    const factory = vi.fn(() => fakeCtx().ctx);
+    createSfx(factory, true).ambient('cluck');
+    expect(factory).not.toHaveBeenCalled();
+
+    const { ctx, calls } = fakeCtx();
+    const sfx = createSfx(() => ctx, true);
+    sfx.unlock(); // creates the (suspended) context
+    sfx.ambient('cluck');
+    expect(calls.osc).toBe(0); // would otherwise queue and burst out on resume
+    (ctx as unknown as { state: string }).state = 'running';
+    sfx.ambient('cluck');
+    expect(calls.osc).toBeGreaterThan(0);
+    const soft = calls.maxGain;
+    sfx.play('cluck');
+    expect(soft).toBeGreaterThan(0);
+    expect(calls.maxGain).toBeGreaterThan(soft * 2);
+    sfx.setEnabled(false);
+    const before = calls.osc;
+    sfx.ambient('cluck');
+    expect(calls.osc).toBe(before);
+  });
+
   it('unlock resumes a suspended context', () => {
     const { ctx, calls } = fakeCtx();
     const sfx = createSfx(() => ctx, true);

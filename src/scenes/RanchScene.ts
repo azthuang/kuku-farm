@@ -65,15 +65,20 @@ const TEX = {
 /** Emoji images are baked at EMOJI_PX texture pixels; scale = wanted world size / EMOJI_PX. */
 const EMOJI_PX = 80;
 const SIZE = { egg: 30, poop: 32, icon: 34, pop: 34, fly: 36 };
-/** Tag centre above the feet (standing / lying sick). */
-const TAG_DY = 82;
-const TAG_DY_LYING = 62;
+/**
+ * Tag centre above the feet (standing / lying sick). The standing sprite reaches ~62–70 above the
+ * feet; the tag's hit box (TAG_DY − TAG_H/2 − TAG_HIT_PAD) must stay clear of the comb.
+ */
+const TAG_DY = 92;
+const TAG_DY_LYING = 70;
 /** Body centre above the feet (hit tests and effects). */
 const BODY_DY = 32;
 const HIT = { egg: 40, poop: 38, animal: 56 };
 /** Name pill height and the extra margin around it that still counts as a tag tap. */
 const TAG_H = 30;
-const TAG_HIT_PAD = 6;
+const TAG_HIT_PAD = 2;
+/** Range of the gap between two ambient clucks across the whole ranch (scene running time). */
+const CLUCK_MS = { min: 20_000, max: 40_000 };
 
 type Img = Phaser.GameObjects.Image;
 type FxKind = 'jump' | 'eat' | 'brush' | 'treat' | 'heal' | 'weak' | 'shake';
@@ -85,6 +90,8 @@ export interface RanchHandlers {
   onLot(lot: number): void;
   /** The name tag was tapped (rename). */
   onTag(animalId: string): void;
+  /** A healthy chicken clucks on its own now and then (at most one every CLUCK_MS, ranch-wide). */
+  onIdleCluck?(animalId: string): void;
 }
 
 /**
@@ -204,6 +211,8 @@ export class RanchScene extends Phaser.Scene {
   private tappedPoop: Img | null = null;
   private pending = new Set<() => void>();
   private sparkles!: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** Running-time ms until the next ambient cluck; only counts down while the scene updates. */
+  private cluckIn = 0;
 
   constructor() {
     super({ key: 'ranch' });
@@ -232,6 +241,7 @@ export class RanchScene extends Phaser.Scene {
     this.animalList = [];
     this.lots = [];
     this.tappedPoop = null;
+    this.cluckIn = rand(CLUCK_MS.min, CLUCK_MS.max);
 
     makePlaceholderTextures(this);
     this.makeChickenTextures();
@@ -265,6 +275,23 @@ export class RanchScene extends Phaser.Scene {
     const dt = Math.min(delta, 100) / 1000;
     const list = this.animalList;
     for (let i = 0; i < list.length; i++) this.step(list[i], time, dt);
+    this.cluckIn -= dt * 1000;
+    if (this.cluckIn <= 0) {
+      this.cluckIn = rand(CLUCK_MS.min, CLUCK_MS.max);
+      this.idleCluck();
+    }
+  }
+
+  /** One random healthy chicken clucks (sick hens stay quiet). */
+  private idleCluck(): void {
+    let pick: AnimalView | null = null;
+    let seen = 0;
+    for (const v of this.animalList) {
+      if (v.sick) continue;
+      seen++;
+      if (Math.random() * seen < 1) pick = v; // reservoir pick: no allocation
+    }
+    if (pick) this.handlers.onIdleCluck?.(pick.id);
   }
 
   /** Syncs the view to the ranch state: adds/removes only what changed. Safe before create(). */
@@ -935,7 +962,22 @@ export class RanchScene extends Phaser.Scene {
     const w = this.cameras.main.getWorldPoint(p.x, p.y);
     const dist = Phaser.Math.Distance.Between;
 
-    // Name tags first: they float above everything and are small, deliberate targets.
+    let animal: AnimalView | null = null;
+    let bestA = HIT.animal;
+    for (const v of this.animalList) {
+      const d = dist(w.x, w.y, v.box.x, v.box.y - BODY_DY);
+      if (d < bestA) {
+        bestA = d;
+        animal = v;
+      }
+    }
+    // With a care tool in hand the child is aiming at the animal, not at its tag or what lies under it.
+    if (animal && this.priority === 'animals') {
+      this.handlers.onAnimal(animal.id);
+      return;
+    }
+
+    // Name tags next: they float above everything and are small, deliberate targets.
     let tagged: AnimalView | null = null;
     let bestT = Infinity;
     for (const v of this.animalList) {
@@ -948,21 +990,6 @@ export class RanchScene extends Phaser.Scene {
     }
     if (tagged) {
       this.handlers.onTag(tagged.id);
-      return;
-    }
-
-    let animal: AnimalView | null = null;
-    let bestA = HIT.animal;
-    for (const v of this.animalList) {
-      const d = dist(w.x, w.y, v.box.x, v.box.y - BODY_DY);
-      if (d < bestA) {
-        bestA = d;
-        animal = v;
-      }
-    }
-    // With a care tool in hand the child is aiming at the animal, not at what lies under it.
-    if (animal && this.priority === 'animals') {
-      this.handlers.onAnimal(animal.id);
       return;
     }
 
