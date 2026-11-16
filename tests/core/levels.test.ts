@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LEVEL_ORDER, CROP_BY_ROW, unlockedRows, nextRow } from '../../src/core/levels';
+import { LEVEL_ORDER, CROP_BY_ROW, unlockedRows, nextRow, cropPool } from '../../src/core/levels';
 
 describe('levels', () => {
   it('has the unlock order', () => {
@@ -17,5 +17,11 @@ describe('levels', () => {
     expect(unlockedRows(3)).toEqual([1, 2, 5]);
     expect(nextRow(3)).toBe(4);
     expect(nextRow(9)).toBeNull();
+  });
+  it('cropPool', () => {
+    expect(cropPool(1).map(c => c.id)).toEqual(['wheat']);
+    expect(cropPool(3).map(c => c.id)).toEqual(['wheat', 'carrot', 'corn']);
+    expect(cropPool(9)).toHaveLength(9);
+    expect(cropPool(9)[8].id).toBe('watermelon');
   });
 });

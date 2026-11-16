@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyAnswer, starsOf, goldenChance, challengeWeight, weightedPick } from '../../src/core/mastery';
+import { applyAnswer, starsOf, challengeWeight, weightedPick, cropWeights, pickCrop } from '../../src/core/mastery';
+import { cropPool } from '../../src/core/levels';
 
 describe('mastery', () => {
   it('applyAnswer', () => {
@@ -14,8 +15,14 @@ describe('mastery', () => {
   it('starsOf', () => {
     expect([0, 1, 2, 3, 4, 5, 6].map(starsOf)).toEqual([0, 0, 1, 1, 2, 2, 3]);
   });
-  it('goldenChance', () => {
-    expect([0, 1, 2, 3].map(goldenChance)).toEqual([0, 0, 0.1, 0.3]);
+  it('cropWeights', () => {
+    const w = cropWeights(3, 0);
+    [1, 0.7, 0.49].forEach((v, i) => expect(w[i]).toBeCloseTo(v));
+    cropWeights(9, 3).forEach(v => expect(v).toBeCloseTo(1));
+  });
+  it('pickCrop', () => {
+    expect(pickCrop(cropPool(2), 0, () => 0)).toBe('wheat');
+    expect(pickCrop(cropPool(2), 0, () => 0.99)).toBe('carrot');
   });
   it('challengeWeight', () => {
     expect(challengeWeight(0)).toBe(7);

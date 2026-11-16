@@ -1,4 +1,5 @@
 import type { Rng } from './clock';
+import type { Crop, CropId } from './levels';
 
 export type Mode = 'basic' | 'challenge';
 
@@ -12,12 +13,6 @@ export function applyAnswer(points: number, mode: Mode, correct: boolean, firstA
 
 export function starsOf(points: number): 0 | 1 | 2 | 3 {
   return Math.min(3, Math.floor(points / 2)) as 0 | 1 | 2 | 3;
-}
-
-export function goldenChance(stars: number): number {
-  if (stars >= 3) return 0.3;
-  if (stars === 2) return 0.1;
-  return 0;
 }
 
 export function challengeWeight(points: number): number {
@@ -34,4 +29,14 @@ export function weightedPick<T>(items: T[], weights: number[], rng: Rng): number
     if (r < cum) return i;
   }
   return items.length - 1;
+}
+
+/** Weight of the i-th crop in the pool is r^i, r = 0.7 + 0.1 * stars. */
+export function cropWeights(poolSize: number, stars: number): number[] {
+  const r = 0.7 + 0.1 * stars;
+  return Array.from({ length: poolSize }, (_, i) => Math.pow(r, i));
+}
+
+export function pickCrop(pool: Crop[], stars: number, rng: Rng): CropId {
+  return pool[weightedPick(pool, cropWeights(pool.length, stars), rng)].id;
 }

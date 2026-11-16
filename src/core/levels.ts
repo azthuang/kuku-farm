@@ -30,3 +30,7 @@ export function unlockedRows(unlocked: number): number[] {
 export function nextRow(unlocked: number): number | null {
   return unlocked < LEVEL_ORDER.length ? LEVEL_ORDER[unlocked] : null;
 }
+
+export function cropPool(unlocked: number): Crop[] {
+  return LEVEL_ORDER.slice(0, unlocked).map(r => CROP_BY_ROW[r]);
+}
