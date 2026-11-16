@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .superpowers/
+# Local working notes (design specs, plans) and tool folders — kept out of the public repo
+docs/superpowers/
+.claude/
