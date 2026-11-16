@@ -42,9 +42,9 @@ interface Cell {
 interface RowDeco {
   label: Text;
   lock: Img;
-  /** Lights a counted row (drawn per question, between the plots and the crops). */
+  /** Lights a counted column, indexed by step (drawn per question, between the plots and the crops). */
   glow: Phaser.GameObjects.Graphics;
-  /** Running total at the row's end while counting. */
+  /** Running total below the counted column while counting. */
   count: Text;
 }
 
@@ -215,19 +215,20 @@ export class FieldScene extends Phaser.Scene {
   }
 
   /**
-   * Counts the block row by row: each row lights up and its running total appears at the row's
-   * end, then onRow(row, total) is awaited. Only onRow takes time; the scene's own animation is
-   * fire and forget. Stops early when the view changes (exit / import / next question).
+   * Counts the block column by column ("b groups of a"): each column lights up and its running
+   * total (a, 2a, ..., ab) appears below it, then onStep(step, total) is awaited. Only onStep
+   * takes time; the scene's own animation is fire and forget. Stops early when the view changes
+   * (exit / import / next question).
    */
-  async playCount(q: Question, onRow: (row: number, total: number) => Promise<void>): Promise<void> {
+  async playCount(q: Question, onStep: (step: number, total: number) => Promise<void>): Promise<void> {
     if (this.built) this.finishPlant();
     const gen = this.gen;
     if (this.built && this.view === 'question') this.setLabels('count', q);
-    for (let row = 1; row <= q.a; row++) {
+    for (let step = 1; step <= q.b; step++) {
       if (gen !== this.gen) return;
-      const total = row * q.b;
-      if (this.built && this.view === 'question') this.lightRow(row, q.b, total);
-      await onRow(row, total);
+      const total = step * q.a;
+      if (this.built && this.view === 'question') this.lightColumn(step, q.a, total);
+      await onStep(step, total);
     }
     // Count finished: the answer is revealed, so bring the a / b highlight back.
     if (gen === this.gen && this.built && this.view === 'question') this.setLabels('question', q);
@@ -433,26 +434,25 @@ export class FieldScene extends Phaser.Scene {
     return out;
   }
 
-  private lightRow(row: number, b: number, total: number): void {
-    const d = this.rows[row];
-    const top = GRID_Y + (row - 1) * CELL;
+  /** Lights column `col` (its a crops) and shows the running total just below it. */
+  private lightColumn(col: number, a: number, total: number): void {
+    const d = this.rows[col]; // per-step decorations, indexed by step (column) here
+    const left = GRID_X + (col - 1) * CELL;
     d.glow.clear()
-      .fillStyle(0xfff1a8, 0.6).fillRoundedRect(GRID_X + 1, top + 1, b * CELL - 2, CELL - 2, 14)
-      .lineStyle(5, 0xffa31a, 1).strokeRoundedRect(GRID_X + 1, top + 1, b * CELL - 2, CELL - 2, 14)
+      .fillStyle(0xfff1a8, 0.6).fillRoundedRect(left + 1, GRID_Y + 1, CELL - 2, a * CELL - 2, 14)
+      .lineStyle(5, 0xffa31a, 1).strokeRoundedRect(left + 1, GRID_Y + 1, CELL - 2, a * CELL - 2, 14)
       .setVisible(true).setAlpha(0);
     this.tweens.add({ targets: d.glow, alpha: 1, duration: 160 });
 
-    for (let col = 1; col <= b; col++) {
+    for (let row = 1; row <= a; row++) {
       const c = this.cells[row][col];
-      this.tweens.add({ targets: c.wrap, y: c.baseY - 9, duration: 130, delay: col * 25, yoyo: true, ease: 'Quad.Out' });
+      this.tweens.add({ targets: c.wrap, y: c.baseY - 9, duration: 130, delay: row * 25, yoyo: true, ease: 'Quad.Out' });
     }
 
-    // Right of the block; with a full row, inside the field edge over the last crop's lower part
-    // (right-aligned so two digits never run off the canvas, and the crop's top still shows).
-    const full = b >= 9;
-    d.count.setText(String(total)).setScale(0).setVisible(true);
-    if (full) d.count.setOrigin(1, 0.5).setPosition(FIELD_RIGHT + 2, top + CELL / 2 + 12);
-    else d.count.setOrigin(0.5, 0.5).setPosition(GRID_X + b * CELL + CELL / 2, top + CELL / 2);
+    // In the empty row below the block; with a full column (a = 9) over the bottom crop's lower part.
+    d.count.setText(String(total)).setScale(0).setVisible(true).setOrigin(0.5, 0.5);
+    if (a >= 9) d.count.setPosition(left + CELL / 2, GRID_Y + 8 * CELL + CELL / 2 + 12);
+    else d.count.setPosition(left + CELL / 2, GRID_Y + a * CELL + CELL / 2);
     this.tweens.add({ targets: d.count, scaleX: 1, scaleY: 1, duration: 260, ease: 'Back.Out', easeParams: [2.4] });
   }
 

@@ -9,7 +9,7 @@ import { chantText, questionText, toChineseNumber } from './core/chant';
 import { createLayout } from './ui/layout';
 import { createSpeech } from './ui/speech';
 import { createPanel } from './ui/panel';
-import { countRowTiming } from './ui/timing';
+import { countTiming } from './ui/timing';
 import { FieldScene, VIEW } from './scenes/FieldScene';
 import { ASSET_RES } from './scenes/assets';
 
@@ -171,11 +171,11 @@ export function startApp(root: HTMLElement): void {
       } else {
         // Spec 3.5: count first, then show the answer. The panel stays neutral meanwhile.
         panel.showCounting(r.q);
-        // Count the block row by row: 「四、八」, then 「是二四得八」. sayAndWait restarts its
-        // timeout when the voice starts, so race it against a hard per-row cap as well: the whole
+        // Count the block column by column ("b groups of a"): 「五、十、十五、二十」, then 「是五四二十」. sayAndWait restarts its
+        // timeout when the voice starts, so race it against a hard per-step cap as well: the whole
         // count must stay under COUNT_MAX_MS even with a slow speech engine.
-        const t = countRowTiming(r.q.a);
-        await scene.playCount(r.q, async (_row, total) => {
+        const t = countTiming(r.q.b);
+        await scene.playCount(r.q, async (_step, total) => {
           if (my !== epoch) return;
           const spoken = speech.sayAndWait(toChineseNumber(total), t.speechMaxMs);
           await Promise.all([Promise.race([spoken, delay(t.speechMaxMs)]), delay(t.minMs)]);

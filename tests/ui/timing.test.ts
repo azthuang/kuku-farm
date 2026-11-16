@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { COUNT_MAX_MS, countRowTiming } from '../../src/ui/timing';
+import { COUNT_MAX_MS, countTiming } from '../../src/ui/timing';
 
-describe('countRowTiming', () => {
-  it('keeps every row readable and the whole count under 12 s', () => {
+describe('countTiming', () => {
+  it('keeps every step readable and the whole count under 12 s', () => {
     for (let a = 1; a <= 9; a++) {
-      const t = countRowTiming(a);
+      const t = countTiming(a);
       expect(t.minMs).toBeGreaterThanOrEqual(500);
       expect(t.minMs).toBeLessThanOrEqual(t.speechMaxMs);
       expect(t.speechMaxMs).toBeLessThanOrEqual(1500);
@@ -13,7 +13,7 @@ describe('countRowTiming', () => {
   });
 
   it('gives small blocks the full speech wait and shortens big ones', () => {
-    expect(countRowTiming(2)).toEqual({ minMs: 800, speechMaxMs: 1500 });
-    expect(countRowTiming(9)).toEqual({ minMs: 800, speechMaxMs: 1333 });
+    expect(countTiming(2)).toEqual({ minMs: 800, speechMaxMs: 1500 });
+    expect(countTiming(9)).toEqual({ minMs: 800, speechMaxMs: 1333 });
   });
 });
