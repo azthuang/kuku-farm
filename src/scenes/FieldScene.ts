@@ -237,17 +237,19 @@ export class FieldScene extends Phaser.Scene {
 
     this.bigCrop.setTexture(ASSETS.crop[CROP_BY_ROW[row].id])
       .setPosition(GRID_X + 4.5 * CELL, rowY).setScale(0).setAlpha(1).setVisible(true);
-    this.tweens.chain({
-      targets: this.bigCrop,
-      tweens: [
-        { scaleX: INV * 2.2, scaleY: INV * 2.2, delay: 300, duration: 450, ease: 'Back.Out' },
-        { y: rowY - 14, duration: 900, ease: 'Sine.InOut', yoyo: true },
-        { alpha: 0, scaleX: INV * 1.2, scaleY: INV * 1.2, duration: 350, ease: 'Quad.In' },
-      ],
-    });
 
     const cells = this.cells[row].slice(1);
     return this.settle(4200, done => {
+      // The new crop's pop-up is the longest part (about 2.9 s); finish when it has faded out.
+      this.tweens.chain({
+        targets: this.bigCrop,
+        tweens: [
+          { scaleX: INV * 2.2, scaleY: INV * 2.2, delay: 300, duration: 450, ease: 'Back.Out' },
+          { y: rowY - 14, duration: 900, ease: 'Sine.InOut', yoyo: true },
+          { alpha: 0, scaleX: INV * 1.2, scaleY: INV * 1.2, duration: 350, ease: 'Quad.In' },
+        ],
+        onComplete: done,
+      });
       cells.forEach((c, i) => {
         this.time.delayedCall(350 + i * 110, () => {
           c.plot.setTexture(ASSETS.tilled).setAlpha(1);
@@ -257,10 +259,7 @@ export class FieldScene extends Phaser.Scene {
             st.setScale(0);
             this.tweens.add({ targets: st, scaleX: STAR_SCALE, scaleY: STAR_SCALE, duration: 260, ease: 'Back.Out' });
           }
-          if (i === cells.length - 1) {
-            this.confetti.explode(50, 300, rowY);
-            this.time.delayedCall(1200, done);
-          }
+          if (i === cells.length - 1) this.confetti.explode(50, 300, rowY);
         });
       });
     }, () => {
