@@ -36,8 +36,9 @@ function rec(v: unknown): Record<string, unknown> {
 function validate(data: unknown): GameState {
   const o = rec(data);
   if (typeof o.version !== 'number' || Number.isNaN(o.version)) fail();
-  if (o.version > 1) throw new Newer();
-  if (o.version !== 1) fail();
+  if (o.version > 2) throw new Newer();
+  if (o.version !== 1 && o.version !== 2) fail();
+  // v1 carried a `growing` map; it is ignored (even if malformed) and dropped.
 
   if (!isIntIn(o.unlocked, 1, 9)) fail();
 
@@ -55,14 +56,6 @@ function validate(data: unknown): GameState {
   for (const k of Object.keys(mIn)) {
     if (!CELL_KEY.test(k) || !isIntIn(mIn[k], 0, MAX_MASTERY)) fail();
     mastery[k] = mIn[k] as number;
-  }
-
-  const growing: Record<string, number> = {};
-  const gIn = rec(o.growing);
-  for (const k of Object.keys(gIn)) {
-    const v = gIn[k];
-    if (!CELL_KEY.test(k) || typeof v !== 'number' || !Number.isFinite(v)) fail();
-    growing[k] = v;
   }
 
   const cleared: Record<number, number[]> = {};
@@ -88,10 +81,9 @@ function validate(data: unknown): GameState {
   if (typeof o.lastSeenAt !== 'number' || !Number.isFinite(o.lastSeenAt)) fail();
 
   return {
-    version: 1,
+    version: 2,
     unlocked: o.unlocked,
     cleared,
-    growing,
     mastery,
     inventory,
     daily,
@@ -112,16 +104,23 @@ export function parseSave(raw: string): ParseResult {
   }
 }
 
-export function loadFrom(storage: Pick<Storage, 'getItem' | 'setItem'>): GameState | null {
+export type LoadResult =
+  | { kind: 'ok'; state: GameState }
+  | { kind: 'empty' }
+  | { kind: 'corrupt' }
+  | { kind: 'newer' };
+
+export function loadFrom(storage: Pick<Storage, 'getItem' | 'setItem'>): LoadResult {
   try {
     const raw = storage.getItem(SAVE_KEY);
-    if (raw === null) return null;
+    if (raw === null) return { kind: 'empty' };
     const r = parseSave(raw);
-    if (r.ok) return r.state;
+    if (r.ok) return { kind: 'ok', state: r.state };
+    if (r.error === 'newer-version') return { kind: 'newer' }; // never touch storage
     try { storage.setItem(CORRUPT_KEY, raw); } catch { /* backup is best-effort */ }
-    return null;
+    return { kind: 'corrupt' };
   } catch {
-    return null;
+    return { kind: 'empty' };
   }
 }
 
