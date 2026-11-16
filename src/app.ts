@@ -421,6 +421,9 @@ export function startApp(root: HTMLElement): void {
       case 'medicine':
         ranchScene.fx(id, 'weak');
         layout.toast('✋ 再摸摸牠');
+        // The next step is a pat: hand the child the ✋ so tapping again doesn't just shake.
+        tool = 'hand';
+        ranchUi.setTool('hand');
         break;
     }
   }
