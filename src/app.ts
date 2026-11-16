@@ -169,7 +169,8 @@ export function startApp(root: HTMLElement): void {
           if (my !== epoch) return;
         }
       } else {
-        panel.showWrong(r.q, r.correctAnswer);
+        // Spec 3.5: count first, then show the answer. The panel stays neutral meanwhile.
+        panel.showCounting(r.q);
         // Count the block row by row: 「四、八」, then 「是二四得八」. sayAndWait restarts its
         // timeout when the voice starts, so race it against a hard per-row cap as well: the whole
         // count must stay under COUNT_MAX_MS even with a slow speech engine.
@@ -180,6 +181,7 @@ export function startApp(root: HTMLElement): void {
           await Promise.all([Promise.race([spoken, delay(t.speechMaxMs)]), delay(t.minMs)]);
         });
         if (my !== epoch) return;
+        panel.showWrong(r.q, r.correctAnswer);
         await Promise.all([
           speech.sayAndWait('是' + chantText(r.q.a, r.q.b), WRONG_CHANT_WAIT_MS),
           delay(WRONG_HOLD_MS),

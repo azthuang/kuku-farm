@@ -5,6 +5,8 @@ import { createNumpad, type Numpad } from './numpad';
 export interface Panel {
   showIdle(mode: Mode, hint: string): void;
   showQuestion(q: Question, progress: { done: number; total: number }): void;
+  /** Neutral overlay while the field counts the rows: hides the numpad, does not reveal the answer. */
+  showCounting(q: Question): void;
   showWrong(q: Question, answer: number): void;
   showCorrect(q: Question, answer: number): void;
   onModeChange(cb: (m: Mode) => void): void;
@@ -81,6 +83,14 @@ export function createPanel(root: HTMLElement): Panel {
       feedback.className = 'q-feedback';
       numpad.clear();
       numpad.setLocked(false);
+    },
+    showCounting(q) {
+      setView('question');
+      setHead(q);
+      numpad.setLocked(true);
+      feedback.replaceChildren();
+      feedback.className = 'q-feedback counting';
+      feedback.appendChild(el('div', 'ans', '一起數數看 👀'));
     },
     showWrong(q, answer) {
       setView('question');
