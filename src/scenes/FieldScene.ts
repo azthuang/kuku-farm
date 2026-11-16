@@ -86,6 +86,10 @@ export class FieldScene extends Phaser.Scene {
   private timers = new Set<Phaser.Time.TimerEvent>();
   private pending = new Set<() => void>();
   private plantDone: (() => void) | null = null;
+  /** Row to practise next (idle map, basic mode), or null for no glow. */
+  private glowRow: number | null = null;
+  private glowRing!: Phaser.GameObjects.Graphics;
+  private glowFill!: Phaser.GameObjects.Graphics;
   private plus!: Text;
   private bigCrop!: Img;
   private sparkles!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -132,6 +136,15 @@ export class FieldScene extends Phaser.Scene {
         const c = this.cells[a][b];
         c.wrap.angle = Math.sin(time * 0.0024 + c.phase) * 3.5;
       }
+    }
+  }
+
+  /** Sets the row that glows on the idle map (null: none) and refreshes the map if it is showing. */
+  setGlowRow(row: number | null): void {
+    if (row === this.glowRow) return;
+    this.glowRow = row;
+    if (this.built && this.model && this.model.mode === null && this.view === 'idle' && this.pending.size === 0) {
+      this.render(this.model);
     }
   }
 
@@ -352,6 +365,8 @@ export class FieldScene extends Phaser.Scene {
     }
     this.plus.setVisible(false);
     this.bigCrop.setVisible(false);
+    this.glowRing.clear().setVisible(false).setAlpha(1);
+    this.glowFill.clear().setVisible(false).setAlpha(1);
   }
 
   private resetCrop(c: Cell): void {
@@ -376,6 +391,17 @@ export class FieldScene extends Phaser.Scene {
           c.plot.setTexture(ASSETS.soil).setAlpha(0.75);
         }
       }
+    }
+    const g = this.glowRow;
+    if (g !== null && open.has(g)) {
+      const top = GRID_Y + (g - 1) * CELL;
+      this.glowFill.clear()
+        .fillStyle(0xfff1a8, 0.2).fillRoundedRect(GRID_X + 1, top + 1, 9 * CELL - 2, CELL - 2, 12)
+        .setVisible(true).setAlpha(1);
+      this.glowRing.clear()
+        .lineStyle(12, GOLD, 1).strokeRoundedRect(GRID_X + 3, top + 3, 9 * CELL - 6, CELL - 6, 10)
+        .setVisible(true).setAlpha(1);
+      this.tweens.add({ targets: [this.glowRing, this.glowFill], alpha: 0.65, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     }
   }
 
@@ -417,7 +443,7 @@ export class FieldScene extends Phaser.Scene {
       chip.text.setAlpha(textAlpha * alpha);
     };
     for (let i = 1; i <= 9; i++) {
-      const rowHi = mode === 'question' && q?.a === i;
+      const rowHi = (mode === 'question' && q?.a === i) || (mode === 'idle' && this.glowRow === i && open.has(i));
       const colHi = mode === 'question' && q?.b === i;
       const base = mode === 'idle' ? 1 : mode === 'count' ? 0.2 : 0.35;
       apply(this.rowChips[i], rowHi, rowHi ? 1 : base, mode === 'idle' && !open.has(i) ? 0.45 : 1);
@@ -510,6 +536,8 @@ export class FieldScene extends Phaser.Scene {
   }
 
   private buildEffects(): void {
+    this.glowRing = this.add.graphics().setDepth(3.5).setVisible(false);
+    this.glowFill = this.add.graphics().setDepth(1.2).setVisible(false);
     this.plus = this.add.text(0, 0, '', textStyle(34, '#ffffff', '#4f9a35', 8))
       .setOrigin(0.5).setDepth(10).setVisible(false);
     this.bigCrop = this.add.image(0, 0, ASSETS.crop.wheat).setDepth(8).setVisible(false);
