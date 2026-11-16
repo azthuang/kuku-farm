@@ -318,6 +318,12 @@ export function drawRun(ctx: Ctx, w: number, h: number, kind: HouseKind): void {
   }
   trough(ctx, w - 112, 34);
 
+  drawFences(ctx, w, h);
+  drawGate(ctx, w, h, g.base);
+}
+
+/** Side fences (a rail with short posts) and the back and front fences (two rails and posts). */
+function drawFences(ctx: Ctx, w: number, h: number): void {
   // side fences: a rail with short posts
   for (const fx of [0, w - 4]) {
     px(ctx, WOOD.light, fx + 1, 8, 2, h - 12);
@@ -337,7 +343,36 @@ export function drawRun(ctx: Ctx, w: number, h: number, kind: HouseKind): void {
     for (let x = 0; x <= w - 4; x += 18) post(ctx, x, top);
     post(ctx, w - 4, top);
   }
-  drawGate(ctx, w, h, g.base);
+}
+
+/** The garden's nine beds (rows 1× … 9×, top to bottom) in sprite pixels of a w × h plot. */
+export function gardenBeds(w: number, h: number): { x0: number; x1: number; rows: { y: number; h: number }[] } {
+  const pitch = 15;
+  const top = Math.round((h - 9 * pitch) / 2) + 1;
+  // Inset from the side fences so the page arrows (over the care view's edges) never hide a label.
+  return { x0: 38, x1: w - 40, rows: Array.from({ length: 9 }, (_, i) => ({ y: top + i * pitch, h: 12 })) };
+}
+
+/** The garden plot: a grassy yard with nine tilled beds, the same fences and gate as the pens. */
+export function drawGardenPlot(ctx: Ctx, w: number, h: number): void {
+  const base = '#9fd472';
+  const rnd = seeded(97);
+  px(ctx, base, 2, 8, w - 4, h - 14);
+  px(ctx, '#86bd5a', 2, 8, w - 4, 3);
+  for (let i = 0; i < 90; i++) px(ctx, '#b0de87', 3 + Math.floor(rnd() * (w - 6)), 11 + Math.floor(rnd() * (h - 20)));
+  const beds = gardenBeds(w, h);
+  for (const b of beds.rows) {
+    const bw = beds.x1 - beds.x0;
+    px(ctx, '#6e4526', beds.x0 - 1, b.y - 1, bw + 2, b.h + 2);
+    px(ctx, '#8a5a34', beds.x0, b.y, bw, b.h);
+    px(ctx, '#a06c40', beds.x0, b.y, bw, 2);
+    // two furrows along the bed and a few clods
+    px(ctx, '#74492a', beds.x0 + 1, b.y + 5, bw - 2, 1);
+    px(ctx, '#74492a', beds.x0 + 1, b.y + 9, bw - 2, 1);
+    for (let i = 0; i < 10; i++) px(ctx, '#b07a4c', beds.x0 + 2 + Math.floor(rnd() * (bw - 4)), b.y + 2 + Math.floor(rnd() * (b.h - 3)));
+  }
+  drawFences(ctx, w, h);
+  drawGate(ctx, w, h, base);
 }
 
 /** Colours of the gate that are not in the plain fence (the gate test looks for its brace). */

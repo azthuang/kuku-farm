@@ -251,17 +251,18 @@ function footprint(p: Prop): Rect {
 }
 
 /**
- * Where everything goes. `lots` are the five pens' rects and `later` the sixth ("之後擴建")
- * cell's plot; nothing but its sign may overlap them.
+ * Where everything goes. `cells` are the six fenced plots in page order, row-major on the 2 × 3
+ * grid (the garden first, then the five pens); nothing may overlap them.
  *
  * The map has a clear hierarchy: the farmhouse's big tree (the largest on the map) and the stream
  * with its mill are the two focal points; two dense woods (bottom-left, and top-right past the
  * stream) are the secondary masses; small patches of one kind thin out away from them, and the
  * lawn in front of the farmhouse and along the paths stays open. Deterministic.
  */
-export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout {
+export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
   const W = SCENERY_WORLD;
-  const keepOut = [...lots, later];
+  const lots = cells;
+  const keepOut = cells;
   const bottom = (r: Rect): number => r.y + r.h;
   const centreX = (r: Rect): number => r.x + r.w / 2;
   // Each row's path runs through the band between its pens' fences and the next row.
@@ -293,10 +294,10 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     { x0: house.x, y0: rowY[0], x1: millEnd, y1: rowY[0] },
     { x0: leftX, y0: rowY[0], x1: leftX, y1: rowY[2] },
     { x0: leftX, y0: rowY[1], x1: W.x + W.w + 30, y1: rowY[1] },
-    { x0: leftX, y0: rowY[2], x1: centreX(later), y1: rowY[2] },
+    { x0: leftX, y0: rowY[2], x1: centreX(cells[5]), y1: rowY[2] },
   ];
   // a short apron up to each pen's fence (its gate)
-  for (const r of [...lots, later]) {
+  for (const r of cells) {
     paths.push({ x0: centreX(r), y0: bottom(r), x1: centreX(r), y1: bottom(r) + 40 });
   }
 
@@ -317,7 +318,6 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     mill,
     { kind: 'mailbox', x: house.x + 46, y: doorY + 70 },
     { kind: 'veggie', x: W.x + 62, y: rowY[0] - 40 },
-    { kind: 'sign', x: centreX(later), y: bottom(later) - 46 },
   ];
   // Buildings, the wheel and the bridges are solid; plants may only grow in front of the big tree.
   const hard = [...props.filter(p => p !== hero).map(propBox), wheelBox, ...bridges];

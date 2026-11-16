@@ -10,27 +10,25 @@ import { SCENERY_FRAMES } from '../../src/scenes/sceneryAtlas';
 
 // Same geometry as RanchScene: 600-wide cells on a 2 × 3 grid, the lot inset (30, 80, 540, 440).
 const cell = (i: number): Rect => ({ x: (i % 2) * 600 + 30, y: Math.floor(i / 2) * 600 + 80, w: 540, h: 440 });
-const LOTS = [0, 1, 2, 3, 4].map(cell);
-const LATER = cell(5);
-const layout = sceneryLayout(LOTS, LATER);
+// The six plots in page order: the garden (cell 0), then the five pens.
+const LOTS = [0, 1, 2, 3, 4, 5].map(cell);
+const layout = sceneryLayout(LOTS);
 
 const inside = (b: Rect, r: Rect): boolean => b.x >= r.x && b.y >= r.y && b.x + b.w <= r.x + r.w && b.y + b.h <= r.y + r.h;
 
 describe('ranch scenery layout', () => {
   it('is the same every time', () => {
-    expect(sceneryLayout(LOTS, LATER)).toEqual(layout);
+    expect(sceneryLayout(LOTS)).toEqual(layout);
   });
 
   it('keeps every prop inside the overview world', () => {
     for (const p of layout.props) expect(inside(propBox(p), SCENERY_WORLD), `${p.kind} at ${p.x},${p.y}`).toBe(true);
   });
 
-  it('never puts a prop on a pen or the 之後擴建 plot (only its sign)', () => {
+  it('never puts a prop on the garden or a pen', () => {
     for (const p of layout.props) {
       const b = propBox(p);
       for (const r of LOTS) expect(overlaps(b, r), `${p.kind} at ${p.x},${p.y}`).toBe(false);
-      if (p.kind === 'sign') expect(inside(b, LATER)).toBe(true);
-      else expect(overlaps(b, LATER), `${p.kind} at ${p.x},${p.y}`).toBe(false);
     }
   });
 
@@ -50,7 +48,7 @@ describe('ranch scenery layout', () => {
       for (let t = 0; t <= 1; t += 0.02) {
         const x = s.x0 + (s.x1 - s.x0) * t;
         const y = s.y0 + (s.y1 - s.y0) * t;
-        for (const r of [...LOTS, LATER]) {
+        for (const r of LOTS) {
           expect(x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h, `path point ${x},${y}`).toBe(false);
         }
       }
@@ -76,7 +74,7 @@ describe('ranch scenery layout', () => {
           expect(x + 32 * SCENERY_SCALE, `corner ${i},${j}`).toBeLessThanOrEqual(SCENERY_WORLD.x + SCENERY_WORLD.w);
         }
       }
-      for (const r of [...LOTS, LATER]) {
+      for (const r of LOTS) {
         for (const c of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]]) {
           expect(toRiver(c[0], c[1])).toBeGreaterThan(layout.riverHalf + 20);
         }
@@ -151,7 +149,7 @@ describe('ranch scenery layout', () => {
       const plants = layout.props.filter(p => p.cluster !== undefined);
       const cover = (ps: Prop[]): number => ps.reduce((s, p) => s + area(p), 0);
       const inWood = cover(plants.filter(p => inRect(p, wood)));
-      const free = W.w * W.h - [...LOTS, LATER].reduce((s, r) => s + r.w * r.h, 0);
+      const free = W.w * W.h - LOTS.reduce((s, r) => s + r.w * r.h, 0);
       expect(inWood / (wood.w * wood.h)).toBeGreaterThan(3 * (cover(plants) / free));
       const door: Rect = { x: W.x + 90, y: 380, w: 120, h: 150 };
       expect(plants.filter(p => inRect(p, door))).toEqual([]);

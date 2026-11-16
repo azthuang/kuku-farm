@@ -9,7 +9,7 @@ const T0 = 1_000_000;
 
 function mk(over: Partial<Animal> = {}): RanchState {
   const r = createRanch(T0);
-  r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 0 });
+  r.houses.push({ id: 'h1', kind: 'coop', lot: 1, poop: 0 });
   r.animals.push({
     id: 'a1', species: 'chicken', name: '咕咕', color: '白', houseId: 'h1',
     satiety: 100, mood: 60, sick: false, medicated: false, neglectMs: 0,
@@ -204,7 +204,7 @@ describe('actions', () => {
 describe('species-driven care', () => {
   function cowRanch() {
     const r = createRanch(0);
-    r.houses.push({ id: 'h2', kind: 'barn', lot: 1, poop: 0 });
+    r.houses.push({ id: 'h2', kind: 'barn', lot: 2, poop: 0 });
     r.animals.push({
       id: 'a2', species: 'cow', name: '哞哞', color: '黑白花', houseId: 'h2',
       satiety: 100, mood: 60, sick: false, medicated: false,
@@ -252,17 +252,18 @@ describe('pageStatus', () => {
   const calm = { hungry: false, sick: false, poop: false, products: 0 };
 
   it('has one calm entry per page even with an empty ranch', () => {
-    expect(pageStatus(createRanch(0))).toEqual([calm, calm, calm, calm, calm]);
+    expect(pageStatus(createRanch(0))).toEqual([calm, calm, calm, calm, calm, calm]);
   });
 
   it('reports each house on its own lot (page)', () => {
     const r = createRanch(0);
-    r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 2 });
-    r.houses.push({ id: 'h2', kind: 'sty', lot: 2, poop: 0 });
+    r.houses.push({ id: 'h1', kind: 'coop', lot: 1, poop: 2 });
+    r.houses.push({ id: 'h2', kind: 'sty', lot: 3, poop: 0 });
     r.animals.push(animal('a1', 'h1', { waiting: 2 }));
     r.animals.push(animal('a2', 'h1', { waiting: 1, satiety: HUNGRY_SHOW_AT }));
     r.animals.push(animal('p1', 'h2', { species: 'pig', color: '粉紅', sick: true, satiety: 50 }));
     expect(pageStatus(r)).toEqual([
+      calm, // the garden
       { hungry: true, sick: false, poop: true, products: 3 },
       calm,
       { hungry: false, sick: true, poop: false, products: 0 },
@@ -273,16 +274,23 @@ describe('pageStatus', () => {
 
   it('hungry only at or below the shown threshold', () => {
     const r = createRanch(0);
-    r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 0 });
+    r.houses.push({ id: 'h1', kind: 'coop', lot: 1, poop: 0 });
     r.animals.push(animal('a1', 'h1', { satiety: HUNGRY_SHOW_AT + 0.5 }));
-    expect(pageStatus(r)[0].hungry).toBe(false);
+    expect(pageStatus(r)[1].hungry).toBe(false);
     r.animals[0].satiety = 0;
-    expect(pageStatus(r)[0].hungry).toBe(true);
+    expect(pageStatus(r)[1].hungry).toBe(true);
   });
 
   it('ignores animals whose house is missing', () => {
     const r = createRanch(0);
     r.animals.push(animal('a1', 'gone', { waiting: 3, sick: true }));
-    expect(pageStatus(r)).toEqual([calm, calm, calm, calm, calm]);
+    expect(pageStatus(r)).toEqual([calm, calm, calm, calm, calm, calm]);
+  });
+
+  it('never flags the garden page, even for a house stored on its lot', () => {
+    const r = createRanch(0);
+    r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 3 });
+    r.animals.push(animal('a1', 'h1', { waiting: 2 }));
+    expect(pageStatus(r)[0]).toEqual(calm);
   });
 });

@@ -163,7 +163,7 @@ describe('save', () => {
 
   function populated(): RanchState {
     const r = createRanch(100);
-    r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 2 });
+    r.houses.push({ id: 'h1', kind: 'coop', lot: 1, poop: 2 });
     r.animals.push(
       { id: 'a1', species: 'chicken', name: '咕咕', color: '白', houseId: 'h1', satiety: 42.5, mood: 60.25,
         sick: false, medicated: false, neglectMs: 1234.5, produceMs: 99.5, poopMs: 10, waiting: 2,
@@ -222,7 +222,7 @@ describe('save', () => {
 
   it("keeps animals over today's caps (a lowered cap must never remove a chicken)", () => {
     const many = withRanch((x) => {
-      x.houses.push({ id: 'h2', kind: 'barn', lot: 1, poop: 0 });
+      x.houses.push({ id: 'h2', kind: 'barn', lot: 2, poop: 0 });
       for (let i = 0; i < 9; i++) x.animals.push({ ...x.animals[0], id: `y${i}`, houseId: 'h1' });
     });
     if (!many.ok) throw new Error('expected ok');
@@ -242,7 +242,7 @@ describe('save', () => {
       ['house kind mismatch', (r) => { (r.houses[0] as unknown as { kind: string }).kind = 'barn'; }],
       ['poop fraction', (r) => { r.houses[0].poop = 1.5; }],
       ['cow in the coop', (r) => { r.animals[0].species = 'cow'; }],
-      ['two coops', (r) => { r.houses.push({ id: 'h9', kind: 'coop', lot: 0, poop: 0 }); }],
+      ['two coops', (r) => { r.houses.push({ id: 'h9', kind: 'coop', lot: 1, poop: 0 }); }],
       ['v4 supply key missing', (r) => { delete (r.supplies as Partial<typeof r.supplies>).feedCow; }],
       ['v4 product key missing', (r) => { delete (r.products as Partial<typeof r.products>).milk; }],
       ['nextId 0', (r) => { r.nextId = 0; }],
@@ -310,7 +310,7 @@ describe('save', () => {
 
   it('migrates a v3 save to v4 keeping coop, chickens, eggs and feed', () => {
     const r3 = populated();
-    r3.houses[0].lot = 0;
+    r3.houses[0].lot = 0; // v3 kept the coop on the first lot; the garden has it now
     r3.supplies = { feed: 12, treat: 3, medicine: 1 } as RanchState['supplies'];
     r3.products = { egg: 7 } as RanchState['products'];
     const v3 = { ...createNewState(5), version: 3, ranch: r3 };
@@ -320,7 +320,7 @@ describe('save', () => {
     const ra = r.state.ranch;
     expect(r.state.version).toBe(4);
     expect(ra.animals).toEqual(r3.animals);
-    expect(ra.houses).toEqual(r3.houses);
+    expect(ra.houses).toEqual([{ ...r3.houses[0], lot: 1 }]);
     expect(ra.supplies).toEqual({
       feed: 12, treat: 3, medicine: 1, feedCow: 0, feedPig: 0, feedSheep: 0, feedLlama: 0,
     });
@@ -331,7 +331,7 @@ describe('save', () => {
     const s = createNewState(5);
     s.unlocked = 9;
     const r = s.ranch;
-    const kinds = [['coop', 'chicken', 0], ['barn', 'cow', 1], ['sty', 'pig', 2], ['fold', 'sheep', 3], ['hut', 'llama', 4]] as const;
+    const kinds = [['coop', 'chicken', 1], ['barn', 'cow', 2], ['sty', 'pig', 3], ['fold', 'sheep', 4], ['hut', 'llama', 5]] as const;
     for (const [kind, sp, lot] of kinds) {
       r.houses.push({ id: `h-${kind}`, kind, lot, poop: 1 });
       r.animals.push({ ...populated().animals[0], id: `a-${sp}`, species: sp, houseId: `h-${kind}` });
@@ -346,6 +346,13 @@ describe('save', () => {
     const r = withRanch((x) => { x.houses[0].lot = 3; });
     if (!r.ok) throw new Error('expected ok');
     expect(r.ranchReset).toBeUndefined();
-    expect(r.state.ranch.houses[0].lot).toBe(0);
+    expect(r.state.ranch.houses[0].lot).toBe(1);
+  });
+
+  it('moves a v4 coop saved on the old first lot to lot 1 (the garden took lot 0)', () => {
+    const r = withRanch((x) => { x.houses[0].lot = 0; });
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.ranchReset).toBeUndefined();
+    expect(r.state.ranch.houses[0]).toMatchObject({ kind: 'coop', lot: 1 });
   });
 });

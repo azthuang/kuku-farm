@@ -18,6 +18,8 @@ export interface Layout {
   updateHud(s: GameState): void;
   bumpCrop(id: CropId | ProductId): void;
   onTab(cb: (tab: Tab) => void): void;
+  /** Switches tab as if its button was pressed (fires onTab when it changes). */
+  setTab(t: Tab): void;
   onExport(cb: () => void): void;
   onImport(cb: (text: string) => void): void;
   onSpeechToggle(cb: (on: boolean) => void): void;
@@ -137,20 +139,21 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
     n.classList.add('bump');
   }
 
+  function selectTab(next: Tab): void {
+    if (next === tab) return;
+    tab = next;
+    root.querySelectorAll<HTMLElement>('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    stage.parentElement!.classList.toggle('show-ranch', tab === 'ranch');
+    ranch.hidden = tab !== 'ranch';
+    ranchNav.hidden = tab !== 'ranch';
+    panel.classList.toggle('tab-hidden', tab !== 'field');
+    cropsEl.scrollLeft = 0; // the product counters come and go at the front of the strip
+    updateHud(lastState);
+    tabCb(tab);
+  }
+
   root.querySelectorAll<HTMLButtonElement>('.tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const next = btn.dataset.tab as Tab;
-      if (next === tab) return;
-      tab = next;
-      root.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === btn));
-      stage.parentElement!.classList.toggle('show-ranch', tab === 'ranch');
-      ranch.hidden = tab !== 'ranch';
-      ranchNav.hidden = tab !== 'ranch';
-      panel.classList.toggle('tab-hidden', tab !== 'field');
-      cropsEl.scrollLeft = 0; // the product counters come and go at the front of the strip
-      updateHud(lastState);
-      tabCb(tab);
-    });
+    btn.addEventListener('click', () => selectTab(btn.dataset.tab as Tab));
   });
 
   q<HTMLElement>('.hud-gear').addEventListener('click', () => { settings.hidden = false; });
@@ -188,6 +191,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   return {
     stage, panel, ranch, ranchNav, updateHud, bumpCrop, toast,
     onTab: cb => { tabCb = cb; },
+    setTab: selectTab,
     onExport: cb => { exportCb = cb; },
     onImport: cb => { importCb = cb; },
     onSpeechToggle: cb => { speechCb = cb; },

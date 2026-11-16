@@ -1,10 +1,12 @@
 /// <reference types="vite/client" />
 import Phaser from 'phaser';
 import { HUNGRY_SHOW_AT, MOOD_HAPPY, pageStatus, type Animal, type House, type PageStatus, type RanchState } from '../core/ranch';
-import { PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, type HouseKind, type SpeciesId } from '../core/species';
+import { FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfLot, type HouseKind, type SpeciesId } from '../core/species';
+import type { Garden } from '../core/garden';
+import { CROP_BY_ROW } from '../core/levels';
 import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets';
 import { VIEW } from './FieldScene';
-import { HOUSE_ART, dashedRect, drawRun, hash, seeded } from './ranchArt';
+import { HOUSE_ART, dashedRect, drawGardenPlot, drawRun, gardenBeds, hash, seeded } from './ranchArt';
 import {
   BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout, wheelFrameOrder,
 } from './ranchScenery';
@@ -90,13 +92,13 @@ const SHADOW_FILE: Record<string, string> = {
 interface Rect { x: number; y: number; w: number; h: number }
 
 /**
- * World layout: a 2-column × 3-row grid of VIEW-sized page cells, lot i (= SPECIES_ORDER[i]'s
- * house) in cell i, row-major; cell 5 is the blank "之後擴建" plot for later batches.
+ * World layout: a 2-column × 3-row grid of VIEW-sized page cells, lot i in cell i, row-major:
+ * the garden (FARM_LOT) first, then each species' house on its SPECIES lot.
  * The care view frames one cell at zoom ASSET_RES; the overview fits the whole grid.
  */
 const COLS = 2;
 const ROWS = 3;
-const PAGES = SPECIES_ORDER.length;
+const PAGES = LOT_COUNT;
 const GRID_W = COLS * VIEW;
 const GRID_H = ROWS * VIEW;
 const OVERVIEW_ZOOM = ASSET_RES * Math.min(VIEW / GRID_W, VIEW / GRID_H);
@@ -109,8 +111,12 @@ function cellRect(i: number): Rect {
     w: LOT_IN_CELL.w, h: LOT_IN_CELL.h,
   };
 }
+/** Every page's fenced plot, by lot (the garden's and the pens'). */
 const LOTS: readonly Rect[] = Array.from({ length: PAGES }, (_, i) => cellRect(i));
-const KIND_OF_LOT: readonly HouseKind[] = SPECIES_ORDER.map(s => SPECIES[s].house);
+const KIND_OF_LOT: Readonly<Record<number, HouseKind>> = Object.fromEntries(
+  SPECIES_ORDER.map(s => [SPECIES[s].lot, SPECIES[s].house]),
+);
+const HOUSE_KINDS_IN_ORDER: readonly HouseKind[] = SPECIES_ORDER.map(s => SPECIES[s].house);
 
 /** Animals are y-sorted within [animal, animal + 0.18]; items sit above them so none is ever hidden. */
 const DEPTH = { grass: 0, water: 0.4, scenery: 0.5, lot: 1, house: 2, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
@@ -124,6 +130,8 @@ const TEX = {
   waterWheel: 'water-wheel-turn',
   house: (k: HouseKind) => `ranch-house-${k}`,
   run: (k: HouseKind) => `ranch-run-${k}`,
+  garden: 'ranch-garden-plot',
+  sprout: 'ranch-garden-sprout',
   sheet: (sp: SpeciesId, kind: 'walk' | 'eat', coat: number) => `${sp}-${kind}-${coat}`,
   anim: (sp: SpeciesId, coat: number, kind: 'walk' | 'eat' | 'eatin' | 'eatout', dir: number) => `${sp}-${coat}-${kind}-${dir}`,
 };
@@ -170,6 +178,8 @@ export interface RanchView {
   locked: Record<HouseKind, boolean>;
   /** Emoji of the crop that keeps each locked house closed (shown as 🔒 + crop). */
   lockCrop?: Partial<Record<HouseKind, string>>;
+  /** The times-table progress drawn in the garden (cell FARM_LOT). */
+  garden?: Garden;
 }
 
 /**
@@ -264,6 +274,32 @@ interface LotView {
   badges: Badges;
 }
 
+/** The garden in cell FARM_LOT: 9 × 9 plants (rows 1× … 9×), a label and a count per row. */
+interface GardenView {
+  plants: Img[][];
+  labels: Phaser.GameObjects.Text[];
+  counts: Phaser.GameObjects.Text[];
+  glow: Phaser.GameObjects.Graphics;
+  /** World box around a row's bed, for the glow. */
+  bedOf(row: number): Rect;
+  /** Where the grown (3-star) plants twinkle. */
+  spots: { x: number; y: number }[];
+  /** The progress last drawn, so render() only restyles on a change. */
+  key: string;
+}
+
+/** How big a plant is at 0 … 3 stars (world units tall) and its texture's pixel height. */
+const SPROUT_PX = 48;
+const CROP_PX = 64 * ASSET_RES;
+const GARDEN_STAGE = [
+  { size: 16, tex: SPROUT_PX },
+  { size: 30, tex: SPROUT_PX },
+  // the crop emoji fills about 0.72 of its texture
+  { size: 26, tex: CROP_PX * 0.72 },
+  { size: 38, tex: CROP_PX * 0.72 },
+] as const;
+const GARDEN_TWINKLE_MS = 1100;
+
 function rand(lo: number, hi: number): number {
   return lo + Math.random() * (hi - lo);
 }
@@ -314,6 +350,7 @@ export class RanchScene extends Phaser.Scene {
   /** Same views as `animals`, for allocation-free iteration in update(). */
   private animalList: AnimalView[] = [];
   private lots: LotView[] = [];
+  private garden: GardenView | null = null;
   /** The poop the child tapped last, removed first when that house's count drops. */
   private tappedPoop: Img | null = null;
   private pending = new Set<() => void>();
@@ -352,7 +389,7 @@ export class RanchScene extends Phaser.Scene {
     return this.isOverview;
   }
 
-  /** Care view of one page (0 … 4). Pans with a short tween unless animate is false. */
+  /** Care view of one page (0 = the garden, 1 … 5 the pens). Pans with a short tween unless animate is false. */
   showPage(index: number, animate = true): void {
     this.pageIndex = clamp(Math.round(index), 0, PAGES - 1);
     const wasOverview = this.isOverview;
@@ -403,8 +440,8 @@ export class RanchScene extends Phaser.Scene {
     this.makeSceneryTextures();
 
     this.buildScenery();
-    LOTS.forEach((rect, lot) => this.lots.push(this.buildLot(lot, rect)));
-    this.buildLaterPlot(cellRect(PAGES));
+    for (const sp of SPECIES_ORDER) this.lots.push(this.buildLot(SPECIES[sp].lot, LOTS[SPECIES[sp].lot]));
+    this.buildGarden(LOTS[FARM_LOT]);
     this.sparkles = this.add.particles(0, 0, ASSETS.sparkle, {
       emitting: false,
       speed: { min: 40, max: 170 },
@@ -461,7 +498,7 @@ export class RanchScene extends Phaser.Scene {
     const liveHouses = new Set<string>();
     const usedLots = new Set<number>();
     for (const h of r.houses) {
-      if (h.lot < 0 || h.lot >= LOTS.length || usedLots.has(h.lot)) continue;
+      if (KIND_OF_LOT[h.lot] === undefined || usedLots.has(h.lot)) continue;
       liveHouses.add(h.id);
       usedLots.add(h.lot);
       let hv = this.houses.get(h.id);
@@ -512,6 +549,7 @@ export class RanchScene extends Phaser.Scene {
       }
       this.syncBadges(lv, status[lv.lot]);
     }
+    if (view.garden) this.syncGarden(view.garden);
   }
 
   fx(animalId: string, kind: FxKind): void {
@@ -784,7 +822,19 @@ export class RanchScene extends Phaser.Scene {
   private makeSceneryTextures(): void {
     const w = LOT_IN_CELL.w / PX;
     const h = LOT_IN_CELL.h / PX;
-    for (const kind of KIND_OF_LOT) {
+    this.pixelTex(TEX.garden, w, h, ctx => drawGardenPlot(ctx, w, h));
+    if (!this.textures.exists(TEX.sprout)) {
+      // a seedling: two leaves on a short stem over a little mound of soil
+      const S = SPROUT_PX;
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0x6e4526, 1).fillEllipse(S / 2, S - 4, 26, 8);
+      g.fillStyle(0x3f8a2a, 1).fillRect(S / 2 - 2, 16, 4, S - 20);
+      g.fillStyle(0x4f9a35, 1).fillEllipse(S / 2 - 10, 17, 22, 12).fillEllipse(S / 2 + 10, 13, 22, 12);
+      g.fillStyle(0x8fd860, 1).fillEllipse(S / 2 - 12, 15, 10, 4).fillEllipse(S / 2 + 8, 11, 10, 4);
+      g.generateTexture(TEX.sprout, S, S);
+      g.destroy();
+    }
+    for (const kind of HOUSE_KINDS_IN_ORDER) {
       this.pixelTex(TEX.run(kind), w, h, ctx => drawRun(ctx, w, h, kind));
       const art = HOUSE_ART[kind];
       this.pixelTex(TEX.house(kind), art.w, art.h, art.draw);
@@ -867,8 +917,7 @@ export class RanchScene extends Phaser.Scene {
    * Pure background: nothing here takes input.
    */
   private buildScenery(): void {
-    const later = cellRect(PAGES);
-    const layout = sceneryLayout(LOTS, later);
+    const layout = sceneryLayout(LOTS);
     const hasAtlas = this.textures.exists(TEX.atlas);
     if (!this.textures.exists(TEX.scenery)) {
       const tex = this.textures.createCanvas(TEX.scenery, BAKE_W, BAKE_H);
@@ -879,7 +928,7 @@ export class RanchScene extends Phaser.Scene {
           const house = this.textures.exists(TEX.farmhouse)
             ? this.textures.get(TEX.farmhouse).getSourceImage() as CanvasImageSource
             : null;
-          bakeScenery(ctx, atlas, house, layout, [...LOTS, later], () => {
+          bakeScenery(ctx, atlas, house, layout, LOTS, () => {
             const c = document.createElement('canvas');
             c.width = BAKE_W;
             c.height = BAKE_H;
@@ -933,16 +982,86 @@ export class RanchScene extends Phaser.Scene {
     }
   }
 
-  /** The sixth cell: a faint plot labelled for the next batch. */
-  private buildLaterPlot(rect: Rect): void {
-    const g = this.add.graphics().setDepth(DEPTH.lot);
-    g.fillStyle(0xffffff, 0.08).fillRoundedRect(rect.x, rect.y, rect.w, rect.h, 22);
-    g.lineStyle(6, 0xffffff, 0.45);
-    dashedRect(g, rect.x + 3, rect.y + 3, rect.w - 6, rect.h - 6, 24, 16);
-    this.add.text(rect.x + rect.w / 2, rect.y + rect.h / 2, '之後擴建', {
-      fontFamily: FONT, fontSize: '76px', fontStyle: 'bold', color: '#ffffff',
-      stroke: '#5fae45', strokeThickness: 10, resolution: ASSET_RES,
-    }).setOrigin(0.5).setDepth(DEPTH.lot).setAlpha(0.9);
+  /**
+   * The garden (cell FARM_LOT): nine fenced beds, rows 1× … 9× top to bottom, one plant per fact.
+   * Plants are made once here and only restyled by syncGarden when the progress changes.
+   */
+  private buildGarden(rect: Rect): void {
+    this.add.image(rect.x, rect.y, TEX.garden).setOrigin(0).setScale(PX).setDepth(DEPTH.lot);
+    const beds = gardenBeds(LOT_IN_CELL.w / PX, LOT_IN_CELL.h / PX);
+    const x0 = rect.x + beds.x0 * PX;
+    const pitch = ((beds.x1 - beds.x0) * PX) / 9;
+    const g: GardenView = {
+      plants: [], labels: [], counts: [], spots: [], key: '',
+      glow: this.add.graphics().setDepth(DEPTH.lot + 0.5),
+      bedOf: row => {
+        const b = beds.rows[row - 1];
+        return { x: x0 - 6, y: rect.y + b.y * PX - 6, w: (beds.x1 - beds.x0) * PX + 12, h: b.h * PX + 12 };
+      },
+    };
+    this.tweens.add({ targets: g.glow, alpha: 0.45, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    for (let row = 1; row <= 9; row++) {
+      const b = beds.rows[row - 1];
+      const base = rect.y + (b.y + b.h - 2) * PX;
+      const mid = rect.y + (b.y + b.h / 2) * PX;
+      const plants: Img[] = [];
+      for (let col = 0; col < 9; col++) {
+        plants.push(this.add.image(x0 + (col + 0.5) * pitch, base, TEX.sprout)
+          .setOrigin(0.5, 1).setDepth(DEPTH.ground + row * 0.01).setVisible(false));
+      }
+      g.plants.push(plants);
+      g.labels.push(this.add.text(rect.x + (beds.x0 - 12) * PX, mid, `${row}×`, {
+        fontFamily: FONT, fontSize: '28px', fontStyle: 'bold', color: '#ffffff',
+        stroke: '#6b4226', strokeThickness: 7, resolution: ASSET_RES,
+      }).setOrigin(0.5).setDepth(DEPTH.ground + 0.5));
+      g.counts.push(this.add.text(rect.x + (beds.x1 + 13) * PX, mid, '', {
+        fontFamily: FONT, fontSize: '21px', fontStyle: 'bold', color: '#ffffff',
+        stroke: '#6b4226', strokeThickness: 6, resolution: ASSET_RES,
+      }).setOrigin(0.5).setDepth(DEPTH.ground + 0.5));
+    }
+    this.garden = g;
+    // Now and then a grown plant twinkles, while the garden can be seen.
+    this.time.addEvent({
+      delay: GARDEN_TWINKLE_MS, loop: true,
+      callback: () => {
+        const spots = this.garden?.spots;
+        if (!spots?.length || (!this.isOverview && this.pageIndex !== FARM_LOT)) return;
+        const p = spots[Math.floor(Math.random() * spots.length)];
+        this.sparkles.explode(4, p.x, p.y);
+      },
+    });
+  }
+
+  /** Restyles the garden's plants, labels and glow from the progress (only when it changed). */
+  private syncGarden(garden: Garden): void {
+    const g = this.garden;
+    if (!g) return;
+    const key = `${garden.glowRow}|${garden.rows.map(r => (r.unlocked ? r.stars.join('') : '-')).join(',')}`;
+    if (key === g.key) return;
+    g.key = key;
+    g.spots = [];
+    for (const r of garden.rows) {
+      const i = r.row - 1;
+      const cropTex = ASSETS.crop[r.crop];
+      g.plants[i].forEach((img, col) => {
+        if (!r.unlocked) {
+          img.setVisible(false);
+          return;
+        }
+        const stars = r.stars[col];
+        const stage = GARDEN_STAGE[stars];
+        img.setVisible(true).setTexture(stars >= 2 ? cropTex : TEX.sprout).setScale(stage.size / stage.tex);
+        img.setOrigin(0.5, stars >= 2 ? 0.88 : 1);
+        if (stars === 3) g.spots.push({ x: img.x, y: img.y - stage.size * 0.45 });
+      });
+      g.labels[i].setAlpha(r.unlocked ? 1 : 0.45);
+      g.counts[i].setText(r.unlocked ? `${r.grown}/9` : '🔒').setAlpha(r.unlocked ? 1 : 0.6);
+    }
+    const bed = g.bedOf(garden.glowRow);
+    g.glow.clear()
+      .fillStyle(0xffd23f, 0.22).fillRoundedRect(bed.x, bed.y, bed.w, bed.h, 12)
+      .lineStyle(6, 0xffd23f, 1).strokeRoundedRect(bed.x, bed.y, bed.w, bed.h, 12);
+    g.labels.forEach((l, i) => l.setColor(i + 1 === garden.glowRow ? '#ffe680' : '#ffffff'));
   }
 
   /** Overview corner badges (🍽️ 🤒 💩 product×n), sized to read at the overview zoom. */
@@ -964,7 +1083,7 @@ export class RanchScene extends Phaser.Scene {
 
   private syncBadges(lv: LotView, s: PageStatus): void {
     const b = lv.badges;
-    const productEmoji = PRODUCT_EMOJI[SPECIES[SPECIES_ORDER[lv.lot]].product];
+    const productEmoji = PRODUCT_EMOJI[SPECIES[speciesOfLot(lv.lot) ?? 'chicken'].product];
     const key = `${+s.hungry}${+s.sick}${+s.poop}${s.products}`;
     if (key === b.last) return;
     b.last = key;
@@ -1566,7 +1685,7 @@ export class RanchScene extends Phaser.Scene {
       this.handlers.onAnimal(animal.id);
       return;
     }
-    const lv = this.lots[page];
+    const lv = this.lots.find(l => l.lot === page);
     const r = lv?.rect;
     if (r && w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.h) {
       if (lv.state === 'plus') {
@@ -1609,6 +1728,7 @@ export class RanchScene extends Phaser.Scene {
     this.animals.clear();
     this.animalList = [];
     this.lots = [];
+    this.garden = null;
     this.tappedPoop = null;
     this.camTween = null;
     this.tagsShown = true;

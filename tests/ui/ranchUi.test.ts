@@ -21,7 +21,8 @@ function rich(s: GameState): GameState {
   return s;
 }
 
-function setup(state: GameState, page = 0) {
+/** Page 1 is the coop (page 0 is the garden). */
+function setup(state: GameState, page = 1) {
   const root = document.createElement('div');
   const nav = document.createElement('div');
   document.body.append(root, nav);
@@ -87,7 +88,7 @@ describe('ranch toolbar', () => {
     const s = rich(st());
     s.ranch.supplies.feed = 3;
     s.ranch.supplies.feedCow = 7;
-    const { root, ui } = setup(s, 1);
+    const { root, ui } = setup(s, 2);
     const feed = toolBtn(root, 'feed');
     expect(feed.querySelector('.feed-sack-emoji')!.textContent).toBe('🐄');
     expect(feed.textContent).not.toContain('🌽');
@@ -97,7 +98,7 @@ describe('ranch toolbar', () => {
     ui.update(s);
     expect(feed.classList.contains('nohouse')).toBe(false);
     expect(feed.classList.contains('empty')).toBe(false);
-    ui.setPage(2, pageStatus(s.ranch));
+    ui.setPage(3, pageStatus(s.ranch));
     expect(feed.querySelector('.feed-sack-emoji')!.textContent).toBe('🐖');
     expect(feed.textContent).not.toContain('🥔');
     expect(feed.classList.contains('nohouse')).toBe(true);
@@ -105,7 +106,7 @@ describe('ranch toolbar', () => {
 
   it('the shop feed rows show the species sack, not a crop', () => {
     const { root, ui } = setup(rich(st()));
-    ui.setPage(1, pageStatus(st().ranch));
+    ui.setPage(2, pageStatus(st().ranch));
     toolBtn(root, 'shop').click();
     const cow = row(root, 'feedCow')!.querySelector('.shop-icon')!;
     expect(cow.querySelector('.feed-sack-emoji')!.textContent).toBe('🐄');
@@ -137,52 +138,82 @@ describe('ranch toolbar', () => {
 
 describe('ranch pages', () => {
   const status = (over: Partial<Record<number, Partial<PageStatus>>>): PageStatus[] =>
-    [0, 1, 2, 3, 4].map(i => ({ hungry: false, sick: false, poop: false, products: 0, ...over[i] }));
+    [0, 1, 2, 3, 4, 5].map(i => ({ hungry: false, sick: false, poop: false, products: 0, ...over[i] }));
 
   it('shows the page name, arrows only where there is a page, and the current dot', () => {
-    const { nav, ui } = setup(st());
+    const { nav, ui } = setup(st(), 0);
     const title = nav.querySelector('.rn-title')!;
     const prev = nav.querySelector<HTMLElement>('.rn-prev')!;
     const next = nav.querySelector<HTMLElement>('.rn-next')!;
-    expect(title.textContent).toBe('🐔 雞舍');
+    expect(title.textContent).toBe('🌱 我的菜園 0/81');
     expect(prev.hidden).toBe(true);
     expect(next.hidden).toBe(false);
     ui.setPage(1, status({}));
-    expect(title.textContent).toBe('🐄 牛棚');
+    expect(title.textContent).toBe('🐔 雞舍');
     expect(prev.hidden).toBe(false);
-    ui.setPage(4, status({}));
+    ui.setPage(2, status({}));
+    expect(title.textContent).toBe('🐄 牛棚');
+    ui.setPage(5, status({}));
     expect(title.textContent).toBe('🦙 羊駝屋');
     expect(next.hidden).toBe(true);
     const dots = Array.from(nav.querySelectorAll('.rn-dot'));
-    expect(dots).toHaveLength(5);
-    expect(dots.map(d => d.classList.contains('current'))).toEqual([false, false, false, false, true]);
+    expect(dots).toHaveLength(6);
+    expect(dots[0].classList.contains('rn-dot-garden')).toBe(true);
+    expect(dots.map(d => d.classList.contains('current'))).toEqual([false, false, false, false, false, true]);
+  });
+
+  it('the garden title counts the fully grown plants (3-star facts)', () => {
+    const s = st(1);
+    s.mastery['1,1'] = 6;
+    s.mastery['1,2'] = 6;
+    s.mastery['1,3'] = 4;
+    const { nav } = setup(s, 0);
+    expect(nav.querySelector('.rn-title')!.textContent).toBe('🌱 我的菜園 2/81');
+  });
+
+  it('on the garden page the care tools give way to「去田裡種菜」; the shop stays', () => {
+    const { root, ui } = setup(st(), 0);
+    const bar = root.querySelector('.ranch-tools')!;
+    expect(bar.classList.contains('garden')).toBe(true);
+    let go = 0;
+    ui.onGoField(() => { go++; });
+    root.querySelector<HTMLElement>('.go-field')!.click();
+    expect(go).toBe(1);
+    toolBtn(root, 'shop').click();
+    expect(rowOrder(root)[0]).toBe('coop'); // the garden page shops for the chickens
+    ui.setPage(1, status({}));
+    expect(bar.classList.contains('garden')).toBe(false);
+    ui.setOverview(true);
+    root.querySelector<HTMLElement>('.go-field')!.click();
+    expect(go).toBe(1);
   });
 
   it('dots of pages that need the child get the attention style', () => {
     const { nav, ui } = setup(st());
-    ui.setPage(0, status({ 1: { hungry: true }, 2: { sick: true }, 3: { poop: true }, 4: { products: 2 } }));
+    ui.setPage(1, status({ 2: { hungry: true }, 3: { sick: true }, 4: { poop: true }, 5: { products: 2 } }));
     const dots = Array.from(nav.querySelectorAll('.rn-dot'));
-    expect(dots.map(d => d.classList.contains('attention'))).toEqual([false, true, true, true, true]);
-    ui.setPage(0, status({ 4: { products: 1 } }));
-    expect(dots.map(d => d.classList.contains('attention'))).toEqual([false, false, false, false, true]);
+    expect(dots.map(d => d.classList.contains('attention'))).toEqual([false, false, true, true, true, true]);
+    ui.setPage(1, status({ 5: { products: 1 } }));
+    expect(dots.map(d => d.classList.contains('attention'))).toEqual([false, false, false, false, false, true]);
   });
 
   it('arrows, dots and 🗺️ report what the child asked for', () => {
-    const { nav, ui } = setup(st(), 2);
+    const { nav, ui } = setup(st(), 3);
     const pages: number[] = [];
     let maps = 0;
     ui.onPage(i => pages.push(i));
     ui.onOverview(() => { maps++; });
     nav.querySelector<HTMLElement>('.rn-next')!.click();
     nav.querySelector<HTMLElement>('.rn-prev')!.click();
-    nav.querySelectorAll<HTMLElement>('.rn-dot')[4].click();
+    nav.querySelectorAll<HTMLElement>('.rn-dot')[5].click();
+    nav.querySelectorAll<HTMLElement>('.rn-dot')[0].click();
     nav.querySelector<HTMLElement>('.rn-map')!.click();
-    expect(pages).toEqual([3, 1, 4]);
+    expect(pages).toEqual([4, 2, 5, 0]);
     expect(maps).toBe(1);
   });
 
   it('the overview has its own title and no arrows or dots', () => {
-    const { nav, ui } = setup(st(), 2);
+    const { nav, ui } = setup(st(), 3);
     ui.setOverview(true);
     expect(nav.querySelector('.rn-title')!.textContent).toBe('🗺️ 我的牧場');
     expect(nav.querySelector<HTMLElement>('.rn-prev')!.hidden).toBe(true);
@@ -198,14 +229,14 @@ describe('ranch shop', () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it('lists the page\'s house, animal and feed first, then medicine and treats', () => {
-    const { root, ui } = setup(rich(st()), 1);
+    const { root, ui } = setup(rich(st()), 2);
     ui.openShop();
     expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat']);
     expect(row(root, 'coop')).toBeNull();
   });
 
   it('a lot or feed focus from another page shows that species', () => {
-    const { root, ui } = setup(rich(st()), 0);
+    const { root, ui } = setup(rich(st()), 1);
     ui.openShop('sty');
     expect(rowOrder(root)).toEqual(['sty', 'pig', 'feedPig', 'medicine', 'treat']);
     expect(focused(root)).toBe('sty');
@@ -214,7 +245,7 @@ describe('ranch shop', () => {
   it('a locked barn shows 🔒🥔 and the level to unlock', () => {
     const s = rich(st(3)); // 1×, 2×, 5× open: 🌽 is there, 🥔 (4×) is not
     expect(lockText(s, 'barn')).toBe('解鎖 4× 就有 🥔');
-    const { root, ui } = setup(s, 1);
+    const { root, ui } = setup(s, 2);
     ui.openShop();
     const barn = row(root, 'barn')!;
     expect(barn.textContent).toContain('🔒🥔');
@@ -293,7 +324,7 @@ describe('ranch shop', () => {
     const s = rich(st());
     s.ranch.products.milk = 0;
     buy(s, 'sty', T0, rng);
-    const { root, ui } = setup(s, 2);
+    const { root, ui } = setup(s, 3);
     ui.openShop();
     const pig = row(root, 'pig')!;
     expect(pig.textContent).toContain('🥛');

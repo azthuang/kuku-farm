@@ -13,7 +13,7 @@ export interface SpeciesDef {
   id: SpeciesId;
   house: HouseKind;
   houseCapacity: number;
-  /** Fixed open lot (and page index) of the house. */
+  /** Fixed lot (and ranch page) of the house: 1 … 5, after the garden at FARM_LOT. */
   lot: number;
   product: ProductId;
   feed: FeedId;
@@ -50,7 +50,7 @@ const LLAMA_HOUSE: Price = { grape: 120, pumpkin: 80 };
 export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   chicken: {
     ...COMMON,
-    id: 'chicken', house: 'coop', houseCapacity: 4, lot: 0, product: 'egg', feed: 'feed',
+    id: 'chicken', house: 'coop', houseCapacity: 4, lot: 1, product: 'egg', feed: 'feed',
     housePrice: CHICKEN_HOUSE,
     animalPrice: (n) => (n < 2 ? { wheat: 80, carrot: 50 } : { corn: 20, egg: 5 }),
     feedPrice: { wheat: 30, carrot: 10 },
@@ -62,7 +62,7 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   },
   cow: {
     ...COMMON,
-    id: 'cow', house: 'barn', lot: 1, product: 'milk', feed: 'feedCow',
+    id: 'cow', house: 'barn', lot: 2, product: 'milk', feed: 'feedCow',
     housePrice: COW_HOUSE,
     animalPrice: () => ({ potato: 60, egg: 10 }),
     feedPrice: { corn: 30, potato: 10 },
@@ -74,7 +74,7 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   },
   pig: {
     ...COMMON,
-    id: 'pig', house: 'sty', lot: 2, product: 'truffle', feed: 'feedPig',
+    id: 'pig', house: 'sty', lot: 3, product: 'truffle', feed: 'feedPig',
     housePrice: PIG_HOUSE,
     animalPrice: () => ({ tomato: 60, milk: 5 }),
     feedPrice: { potato: 30, tomato: 10 },
@@ -86,7 +86,7 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   },
   sheep: {
     ...COMMON,
-    id: 'sheep', house: 'fold', lot: 3, product: 'yarn', feed: 'feedSheep',
+    id: 'sheep', house: 'fold', lot: 4, product: 'yarn', feed: 'feedSheep',
     housePrice: SHEEP_HOUSE,
     animalPrice: () => ({ strawberry: 60, truffle: 5 }),
     feedPrice: { tomato: 30, strawberry: 10 },
@@ -98,7 +98,7 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   },
   llama: {
     ...COMMON,
-    id: 'llama', house: 'hut', lot: 4, product: 'fluff', feed: 'feedLlama',
+    id: 'llama', house: 'hut', lot: 5, product: 'fluff', feed: 'feedLlama',
     housePrice: LLAMA_HOUSE,
     animalPrice: () => ({ watermelon: 60, yarn: 5 }),
     feedPrice: { pumpkin: 30, grape: 10 },
@@ -110,8 +110,17 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   },
 };
 
-/** Page order of the ranch. */
+/** Species in ranch page order (pages 1 … 5, after the garden). */
 export const SPECIES_ORDER: readonly SpeciesId[] = ['chicken', 'cow', 'pig', 'sheep', 'llama'];
+/** The ranch's first lot and page: the garden that shows the times-table progress. */
+export const FARM_LOT = 0;
+/** Lots (and ranch pages): the garden, then one per species. */
+export const LOT_COUNT = SPECIES_ORDER.length + 1;
+
+/** The species whose house stands on `lot`, or null for the garden (or no lot). */
+export function speciesOfLot(lot: number): SpeciesId | null {
+  return SPECIES_ORDER.find((s) => SPECIES[s].lot === lot) ?? null;
+}
 export const HOUSE_KINDS: readonly HouseKind[] = SPECIES_ORDER.map((s) => SPECIES[s].house);
 export const PRODUCT_IDS: readonly ProductId[] = SPECIES_ORDER.map((s) => SPECIES[s].product);
 export const FEED_IDS: readonly FeedId[] = SPECIES_ORDER.map((s) => SPECIES[s].feed);

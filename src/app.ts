@@ -19,9 +19,10 @@ import {
 } from './core/ranch';
 import { buy, isLocked, lockHint, nextName, type ShopItemId } from './core/shop';
 import {
-  FEED_IDS, HOUSE_KINDS, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfHouse,
+  FEED_IDS, HOUSE_KINDS, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfHouse, speciesOfLot,
   type HouseKind, type SpeciesId,
 } from './core/species';
+import { gardenOf } from './core/garden';
 import { createSfx, voiceOf } from './ui/sfx';
 import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
 import { careFeedback } from './ui/ranchFeedback';
@@ -36,6 +37,8 @@ const EXPORT_URL_TTL_MS = 40_000;
 const HINT: Record<Mode, string> = { basic: '點一列開始', challenge: '準備好了就開始！' };
 /** The ranch is settled and redrawn this often while its tab is on screen. */
 const RANCH_TICK_MS = 1000;
+/** The ranch opens on the coop (the parent's choice); the garden is the page before it. */
+const START_PAGE = SPECIES.chicken.lot;
 /** A scene still booting/loading can't be slept or woken yet: look again after this long. */
 const SCENE_RETRY_MS = 100;
 
@@ -112,8 +115,11 @@ export function startApp(root: HTMLElement): void {
   let saveFailShown = false;
   let tab: Tab = 'field';
   let tool: Tool = 'hand';
-  /** Ranch page (0 … 4, SPECIES_ORDER) and whether the zoomed-out overview is showing. */
-  let ranchPage = 0;
+  /**
+   * Ranch page (= lot: 0 the garden, 1 … 5 the pens) and whether the zoomed-out overview is
+   * showing. The ranch opens on the coop: the garden is one swipe to the left.
+   */
+  let ranchPage = START_PAGE;
   let ranchOverview = false;
 
   function save(): void {
@@ -321,7 +327,7 @@ export function startApp(root: HTMLElement): void {
     scene.render(game);
     renderRanch();
     ranchUi.update(game.state);
-    goPage(0, false); // a different ranch: start at the first page, not the overview
+    goPage(START_PAGE, false); // a different ranch: start at the coop again, not the overview
     layout.updateHud(game.state);
     showIdle();
     // The file's ranch was unreadable: the field progress came in, the ranch starts over.
@@ -380,7 +386,7 @@ export function startApp(root: HTMLElement): void {
       const hint = locked[kind] ? lockHint(game.state, kind) : null;
       if (hint) lockCrop[kind] = CROP_BY_ROW[hint.row].emoji;
     }
-    return { locked, lockCrop };
+    return { locked, lockCrop, garden: gardenOf(game.state) };
   }
 
   function renderRanch(): void {
@@ -402,7 +408,7 @@ export function startApp(root: HTMLElement): void {
 
   /** Care view of page `i` (from a swipe, the arrows, a dot or an overview tap). */
   function goPage(i: number, animate = tab === 'ranch'): void {
-    ranchPage = Math.max(0, Math.min(SPECIES_ORDER.length - 1, i));
+    ranchPage = Math.max(0, Math.min(LOT_COUNT - 1, i));
     ranchOverview = false;
     ranchScene.showPage(ranchPage, animate);
     ranchUi.setOverview(false);
@@ -463,7 +469,7 @@ export function startApp(root: HTMLElement): void {
     }
     ranchChanged();
     const a = r.animals.find(x => x.id === id);
-    const fb = careFeedback(used, res, a?.sick ?? false, a?.species ?? SPECIES_ORDER[ranchPage]);
+    const fb = careFeedback(used, res, a?.sick ?? false, a?.species ?? speciesOfLot(ranchPage) ?? 'chicken');
     ranchScene.fx(id, fb.fx);
     if (fb.sound) sfx.play(fb.sound);
     if (fb.toast) layout.toast(fb.toast);
@@ -511,7 +517,10 @@ export function startApp(root: HTMLElement): void {
     onAnimal,
     onPoop,
     onEgg,
-    onLot: lot => ranchUi.openShop(SPECIES[SPECIES_ORDER[lot]].house),
+    onLot: lot => {
+      const sp = speciesOfLot(lot);
+      if (sp) ranchUi.openShop(SPECIES[sp].house);
+    },
     onLockedLot: kind => {
       const hint = lockText(game.state, kind);
       if (hint) layout.toast(`🔒 ${hint}`);
@@ -520,7 +529,7 @@ export function startApp(root: HTMLElement): void {
     onPageTap: i => goPage(i),
     onSwipe: d => {
       const i = ranchPage + d;
-      if (!ranchOverview && i >= 0 && i < SPECIES_ORDER.length) goPage(i);
+      if (!ranchOverview && i >= 0 && i < LOT_COUNT) goPage(i);
     },
     onTag: id => {
       nextName(game.state.ranch, id); // the scene pops the tag when the name changes
@@ -534,12 +543,14 @@ export function startApp(root: HTMLElement): void {
       if (a && !a.sick && tab === 'ranch' && document.visibilityState === 'visible') sfx.ambient(voiceOf(a.species));
     },
   });
+  ranchScene.showPage(ranchPage, false); // before create: the scene starts on this page
   renderRanch();
   ranchUi.update(game.state);
   syncNav();
   ranchUi.onTool(selectTool);
   ranchUi.onPage(i => goPage(i));
   ranchUi.onOverview(toggleOverview);
+  ranchUi.onGoField(() => layout.setTab('field'));
   ranchUi.onBuy(item => {
     const res = buy(game.state, item, clock.now(), rng);
     ranchChanged();

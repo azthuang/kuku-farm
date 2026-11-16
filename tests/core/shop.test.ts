@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { createNewState } from '../../src/core/state';
 import { createRanch } from '../../src/core/ranch';
 import { buy, checkBuy, priceOf, nextName, isLocked, lockHint, MAX_ANIMALS, type ShopState, type ShopItemId } from '../../src/core/shop';
-import { SPECIES, SPECIES_ORDER } from '../../src/core/species';
+import { FARM_LOT, LOT_COUNT, SPECIES, SPECIES_ORDER, speciesOfLot } from '../../src/core/species';
 
 function st(): ShopState {
   return { ...createNewState(0), unlocked: 9, ranch: createRanch(0) };
 }
-const coop = (s: ShopState) => { s.ranch.houses.push({ id: 'h0', kind: 'coop', lot: 0, poop: 0 }); return s; };
+const coop = (s: ShopState) => { s.ranch.houses.push({ id: 'h0', kind: 'coop', lot: 1, poop: 0 }); return s; };
 const rich = (s: ShopState) => {
   s.inventory.wheat = 900; s.inventory.carrot = 900; s.inventory.corn = 900; s.ranch.products.egg = 900;
   return s;
@@ -134,9 +134,13 @@ describe('shop', () => {
     const d = SPECIES;
     expect(SPECIES_ORDER).toEqual(['chicken', 'cow', 'pig', 'sheep', 'llama']);
     expect(SPECIES_ORDER.map((s) => [d[s].house, d[s].lot, d[s].houseCapacity, d[s].product, d[s].feed])).toEqual([
-      ['coop', 0, 4, 'egg', 'feed'], ['barn', 1, 2, 'milk', 'feedCow'], ['sty', 2, 2, 'truffle', 'feedPig'],
-      ['fold', 3, 2, 'yarn', 'feedSheep'], ['hut', 4, 2, 'fluff', 'feedLlama'],
+      ['coop', 1, 4, 'egg', 'feed'], ['barn', 2, 2, 'milk', 'feedCow'], ['sty', 3, 2, 'truffle', 'feedPig'],
+      ['fold', 4, 2, 'yarn', 'feedSheep'], ['hut', 5, 2, 'fluff', 'feedLlama'],
     ]);
+    // the garden is lot (and page) 0; each species after it in page order
+    expect(FARM_LOT).toBe(0);
+    expect(LOT_COUNT).toBe(6);
+    expect([0, 1, 2, 3, 4, 5, 6].map(speciesOfLot)).toEqual([null, 'chicken', 'cow', 'pig', 'sheep', 'llama', null]);
     expect(SPECIES_ORDER.map((s) => d[s].housePrice)).toEqual([
       { wheat: 150, carrot: 100 }, { potato: 120, corn: 80 }, { tomato: 120, potato: 80 },
       { strawberry: 120, tomato: 80 }, { grape: 120, pumpkin: 80 },
@@ -193,7 +197,7 @@ describe('shop', () => {
     const s = rich(st());
     s.inventory.potato = 500;
     buy(s, 'barn', 0, () => 0);
-    expect(s.ranch.houses[0]).toMatchObject({ kind: 'barn', lot: 1 });
+    expect(s.ranch.houses[0]).toMatchObject({ kind: 'barn', lot: 2 });
     expect(checkBuy(s, 'barn')).toEqual({ ok: false, reason: 'full' });
     const r = buy(s, 'cow', 0, () => 0);
     expect(r.ok).toBe(true);

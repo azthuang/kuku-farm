@@ -1,4 +1,4 @@
-import { SPECIES, SPECIES_ORDER, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
+import { FARM_LOT, LOT_COUNT, SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
 
 const MS_HOUR = 3_600_000;
 const STEP_MS = 60_000;
@@ -225,14 +225,14 @@ export function collect(r: RanchState, animalId: string): number {
 export interface PageStatus { hungry: boolean; sick: boolean; poop: boolean; products: number }
 
 /**
- * What needs the child on each ranch page (index = lot = SPECIES_ORDER position): any hungry
+ * What needs the child on each ranch page (index = lot; the garden at FARM_LOT never does): any hungry
  * (satiety ≤ HUNGRY_SHOW_AT) or sick animal, poop in the house, and products waiting.
  */
 export function pageStatus(r: RanchState): PageStatus[] {
-  const out = SPECIES_ORDER.map((): PageStatus => ({ hungry: false, sick: false, poop: false, products: 0 }));
+  const out = Array.from({ length: LOT_COUNT }, (): PageStatus => ({ hungry: false, sick: false, poop: false, products: 0 }));
   const lotOf = new Map<string, number>();
   for (const h of r.houses) {
-    if (h.lot < 0 || h.lot >= out.length) continue;
+    if (h.lot === FARM_LOT || h.lot < 0 || h.lot >= out.length) continue;
     lotOf.set(h.id, h.lot);
     if (h.poop > 0) out[h.lot].poop = true;
   }

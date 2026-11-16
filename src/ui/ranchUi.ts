@@ -2,8 +2,9 @@ import { CROP_BY_ROW, type CropId } from '../core/levels';
 import type { PageStatus } from '../core/ranch';
 import { feedIcon } from './feedIcon';
 import { checkBuy, lockHint, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
+import { gardenOf } from '../core/garden';
 import {
-  PRODUCT_EMOJI, SPECIES, SPECIES_ORDER,
+  FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfLot,
   type HouseKind, type ProductId, type SpeciesId, type SupplyId,
 } from '../core/species';
 import type { GameState } from '../core/state';
@@ -20,13 +21,15 @@ export interface RanchUi {
   onBuy(cb: (item: ShopItemId) => void): void;
   /** Stars on a shop row after a purchase. */
   celebrate(item: ShopItemId): void;
-  /** Current page (0 … 4) and every page's status (for the dots). Cheap: call it every tick. */
+  /** Current page (0 the garden, 1 … 5 the pens) and every page's status (for the dots). Cheap: call it every tick. */
   setPage(index: number, status: readonly PageStatus[]): void;
   /** ◀ ▶ or a dot asked for page `index`. */
   onPage(cb: (index: number) => void): void;
   /** 🗺️ was pressed (in either view). */
   onOverview(cb: () => void): void;
   setOverview(on: boolean): void;
+  /** The garden page's「去田裡種菜」button. */
+  onGoField(cb: () => void): void;
 }
 
 /**
@@ -45,6 +48,7 @@ export const SPECIES_UI: Record<SpeciesId, { emoji: string; name: string; house:
 };
 
 const OVERVIEW_TITLE = '🗺️ 我的牧場';
+const GARDEN_TITLE = '🌱 我的菜園';
 
 const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: 'treat' | 'medicine' }[] = [
   { tool: 'hand', icon: '✋', label: '摸摸' },
@@ -115,6 +119,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   let buyCb: (item: ShopItemId) => void = () => {};
   let pageCb: (index: number) => void = () => {};
   let overviewCb: () => void = () => {};
+  let goFieldCb: () => void = () => {};
   let tool: Tool = 'hand';
   let state: GameState | null = null;
   let ignoreUntil = 0;
@@ -123,7 +128,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   let shopSpecies: SpeciesId = 'chicken';
   let focusItem: ShopItemId | null = null;
 
-  const pageSpecies = (): SpeciesId => SPECIES_ORDER[page];
+  /** The species of the page shown (the garden page shops and feeds for the chickens). */
+  const pageSpecies = (): SpeciesId => speciesOfLot(page) ?? SPECIES_ORDER[0];
 
   // ---------------------------------------------------------------- toolbar
 
@@ -166,7 +172,13 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   shopBtn.addEventListener('click', () => {
     if (!overview) openShop();
   });
-  bar.append(shopBtn);
+  // On the garden page the care tools give way to one big way back to the field.
+  const goField = button('tool go-field', '', '去田裡種菜');
+  goField.append(el('span', 'tool-icon', '🌱'), el('span', 'go-field-text', '去田裡種菜'));
+  goField.addEventListener('click', () => {
+    if (!overview) goFieldCb();
+  });
+  bar.append(goField, shopBtn);
 
   // ---------------------------------------------------------------- page navigation
 
@@ -175,24 +187,29 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   const prev = button('rn-prev', '◀', '上一頁');
   const next = button('rn-next', '▶', '下一頁');
   const dotsEl = el('div', 'rn-dots');
-  const dots = SPECIES_ORDER.map((sp, i) => {
-    const d = button('rn-dot', '', SPECIES_UI[sp].house);
+  const dots = Array.from({ length: LOT_COUNT }, (_, i) => {
+    const sp = speciesOfLot(i);
+    const d = button(sp ? 'rn-dot' : 'rn-dot rn-dot-garden', '', sp ? SPECIES_UI[sp].house : '菜園');
     d.dataset.page = String(i);
     d.addEventListener('click', () => pageCb(i));
     dotsEl.append(d);
     return d;
   });
   prev.addEventListener('click', () => { if (page > 0) pageCb(page - 1); });
-  next.addEventListener('click', () => { if (page < SPECIES_ORDER.length - 1) pageCb(page + 1); });
+  next.addEventListener('click', () => { if (page < LOT_COUNT - 1) pageCb(page + 1); });
   mapBtn.addEventListener('click', () => overviewCb());
   nav?.replaceChildren(title, mapBtn, prev, next, dotsEl);
 
   function renderNav(): void {
     const sp = pageSpecies();
-    title.textContent = overview ? OVERVIEW_TITLE : `${SPECIES_UI[sp].emoji} ${SPECIES_UI[sp].house}`;
+    const garden = page === FARM_LOT;
+    let text = `${SPECIES_UI[sp].emoji} ${SPECIES_UI[sp].house}`;
+    if (garden) text = state ? `${GARDEN_TITLE} ${gardenOf(state).grown}/81` : GARDEN_TITLE;
+    if (title.textContent !== (overview ? OVERVIEW_TITLE : text)) title.textContent = overview ? OVERVIEW_TITLE : text;
     mapBtn.classList.toggle('active', overview);
+    bar.classList.toggle('garden', garden);
     prev.hidden = overview || page === 0;
-    next.hidden = overview || page === SPECIES_ORDER.length - 1;
+    next.hidden = overview || page === LOT_COUNT - 1;
     dotsEl.hidden = overview;
     dots.forEach((d, i) => d.classList.toggle('current', i === page));
   }
@@ -360,7 +377,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   }
 
   function setPage(index: number, status: readonly PageStatus[]): void {
-    const i = Math.max(0, Math.min(SPECIES_ORDER.length - 1, Math.round(index)));
+    const i = Math.max(0, Math.min(LOT_COUNT - 1, Math.round(index)));
     if (i !== page) {
       page = i;
       if (state) renderTools(state);
@@ -378,6 +395,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     bar.classList.toggle('off', on);
     for (const { btn } of toolBtns.values()) btn.disabled = on;
     shopBtn.disabled = on;
+    goField.disabled = on;
     if (on) closeShop();
     renderNav();
   }
@@ -391,5 +409,6 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     onBuy: cb => { buyCb = cb; },
     onPage: cb => { pageCb = cb; },
     onOverview: cb => { overviewCb = cb; },
+    onGoField: cb => { goFieldCb = cb; },
   };
 }
