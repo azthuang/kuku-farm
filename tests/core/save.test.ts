@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createNewState } from '../../src/core/state';
+import { createNewState, type GameState } from '../../src/core/state';
 import {
   SAVE_KEY, CORRUPT_KEY, serialize, parseSave, loadFrom, saveTo, exportFileName,
 } from '../../src/core/save';
@@ -190,34 +190,114 @@ describe('save', () => {
     expect(parseSave(serialize(s))).toEqual({ ok: true, state: s });
   });
 
-  it('rejects impossible ranch data', () => {
-    const bad: Array<[string, (r: RanchState) => void]> = [
-      ['satiety 101', (r) => { r.animals[0].satiety = 101; }],
-      ['mood -1', (r) => { r.animals[0].mood = -1; }],
+  it('clamps out-of-range ranch numbers instead of rejecting them', () => {
+    const r = withRanch((x) => {
+      x.animals[0].satiety = 101;
+      x.animals[0].mood = -1;
+      x.animals[1].mood = 250;
+      x.animals[0].waiting = 4;
+      x.animals[1].waiting = -2;
+      x.animals[0].neglectMs = -5;
+      x.animals[0].produceMs = -1;
+      x.animals[0].poopMs = -0.5;
+      x.animals[0].petTimes = [1, 2, 3, 4, 5];
+      (x.animals[1] as unknown as { petTimes: unknown }).petTimes = ['x', null, 7];
+      x.houses[0].poop = 7;
+      x.supplies = { feed: 100, treat: -3, medicine: 5000 };
+      x.products.egg = 1000;
+    });
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.ranchReset).toBeUndefined();
+    const [a, b] = r.state.ranch.animals;
+    expect(a).toMatchObject({ satiety: 100, mood: 0, waiting: 3, neglectMs: 0, produceMs: 0, poopMs: 0 });
+    expect(a.petTimes).toEqual([3, 4, 5]);
+    expect(b).toMatchObject({ mood: 100, waiting: 0 });
+    expect(b.petTimes).toEqual([7]);
+    expect(r.state.ranch.houses[0].poop).toBe(6);
+    expect(r.state.ranch.supplies).toEqual({ feed: 99, treat: 0, medicine: 99 });
+    expect(r.state.ranch.products.egg).toBe(999);
+  });
+
+  it("keeps animals over today's caps (a lowered cap must never remove a chicken)", () => {
+    const many = withRanch((x) => {
+      x.houses.push({ id: 'h2', kind: 'coop', lot: 1, poop: 0 });
+      for (let i = 0; i < 9; i++) x.animals.push({ ...x.animals[0], id: `y${i}`, houseId: i < 3 ? 'h1' : 'h2' });
+    });
+    if (!many.ok) throw new Error('expected ok');
+    expect(many.ranchReset).toBeUndefined();
+    expect(many.state.ranch.animals).toHaveLength(11);
+  });
+
+  it('a structurally broken ranch resets only the ranch and keeps the field progress', () => {
+    const broken: Array<[string, (r: RanchState) => void]> = [
       ['satiety NaN', (r) => { r.animals[0].satiety = NaN; }],
+      ['satiety string', (r) => { (r.animals[0] as unknown as { satiety: unknown }).satiety = '5'; }],
       ['species', (r) => { (r.animals[0] as unknown as { species: string }).species = 'dragon'; }],
       ['houseId', (r) => { r.animals[0].houseId = 'nope'; }],
-      ['capacity', (r) => {
-        for (let i = 0; i < 3; i++) {
-          r.animals.push({ ...r.animals[0], id: `x${i}` });
-        }
-      }],
-      ['animals > 10', (r) => {
-        for (let i = 0; i < 9; i++) r.animals.push({ ...r.animals[0], id: `y${i}`, houseId: 'h2' });
-        r.houses.push({ id: 'h2', kind: 'coop', lot: 1, poop: 0 });
-      }],
-      ['supply 100', (r) => { r.supplies.feed = 100; }],
-      ['product 1000', (r) => { r.products.egg = 1000; }],
       ['dup animal id', (r) => { r.animals[1].id = 'a1'; }],
       ['dup house id', (r) => { r.houses.push({ id: 'h1', kind: 'coop', lot: 1, poop: 0 }); }],
-      ['poop 7', (r) => { r.houses[0].poop = 7; }],
-      ['waiting 4', (r) => { r.animals[0].waiting = 4; }],
       ['bad house kind', (r) => { (r.houses[0] as unknown as { kind: string }).kind = 'barn'; }],
+      ['poop fraction', (r) => { r.houses[0].poop = 1.5; }],
       ['nextId 0', (r) => { r.nextId = 0; }],
-      ['petTimes junk', (r) => { (r.animals[0] as unknown as { petTimes: unknown }).petTimes = ['x']; }],
+      ['petTimes not array', (r) => { (r.animals[0] as unknown as { petTimes: unknown }).petTimes = 'x'; }],
+      ['supplies missing', (r) => { (r as unknown as { supplies: unknown }).supplies = undefined; }],
+      ['sick not boolean', (r) => { (r.animals[0] as unknown as { sick: unknown }).sick = 1; }],
     ];
-    for (const [name, mut] of bad) expect(withRanch(mut).ok, name).toBe(false);
-    const s = { ...createNewState(5), ranch: undefined };
-    expect(parseSave(JSON.stringify(s)).ok).toBe(false);
+    const field = (s: GameState) => {
+      s.unlocked = 4;
+      s.mastery = { '1,2': 6, '3,4': 2 };
+      s.inventory.corn = 321;
+      s.cleared = { 1: [1, 2, 3] };
+      s.lastSeenAt = 4242;
+      return s;
+    };
+    for (const [name, mut] of broken) {
+      const s = field(createNewState(5));
+      s.ranch = populated();
+      mut(s.ranch);
+      const r = parseSave(JSON.stringify(s));
+      expect(r, name).toEqual({
+        ok: true, ranchReset: true, state: { ...field(createNewState(5)), ranch: createRanch(4242) },
+      });
+    }
+    for (const ranch of [undefined, null, 'x', []]) {
+      const r = parseSave(JSON.stringify({ ...field(createNewState(5)), ranch }));
+      expect(r.ok && r.ranchReset && r.state.unlocked === 4 && r.state.inventory.corn === 321).toBe(true);
+    }
+  });
+
+  it('loadFrom keeps the field, empties a broken ranch and backs the raw save up', () => {
+    const s = createNewState(5);
+    s.unlocked = 6;
+    s.mastery = { '5,5': 4 };
+    s.inventory.wheat = 77;
+    s.ranch = populated();
+    (s.ranch.animals[0] as unknown as { species: string }).species = 'dragon';
+    const raw = JSON.stringify(s);
+    const mem = memoryStorage();
+    mem.setItem(SAVE_KEY, raw);
+    const r = loadFrom(mem);
+    expect(r).toMatchObject({ kind: 'ok', ranchReset: true });
+    if (r.kind !== 'ok') throw new Error('expected ok');
+    expect(r.state.unlocked).toBe(6);
+    expect(r.state.mastery).toEqual({ '5,5': 4 });
+    expect(r.state.inventory.wheat).toBe(77);
+    expect(r.state.ranch).toEqual(createRanch(5));
+    expect(mem.getItem(CORRUPT_KEY)).toBe(raw);
+  });
+
+  it('loadFrom writes no backup for a healthy save', () => {
+    const s = createNewState(5);
+    s.ranch = populated();
+    const mem = memoryStorage();
+    saveTo(mem, s);
+    expect(loadFrom(mem)).toEqual({ kind: 'ok', state: s });
+    expect(mem.getItem(CORRUPT_KEY)).toBeNull();
+  });
+
+  it('a whole broken save is still rejected (not just the ranch)', () => {
+    const s = createNewState(5);
+    s.ranch = populated();
+    expect(parseSave(JSON.stringify({ ...s, unlocked: 0 }))).toEqual({ ok: false, error: 'invalid' });
   });
 });

@@ -303,7 +303,8 @@ export function startApp(root: HTMLElement): void {
     ranchUi.update(game.state);
     layout.updateHud(game.state);
     showIdle();
-    layout.toast('✅ 已匯入存檔');
+    // The file's ranch was unreadable: the field progress came in, the ranch starts over.
+    layout.toast(r.ranchReset ? '✅ 已匯入存檔（牧場重新開始）' : '✅ 已匯入存檔');
   });
 
   // Keep the canvas fitted: the stage shrinks when the question panel opens.

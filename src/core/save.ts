@@ -4,18 +4,21 @@ import {
   MAX_POOP, PRODUCT_CAP, PET_MAX_IN_WINDOW, createRanch,
   type Animal, type House, type RanchState,
 } from './ranch';
+import { SUPPLY_CAP } from './shop';
 import { CROP_CAP, type DailyStat, type GameState } from './state';
 
 export const SAVE_KEY = 'kuku-farm-save';
 export const CORRUPT_KEY = 'kuku-farm-save-corrupt';
 
+/**
+ * `ranchReset`: the field data was fine but the ranch part was unreadable, so `state.ranch` is a
+ * fresh empty ranch. Present only when true.
+ */
 export type ParseResult =
-  | { ok: true; state: GameState }
+  | { ok: true; state: GameState; ranchReset?: true }
   | { ok: false; error: 'invalid' | 'newer-version' };
 
 const MAX_MASTERY = 6;
-const MAX_ANIMALS_SAVED = 10; // mirrors shop.MAX_ANIMALS
-const SUPPLY_CAP_SAVED = 99; // mirrors shop.SUPPLY_CAP
 const SUPPLY_IDS: readonly SupplyId[] = ['feed', 'treat', 'medicine'];
 const PRODUCT_IDS: readonly ProductId[] = ['egg'];
 const HOUSE_KINDS: readonly HouseKind[] = ['coop'];
@@ -47,10 +50,22 @@ function has(o: Record<string, unknown>, k: string): boolean {
   return Object.prototype.hasOwnProperty.call(o, k);
 }
 
-function isFiniteIn(v: unknown, min: number, max: number): v is number {
-  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+function finite(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fail();
 }
 
+function int(v: unknown): number {
+  return typeof v === 'number' && Number.isInteger(v) ? v : fail();
+}
+
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+
+/**
+ * Wrong types, unknown species/kinds, dangling or duplicate ids fail (the caller then resets just
+ * the ranch). Numbers that are merely out of range are clamped: caps are tunable and a changed cap
+ * must never cost the child her animals. Animal and house-capacity counts are not capped here at all
+ * (the shop refuses more buys), so lowering a cap later never removes a chicken.
+ */
 function validateRanch(data: unknown): RanchState {
   const o = rec(data);
 
@@ -60,13 +75,13 @@ function validateRanch(data: unknown): RanchState {
     const h = rec(hv);
     if (typeof h.id !== 'string' || h.id === '') fail();
     if (!HOUSE_KINDS.includes(h.kind as HouseKind)) fail();
-    if (!isNonNegInt(h.lot) || !isIntIn(h.poop, 0, MAX_POOP)) fail();
+    if (!isNonNegInt(h.lot)) fail();
     if (houses.some((x) => x.id === h.id)) fail();
-    houses.push({ id: h.id, kind: h.kind as HouseKind, lot: h.lot, poop: h.poop });
+    houses.push({ id: h.id, kind: h.kind as HouseKind, lot: h.lot, poop: clamp(int(h.poop), 0, MAX_POOP) });
   }
 
   const animals: Animal[] = [];
-  if (!Array.isArray(o.animals) || o.animals.length > MAX_ANIMALS_SAVED) fail();
+  if (!Array.isArray(o.animals)) fail();
   for (const av of o.animals) {
     const a = rec(av);
     if (typeof a.id !== 'string' || a.id === '') fail();
@@ -76,44 +91,54 @@ function validateRanch(data: unknown): RanchState {
     if (typeof a.name !== 'string' || typeof a.color !== 'string') fail();
     const house = houses.find((h) => h.id === a.houseId);
     if (!house || house.kind !== sp.house) fail();
-    if (!isFiniteIn(a.satiety, 0, 100) || !isFiniteIn(a.mood, 0, 100)) fail();
     if (typeof a.sick !== 'boolean' || typeof a.medicated !== 'boolean') fail();
-    if (!isFiniteIn(a.neglectMs, 0, Infinity) || !isFiniteIn(a.produceMs, 0, Infinity)
-      || !isFiniteIn(a.poopMs, 0, Infinity)) fail();
-    if (!isIntIn(a.waiting, 0, sp.maxWaiting)) fail();
-    if (!Array.isArray(a.petTimes) || a.petTimes.length > PET_MAX_IN_WINDOW
-      || !a.petTimes.every((t) => typeof t === 'number' && Number.isFinite(t))) fail();
-    if (a.lastBrushAt !== null && !(typeof a.lastBrushAt === 'number' && Number.isFinite(a.lastBrushAt))) fail();
-    if (animals.filter((x) => x.houseId === a.houseId).length >= sp.houseCapacity) fail();
+    if (!Array.isArray(a.petTimes)) fail();
+    if (a.lastBrushAt !== null) finite(a.lastBrushAt);
     animals.push({
-      id: a.id, species: a.species as SpeciesId, name: a.name, color: a.color, houseId: a.houseId as string,
-      satiety: a.satiety, mood: a.mood, sick: a.sick, medicated: a.medicated,
-      neglectMs: a.neglectMs, produceMs: a.produceMs, poopMs: a.poopMs, waiting: a.waiting,
-      petTimes: [...(a.petTimes as number[])], lastBrushAt: a.lastBrushAt as number | null,
+      id: a.id, species: a.species as SpeciesId, name: a.name, color: a.color, houseId: house.id,
+      satiety: clamp(finite(a.satiety), 0, 100),
+      mood: clamp(finite(a.mood), 0, 100),
+      sick: a.sick, medicated: a.medicated,
+      neglectMs: Math.max(0, finite(a.neglectMs)),
+      produceMs: Math.max(0, finite(a.produceMs)),
+      poopMs: Math.max(0, finite(a.poopMs)),
+      waiting: clamp(int(a.waiting), 0, sp.maxWaiting),
+      petTimes: a.petTimes
+        .filter((t): t is number => typeof t === 'number' && Number.isFinite(t))
+        .slice(-PET_MAX_IN_WINDOW),
+      lastBrushAt: a.lastBrushAt as number | null,
     });
   }
 
   const sIn = rec(o.supplies);
   const supplies = {} as Record<SupplyId, number>;
   for (const k of SUPPLY_IDS) {
-    const n = has(sIn, k) ? sIn[k] : undefined;
-    if (!isIntIn(n, 0, SUPPLY_CAP_SAVED)) fail();
-    supplies[k] = n;
+    if (!has(sIn, k)) fail();
+    supplies[k] = clamp(int(sIn[k]), 0, SUPPLY_CAP);
   }
   const pIn = rec(o.products);
   const products = {} as Record<ProductId, number>;
   for (const k of PRODUCT_IDS) {
-    const n = has(pIn, k) ? pIn[k] : undefined;
-    if (!isIntIn(n, 0, PRODUCT_CAP)) fail();
-    products[k] = n;
+    if (!has(pIn, k)) fail();
+    products[k] = clamp(int(pIn[k]), 0, PRODUCT_CAP);
   }
 
-  if (typeof o.settledAt !== 'number' || !Number.isFinite(o.settledAt)) fail();
+  const settledAt = finite(o.settledAt);
   if (!isIntIn(o.nextId, 1, Number.MAX_SAFE_INTEGER)) fail();
-  return { houses, animals, supplies, products, settledAt: o.settledAt, nextId: o.nextId };
+  return { houses, animals, supplies, products, settledAt, nextId: o.nextId };
 }
 
-function validate(data: unknown): GameState {
+/** The ranch part of a v3 save, or null when it is too broken to read. */
+function tryRanch(data: unknown): RanchState | null {
+  try {
+    return validateRanch(data);
+  } catch (e) {
+    if (e instanceof Invalid) return null;
+    throw e;
+  }
+}
+
+function validate(data: unknown): { state: GameState; ranchReset: boolean } {
   const o = rec(data);
   if (typeof o.version !== 'number' || Number.isNaN(o.version)) fail();
   if (o.version > 3) throw new Newer();
@@ -160,9 +185,11 @@ function validate(data: unknown): GameState {
 
   if (typeof o.lastSeenAt !== 'number' || !Number.isFinite(o.lastSeenAt)) fail();
 
-  const ranch = o.version === 3 ? validateRanch(o.ranch) : createRanch(o.lastSeenAt);
+  // A broken ranch must never cost the field progress: keep the rest and start the ranch over.
+  const ranch = o.version === 3 ? tryRanch(o.ranch) : createRanch(o.lastSeenAt);
+  const ranchReset = ranch === null;
 
-  return {
+  const state: GameState = {
     version: 3,
     unlocked: o.unlocked,
     cleared,
@@ -171,8 +198,9 @@ function validate(data: unknown): GameState {
     daily,
     settings: { speech: sIn.speech, sound: sIn.sound },
     lastSeenAt: o.lastSeenAt,
-    ranch,
+    ranch: ranch ?? createRanch(o.lastSeenAt),
   };
+  return { state, ranchReset };
 }
 
 export function serialize(s: GameState): string {
@@ -181,14 +209,16 @@ export function serialize(s: GameState): string {
 
 export function parseSave(raw: string): ParseResult {
   try {
-    return { ok: true, state: validate(JSON.parse(raw)) };
+    const { state, ranchReset } = validate(JSON.parse(raw));
+    return ranchReset ? { ok: true, state, ranchReset: true } : { ok: true, state };
   } catch (e) {
     return { ok: false, error: e instanceof Newer ? 'newer-version' : 'invalid' };
   }
 }
 
+/** `ranchReset` as in ParseResult; the raw save was then copied to CORRUPT_KEY first. */
 export type LoadResult =
-  | { kind: 'ok'; state: GameState }
+  | { kind: 'ok'; state: GameState; ranchReset?: true }
   | { kind: 'empty' }
   | { kind: 'corrupt' }
   | { kind: 'newer' };
@@ -198,10 +228,11 @@ export function loadFrom(storage: Pick<Storage, 'getItem' | 'setItem'>): LoadRes
     const raw = storage.getItem(SAVE_KEY);
     if (raw === null) return { kind: 'empty' };
     const r = parseSave(raw);
-    if (r.ok) return { kind: 'ok', state: r.state };
-    if (r.error === 'newer-version') return { kind: 'newer' }; // never touch storage
+    if (r.ok && !r.ranchReset) return { kind: 'ok', state: r.state };
+    if (!r.ok && r.error === 'newer-version') return { kind: 'newer' }; // never touch storage
+    // Keep the raw save so a broken ranch (or a broken save) can still be recovered by hand.
     try { storage.setItem(CORRUPT_KEY, raw); } catch { /* backup is best-effort */ }
-    return { kind: 'corrupt' };
+    return r.ok ? { kind: 'ok', state: r.state, ranchReset: true } : { kind: 'corrupt' };
   } catch {
     return { kind: 'empty' };
   }
