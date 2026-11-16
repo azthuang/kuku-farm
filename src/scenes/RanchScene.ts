@@ -576,7 +576,7 @@ export class RanchScene extends Phaser.Scene {
         break;
       case 'weak':
         // A sick animal lifts itself a little and sinks back.
-        this.tweens.add({ targets: body, scaleY: sy + S * (v.sick ? 0.28 : 0.06) / 2.5, y: y0 - 5, duration: 380, yoyo: true, ease: 'Sine.Out' });
+        this.tweens.add({ targets: body, scaleY: sy + S * (v.sick ? 0.28 : 0.06), y: y0 - 5, duration: 380, yoyo: true, ease: 'Sine.Out' });
         v.busyUntil = now + 820;
         break;
       case 'shake':
@@ -639,7 +639,10 @@ export class RanchScene extends Phaser.Scene {
       this.camTween.remove();
       this.camTween = null;
     }
-    if (!animate || !this.sys.isActive()) {
+    const c = this.cam;
+    // Already there (e.g. a swipe past the first/last page): no tween, so taps are not blocked.
+    const there = c.x === x && c.y === y && c.zoom === zoom;
+    if (!animate || there || !this.sys.isActive()) {
       this.snapCamera();
       return;
     }
@@ -1371,6 +1374,7 @@ export class RanchScene extends Phaser.Scene {
   private onUp(p: Phaser.Input.Pointer): void {
     if (!this.built || !this.downActive) return;
     this.downActive = false;
+    if (p.wasCanceled) return; // the browser took the touch (e.g. a system gesture): neither tap nor swipe
     const dx = p.x - this.downX;
     const dy = p.y - this.downY;
     if (!this.isOverview && Math.abs(dx) >= SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.4) {
