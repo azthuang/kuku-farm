@@ -69,39 +69,43 @@ describe('shop', () => {
     const s = rich(st());
     buy(s, 'feed', 0, () => 0);
     expect(s.ranch.supplies.feed).toBe(5);
-    expect(s.inventory.wheat).toBe(885);
+    expect(s.inventory.wheat).toBe(870);
+    expect(s.inventory.carrot).toBe(890);
     s.ranch.supplies.feed = 95;
     expect(buy(s, 'feed', 0, () => 0)).toEqual({ ok: false, reason: 'full' });
-    expect(s.inventory.wheat).toBe(885);
+    expect(s.inventory.wheat).toBe(870);
     expect(s.ranch.supplies.feed).toBe(95);
   });
 
   it('treat x3, medicine x1 priced in crops only', () => {
     const s = rich(st());
-    expect(priceOf(s, 'medicine')).toEqual({ wheat: 10, carrot: 5 });
+    expect(priceOf(s, 'medicine')).toEqual({ wheat: 40, carrot: 20 });
+    expect(priceOf(s, 'feed')).toEqual({ wheat: 30, carrot: 10 });
+    expect(priceOf(s, 'treat')).toEqual({ carrot: 20 });
     buy(s, 'treat', 0, () => 0);
     buy(s, 'medicine', 0, () => 0);
     expect(s.ranch.supplies).toEqual({ feed: 0, treat: 3, medicine: 1 });
-    expect(s.inventory.wheat).toBe(890);
-    expect(s.inventory.carrot).toBe(885);
+    expect(s.inventory.wheat).toBe(860);
+    expect(s.inventory.carrot).toBe(860);
     expect(s.ranch.products.egg).toBe(900);
   });
 
   it('medicine is affordable with no eggs at all', () => {
     const s = st();
-    s.inventory.wheat = 10; s.inventory.carrot = 5;
+    s.inventory.wheat = 40; s.inventory.carrot = 20;
     expect(checkBuy(s, 'medicine')).toEqual({ ok: true });
   });
 
   it('two buys succeed only if affordable twice', () => {
     const s = st();
-    s.inventory.wheat = 29;
+    s.inventory.wheat = 59; s.inventory.carrot = 20;
     expect(buy(s, 'feed', 0, () => 0).ok).toBe(true);
     expect(buy(s, 'feed', 0, () => 0).ok).toBe(false);
-    expect(s.inventory.wheat).toBe(14);
-    s.inventory.wheat = 30;
+    expect(s.inventory.wheat).toBe(29);
+    s.inventory.wheat = 60; s.inventory.carrot = 20;
     expect(buy(s, 'feed', 0, () => 0).ok).toBe(true);
     expect(buy(s, 'feed', 0, () => 0).ok).toBe(true);
     expect(s.inventory.wheat).toBe(0);
+    expect(s.inventory.carrot).toBe(0);
   });
 });
