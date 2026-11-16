@@ -8,7 +8,6 @@ import { CROP_BY_ROW, type CropId } from '../core/levels';
 export const ASSETS = {
   soil: 'soil',
   tilled: 'tilled',
-  sprout: 'sprout',
   lock: 'lock',
   crop: {
     wheat: 'crop-wheat',
@@ -25,14 +24,13 @@ export const ASSETS = {
   star: 'fx-star',
   sparkle: 'fx-sparkle',
   confetti: 'fx-confetti',
-  glow: 'fx-glow',
 };
 
 /** Texture pixels per logical pixel. Images are shown at scale 1 / ASSET_RES. */
 export const ASSET_RES = 2;
 
 /** Logical sizes of the generated textures. */
-export const SIZE = { plot: 58, sprout: 40, lock: 40, crop: 64, star: 20, sparkle: 16, glow: 64 };
+export const SIZE = { plot: 58, lock: 40, crop: 64, star: 20, sparkle: 16 };
 
 const R = ASSET_RES;
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
@@ -92,7 +90,7 @@ export function makePlaceholderTextures(scene: Phaser.Scene): void {
     for (const [x, y] of [[8, 8], [46, 11], [14, 44], [44, 42], [30, 20]]) g.fillCircle(x * R, y * R, 1.6 * R);
   });
 
-  // Untilled soil for locked rows: flat, dusty, with grass tufts.
+  // Untilled soil (locked rows, and the empty plots around a planted block): flat, dusty, grass tufts.
   bake(scene, ASSETS.soil, P, P, g => {
     g.fillStyle(0xb48d62, 1).fillRoundedRect(0, 2 * R, P * R, (P - 2) * R, 12 * R);
     g.fillStyle(0xcaa67a, 1).fillRoundedRect(0, 0, P * R, (P - 3) * R, 12 * R);
@@ -104,18 +102,6 @@ export function makePlaceholderTextures(scene: Phaser.Scene): void {
       leaf(g, x, y, 9, 3, -Math.PI / 2);
       leaf(g, x, y, 8, 3, -Math.PI / 2 + 0.4);
     }
-  });
-
-  // Sprout: little mound with a two-leaf seedling.
-  const S = SIZE.sprout;
-  bake(scene, ASSETS.sprout, S, S, g => {
-    g.fillStyle(0x7a4b28, 1).fillEllipse(20 * R, 33 * R, 22 * R, 8 * R);
-    g.fillStyle(0x4c9a2a, 1).fillRoundedRect(18.5 * R, 16 * R, 3 * R, 18 * R, 1.5 * R);
-    g.fillStyle(0x5fbf3a, 1);
-    leaf(g, 20, 18, 15, 9, -Math.PI + 0.5);
-    leaf(g, 20, 17, 16, 10, -0.5);
-    g.fillStyle(0x8ee06a, 1);
-    leaf(g, 20, 17, 9, 4, -0.5);
   });
 
   // Padlock.
@@ -148,13 +134,6 @@ export function makePlaceholderTextures(scene: Phaser.Scene): void {
 
   bake(scene, ASSETS.confetti, 10, 6, g => {
     g.fillStyle(0xffffff, 1).fillRoundedRect(0, 0, 10 * R, 6 * R, 1.5 * R);
-  });
-
-  const GL = SIZE.glow;
-  bake(scene, ASSETS.glow, GL, GL, g => {
-    for (let i = 10; i >= 1; i--) {
-      g.fillStyle(0xffffff, 0.1).fillCircle(32 * R, 32 * R, (i / 10) * 32 * R);
-    }
   });
 
   // Crops: system emoji drawn onto a canvas texture (padded so tall glyphs don't clip).

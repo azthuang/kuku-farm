@@ -87,14 +87,8 @@ export function createPanel(root: HTMLElement): Panel {
       setHead(q);
       feedback.replaceChildren();
       feedback.className = 'q-feedback wrong';
+      // The field counts the rows; the panel only shows the answer.
       feedback.appendChild(el('div', 'ans', `${q.a} × ${q.b} = ${answer}`));
-      const grid = el('div', 'dot-grid');
-      for (let r = 0; r < q.a; r++) {
-        const row = el('div', 'dot-row');
-        for (let c = 0; c < q.b; c++) row.appendChild(el('span', 'dot'));
-        grid.appendChild(row);
-      }
-      feedback.appendChild(grid);
     },
     showCorrect(q, answer) {
       setView('question');

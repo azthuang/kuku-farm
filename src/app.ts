@@ -1,22 +1,23 @@
 import Phaser from 'phaser';
-import { CHALLENGE_MAX, Game, type AnswerResult, type Question } from './core/game';
+import { Game, type AnswerResult, type Question } from './core/game';
 import { createNewState } from './core/state';
 import { CROP_BY_ROW, unlockedRows } from './core/levels';
 import type { Mode } from './core/mastery';
-import { exportFileName, loadFrom, parseSave, saveTo, serialize } from './core/save';
+import { exportFileName, loadFrom, parseSave, saveTo, serialize, type LoadResult } from './core/save';
 import { systemClock, systemRng } from './core/clock';
-import { chantText, questionText } from './core/chant';
+import { chantText, questionText, toChineseNumber } from './core/chant';
 import { createLayout } from './ui/layout';
 import { createSpeech } from './ui/speech';
 import { createPanel } from './ui/panel';
-import { formatMs } from './ui/format';
+import { countRowTiming } from './ui/timing';
 import { FieldScene, VIEW } from './scenes/FieldScene';
 import { ASSET_RES } from './scenes/assets';
 
-const WRONG_PAUSE_MS = 2500;
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
 const CHANT_WAIT_MS = 3000;
 const WRONG_CHANT_WAIT_MS = 3500;
+/** After a wrong answer's row count, the counted block stays on screen at least this long. */
+const WRONG_HOLD_MS = 1500;
 /** Exported blob URLs stay valid long enough for slow mobile download sheets. */
 const EXPORT_URL_TTL_MS = 40_000;
 const HINT: Record<Mode, string> = { basic: '點一列開始', challenge: '準備好了就開始！' };
@@ -33,8 +34,10 @@ export function startApp(root: HTMLElement): void {
   const rng = systemRng;
 
   const store = storage();
-  let game = new Game((store && loadFrom(store)) ?? createNewState(clock.now()), clock, rng);
-  game.resume();
+  const loaded: LoadResult = store ? loadFrom(store) : { kind: 'empty' };
+  /** A newer version's save is in storage: play on a fresh state but never overwrite it. */
+  let readOnly = loaded.kind === 'newer';
+  let game = new Game(loaded.kind === 'ok' ? loaded.state : createNewState(clock.now()), clock, rng);
 
   const speech = createSpeech(
     typeof window !== 'undefined' ? window.speechSynthesis : undefined,
@@ -56,7 +59,7 @@ export function startApp(root: HTMLElement): void {
 
   const layout = createLayout(root, game.state);
   const panel = createPanel(layout.panel);
-  const scene = new FieldScene(clock);
+  const scene = new FieldScene();
   const phaser = new Phaser.Game({
     type: Phaser.AUTO,
     parent: layout.stage,
@@ -78,6 +81,7 @@ export function startApp(root: HTMLElement): void {
   let saveFailShown = false;
 
   function save(): void {
+    if (readOnly) return;
     const s = game.state;
     s.lastSeenAt = Math.max(s.lastSeenAt, clock.now());
     try {
@@ -92,27 +96,31 @@ export function startApp(root: HTMLElement): void {
   }
 
   function showIdle(hint: string = HINT[uiMode]): void {
-    scene.highlight(null);
     panel.showIdle(uiMode, hint);
   }
 
-  /** Shows the current question, or returns to idle when no round is active. */
-  function showCurrent(): void {
+  /**
+   * Shows the current question: the block grows, then the question is spoken. The numpad stays
+   * open while the crops pop up; if an answer comes in first, the question is not spoken.
+   */
+  async function showCurrent(): Promise<void> {
     const q = game.mode !== null ? game.current : null;
     if (!q) {
+      scene.render(game);
       showIdle();
       return;
     }
+    const my = epoch;
     panel.showQuestion(q, game.progress());
-    scene.highlight(q);
+    await scene.plant(q);
+    if (my !== epoch || busy || game.current !== q) return;
     say(questionText(q.a, q.b));
   }
 
-  function beginRound(q: Question | null): boolean {
-    if (!q) return false;
+  function beginRound(q: Question | null): void {
+    if (!q) return;
     epoch++;
-    showCurrent();
-    return true;
+    void showCurrent();
   }
 
   function onCellTap(a: number, _b: number): void {
@@ -121,9 +129,7 @@ export function startApp(root: HTMLElement): void {
       layout.toast('先完成前一級喔');
       return;
     }
-    if (!beginRound(game.startBasic(a))) {
-      layout.toast(`作物還在長大（${formatMs(game.msUntilNextRipe(a))}）`);
-    }
+    beginRound(game.startBasic(a));
   }
 
   async function onAnswer(value: number): Promise<void> {
@@ -154,7 +160,8 @@ export function startApp(root: HTMLElement): void {
         await chantDone;
         if (my !== epoch) return;
         if (r.unlockedRow !== null) {
-          layout.toast(`🎉 解鎖了！${CROP_BY_ROW[r.unlockedRow].emoji} ${CROP_BY_ROW[r.unlockedRow].name}`);
+          const { emoji, name } = CROP_BY_ROW[r.unlockedRow];
+          layout.toast(`🎉 解鎖了！新作物 ${emoji} ${name}`);
           await Promise.all([
             scene.playUnlock(r.unlockedRow),
             speech.sayAndWait('解鎖了！', CHANT_WAIT_MS),
@@ -163,10 +170,16 @@ export function startApp(root: HTMLElement): void {
         }
       } else {
         panel.showWrong(r.q, r.correctAnswer);
+        // Count the block row by row: 「四、八」, then 「是二四得八」.
+        const t = countRowTiming(r.q.a);
+        await scene.playCount(r.q, async (_row, total) => {
+          if (my !== epoch) return;
+          await Promise.all([speech.sayAndWait(toChineseNumber(total), t.speechMaxMs), delay(t.minMs)]);
+        });
+        if (my !== epoch) return;
         await Promise.all([
-          scene.playWrong(r.q),
-          delay(WRONG_PAUSE_MS),
           speech.sayAndWait('是' + chantText(r.q.a, r.q.b), WRONG_CHANT_WAIT_MS),
+          delay(WRONG_HOLD_MS),
         ]);
         if (my !== epoch) return;
       }
@@ -178,12 +191,12 @@ export function startApp(root: HTMLElement): void {
     }
     if (my !== epoch) return;
 
-    scene.render(game);
     if (game.mode === null) {
+      scene.render(game);
       const { total } = game.progress();
       showIdle(total > 0 ? `🎉 完成 ${total} 題！` : HINT[uiMode]);
     } else {
-      showCurrent();
+      void showCurrent();
     }
   }
 
@@ -210,12 +223,7 @@ export function startApp(root: HTMLElement): void {
   });
   panel.onStartChallenge(() => {
     if (busy || game.mode !== null) return;
-    if (!beginRound(game.startChallenge())) {
-      layout.toast('作物還在長大');
-    } else if (game.progress().total < CHALLENGE_MAX) {
-      // Spec 5.5: a short challenge round still starts, but tell the child why it is short.
-      layout.toast('作物還在長大');
-    }
+    beginRound(game.startChallenge());
   });
 
   layout.onSpeechToggle(on => {
@@ -248,7 +256,7 @@ export function startApp(root: HTMLElement): void {
     busy = false;
     speech.cancel();
     game = new Game(r.state, clock, rng);
-    game.resume();
+    readOnly = false; // importing is an explicit choice to use this progress: saving resumes
     speech.setEnabled(game.state.settings.speech);
     save();
     scene.render(game);
@@ -269,16 +277,11 @@ export function startApp(root: HTMLElement): void {
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      save();
-    } else {
-      game.resume();
-      save();
-      scene.render(game);
-    }
+    if (document.visibilityState === 'hidden') save();
   });
   window.addEventListener('pagehide', save);
 
   save();
   showIdle();
+  if (readOnly) layout.toast('請重新整理頁面', 6000); // shown at boot: keep it up long enough to be seen
 }

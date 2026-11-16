@@ -13,7 +13,8 @@ export interface Layout {
   onExport(cb: () => void): void;
   onImport(cb: (text: string) => void): void;
   onSpeechToggle(cb: (on: boolean) => void): void;
-  toast(msg: string): void;
+  /** Shows a short message for `ms` (default 2 s). */
+  toast(msg: string, ms?: number): void;
 }
 
 export function createLayout(root: HTMLElement, s: GameState): Layout {
@@ -130,11 +131,11 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   });
 
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
-  function toast(msg: string): void {
+  function toast(msg: string, ms = 2000): void {
     toastEl.textContent = msg;
     toastEl.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2000);
+    toastTimer = setTimeout(() => { toastEl.hidden = true; }, ms);
   }
 
   updateHud(s);
