@@ -12,6 +12,10 @@ const FRAME = 32;
 const FEET_ORIGIN = 29 / FRAME;
 const INV = 1 / ASSET_RES;
 const HUNGRY_ICON_AT = 20;
+/** Lying sick: the side frame flattened and tilted head-down (never rotated onto its side). */
+const SICK_SCALE_X = 1.18;
+const SICK_SCALE_Y = 0.55;
+const SICK_TILT = 14;
 const MAX_EGGS_SHOWN = 6;
 const FONT = '"Arial Rounded MT Bold","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
 
@@ -323,11 +327,11 @@ export class RanchScene extends Phaser.Scene {
         this.setIcon(v);
         this.sparkles.explode(30, cx, cy);
         this.stand(v);
-        body.setScale(PX * 1.08, PX * 0.7);
+        body.setScale(PX * SICK_SCALE_X, PX * SICK_SCALE_Y);
         this.tweens.chain({
           targets: body,
           tweens: [
-            { scaleX: PX, scaleY: PX, duration: 380, ease: 'Back.Out', easeParams: [2.5] },
+            { scaleX: PX, scaleY: PX, angle: 0, duration: 380, ease: 'Back.Out', easeParams: [2.5] },
             { y: -26, duration: 170, ease: 'Quad.Out', yoyo: true },
           ],
         });
@@ -593,7 +597,7 @@ export class RanchScene extends Phaser.Scene {
 
     const pill = this.add.graphics();
     const label = this.add.text(0, 0, '', {
-      fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: '#4a3a2a', resolution: ASSET_RES,
+      fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#4a3a2a', resolution: ASSET_RES,
     }).setOrigin(0.5, 0.5);
     const icon = this.emoji(0, 0, '🍽️', SIZE.icon, true).setVisible(false);
     const heart = this.emoji(0, 0, '💗', SIZE.icon, true).setVisible(false);
@@ -635,7 +639,7 @@ export class RanchScene extends Phaser.Scene {
       v.name = a.name;
       v.label.setText(a.name);
       const w = Math.max(40, v.label.width + 18);
-      const h = 28;
+      const h = 30;
       v.pill.clear()
         .fillStyle(0x6b4226, 0.35).fillRoundedRect(-w / 2, -h / 2 + 2, w, h, 12)
         .fillStyle(0xfff8e1, 0.96).fillRoundedRect(-w / 2, -h / 2, w, h, 12)
@@ -738,9 +742,12 @@ export class RanchScene extends Phaser.Scene {
       const side = v.dir === LEFT ? LEFT : RIGHT;
       v.dir = side;
       body.anims.stop();
-      body.setTexture(TEX.sheet('walk', v.coat), side * 4).setScale(PX * 1.08, PX * 0.7);
-      shadow.setFrame(side);
-      this.tweens.add({ targets: body, scaleY: PX * 0.76, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      body.setTexture(TEX.sheet('walk', v.coat), side * 4)
+        .setScale(PX * SICK_SCALE_X, PX * SICK_SCALE_Y)
+        .setAngle(side === LEFT ? -SICK_TILT : SICK_TILT) // head drooping toward the ground
+        .setY(2);
+      shadow.setFrame(side).setScale(PX * 1.1, PX);
+      this.tweens.add({ targets: body, scaleY: PX * (SICK_SCALE_Y + 0.05), duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
       v.mode = 'idle';
     } else {
       body.setScale(PX);
