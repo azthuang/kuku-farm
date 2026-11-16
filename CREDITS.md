@@ -11,13 +11,13 @@
 
 ## 牧場景觀（LPC）
 
-牧場的草地、石頭路、樹木、花草、農場主人的家與風車，來自下列 OpenGameArt 素材包。
+牧場的草地、石頭路、小溪、樹木、花草、農場主人的家、磨坊與水車，來自下列 OpenGameArt 素材包。
 `public/assets/scenery/scenery.png`（圖集）與 `public/assets/scenery/farmhouse.png`（農場主人的家）
-是本專案從這些素材裁切、拼合而成（另加少量手繪像素：門、窗、花台、信箱、木牌、菜圃邊框），
+是本專案從這些素材裁切、拼合而成（另加少量手繪像素：門、窗、花台、信箱、木牌、菜圃邊框、木橋、水面亮點），
 這兩張拼合圖以 **CC-BY-SA 3.0** 釋出。各素材包附的 `CREDITS-*.txt` 原檔也放在
 `public/assets/scenery/` 下，內容照錄於後。
 
-### [LPC] Terrains（草地、石頭路、菜圃泥土、石頭、草叢）
+### [LPC] Terrains（草地、小溪與草岸、石頭路、菜圃泥土、石頭、草叢）
 
 - 來源：https://opengameart.org/content/lpc-terrains
 - 授權：CC-BY-SA 3.0 / CC-BY-SA 4.0（本專案採用 CC-BY-SA 3.0）
@@ -208,7 +208,7 @@ CC0
 https://opengameart.org/content/old-eastern-themed-building-tiles-tree
 ```
 
-### [LPC] Flowers / Plants / Fungi / Wood（野花、小草、蘑菇、樹樁、灌木、高麗菜、南瓜）
+### [LPC] Flowers / Plants / Fungi / Wood（野花、小草、蘑菇、樹樁、灌木、高麗菜、南瓜、香蒲、蘆葦、睡蓮）
 
 - 來源：https://opengameart.org/content/lpc-flowers-plants-fungi-wood
 - 授權：CC-BY-SA 3.0
@@ -323,14 +323,14 @@ CC0
 https://opengameart.org/content/opp2017-jungle-and-temple-set
 ```
 
-### [LPC] Thatched-roof Cottage（農場主人的家：茅草屋頂、木骨牆、石基）
+### [LPC] Thatched-roof Cottage（農場主人的家與磨坊：茅草屋頂、木骨牆、石牆、石基）
 
 - 來源：https://opengameart.org/content/lpc-thatched-roof-cottage
 - 作者：bluecarrot16；based on LPC base assets by Lanea Zimmerman (Sharm) and Daniel Armstrong (HughSpectrum)
 - 授權：CC-BY-SA 3.0 / GPL 3.0+（本專案採用 CC-BY-SA 3.0）
 - 使用檔案：`cottage.png`、`thatched-roof.png`（此包沒有附 CREDITS 檔）
 
-### [LPC] Farm（風車塔與轉動的葉片、乾草堆、麥束）
+### [LPC] Farm（轉動的水車 water-wheel.png）
 
 - 來源：https://opengameart.org/content/lpc-farm
 - 授權：CC-BY 4.0

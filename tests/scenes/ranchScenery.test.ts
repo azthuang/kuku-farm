@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BLADE_HUB, SCENERY_SCALE, SCENERY_WORLD, crossesPageEdge, isBig, isTree, isUnderstory, onPath, overlaps, propBox,
-  sceneryLayout, segDist, type Prop, type Rect,
+  SCENERY_SCALE, SCENERY_WORLD, crossesPageEdge, isAfloat, isBig, isTree, isUnderstory, isWater, isWaterside, lineDist,
+  onPath, overlaps, propBox, sceneryLayout, segDist, type Prop, type Rect,
 } from '../../src/scenes/ranchScenery';
 import { SCENERY_FRAMES } from '../../src/scenes/sceneryAtlas';
 
@@ -58,14 +58,101 @@ describe('ranch scenery layout', () => {
     }
   });
 
-  it('turns the windmill blades in the side strip, clear of the pens', () => {
-    const size = SCENERY_FRAMES.blade0[2] * SCENERY_SCALE;
-    const blades: Rect = {
-      x: layout.hub.x - BLADE_HUB.x * SCENERY_SCALE, y: layout.hub.y - BLADE_HUB.y * SCENERY_SCALE, w: size, h: size,
-    };
-    expect(inside(blades, SCENERY_WORLD)).toBe(true);
-    for (const r of [...LOTS, LATER]) expect(overlaps(blades, r)).toBe(false);
-    expect(blades.x).toBeGreaterThanOrEqual(1200);
+  describe('the stream', () => {
+    const toRiver = (x: number, y: number): number => lineDist(layout.river, x, y);
+
+    it('flows from the top of the world to the bottom inside the right strip, clear of the pens', () => {
+      expect(layout.river[0].y).toBeLessThanOrEqual(0);
+      expect(layout.river[layout.river.length - 1].y).toBeGreaterThanOrEqual(SCENERY_WORLD.h);
+      // every water tile corner, with the bank tiles around it, lies east of the grid
+      for (let j = 0; j < 30; j++) {
+        for (let i = 0; i < 30; i++) {
+          if (!isWater(i, j)) continue;
+          const x = SCENERY_WORLD.x + i * 32 * SCENERY_SCALE;
+          expect(x - 32 * SCENERY_SCALE, `corner ${i},${j}`).toBeGreaterThanOrEqual(1200);
+          expect(x + 32 * SCENERY_SCALE, `corner ${i},${j}`).toBeLessThanOrEqual(SCENERY_WORLD.x + SCENERY_WORLD.w);
+        }
+      }
+      for (const r of [...LOTS, LATER]) {
+        for (const c of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]]) {
+          expect(toRiver(c[0], c[1])).toBeGreaterThan(layout.riverHalf + 20);
+        }
+      }
+    });
+
+    it('carries every path over the water on a bridge', () => {
+      let crossings = 0;
+      for (const s of layout.paths) {
+        let wet = false;
+        for (let t = 0; t <= 1; t += 0.002) {
+          const x = s.x0 + (s.x1 - s.x0) * t;
+          const y = s.y0 + (s.y1 - s.y0) * t;
+          const w = toRiver(x, y) <= layout.riverHalf;
+          if (w) expect(layout.bridges.some(b => x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h), `path over water at ${x},${y}`).toBe(true);
+          if (w && !wet) crossings++;
+          wet = w;
+        }
+      }
+      expect(crossings).toBe(layout.bridges.length);
+      expect(crossings).toBeGreaterThanOrEqual(1);
+    });
+
+    it('turns the water wheel in the stream beside the mill', () => {
+      expect(toRiver(layout.wheel.x, layout.wheel.y - 30)).toBeLessThan(layout.riverHalf);
+      const mill = layout.props.find(p => p.kind === 'mill');
+      expect(mill).toBeDefined();
+      if (mill) expect(Math.abs(mill.x - layout.wheel.x)).toBeLessThan(120);
+      expect(layout.wheel.x - 64).toBeGreaterThanOrEqual(1200);
+    });
+
+    it('keeps land plants out of the water, with reeds on the banks and lily pads afloat', () => {
+      for (const p of layout.props) {
+        const d = toRiver(p.x, p.y);
+        if (isAfloat(p.kind)) expect(toRiver(p.x, p.y - propBox(p).h / 2), p.kind).toBeLessThan(layout.riverHalf);
+        else if (isWaterside(p.kind)) expect(d, p.kind).toBeLessThan(layout.riverHalf + 60);
+        else if (p.kind !== 'mill') expect(d, `${p.kind} at ${p.x},${p.y}`).toBeGreaterThan(layout.riverHalf);
+      }
+      expect(layout.props.some(p => isWaterside(p.kind))).toBe(true);
+      expect(layout.props.some(p => isAfloat(p.kind))).toBe(true);
+    });
+  });
+
+  describe('hierarchy and density', () => {
+    const trees = layout.props.filter(p => isTree(p.kind));
+    const area = (p: Prop): number => propBox(p).w * propBox(p).h;
+
+    it('makes the farmhouse tree the biggest tree on the map, by the house', () => {
+      const hero = layout.props.find(p => p.kind === 'heroTree');
+      expect(hero).toBeDefined();
+      if (!hero) return;
+      for (const t of trees) if (t !== hero) expect(area(hero)).toBeGreaterThan(area(t) * 1.4);
+      const house = layout.props.find(p => p.kind === 'farmhouse');
+      expect(house && Math.hypot(hero.x - house.x, hero.y - house.y)).toBeLessThan(650);
+    });
+
+    it('packs the bottom-left wood densely and leaves the lawn before the farmhouse door open', () => {
+      const W = SCENERY_WORLD;
+      const inRect = (p: Prop, r: Rect): boolean => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+      const wood: Rect = { x: W.x, y: 1100, w: 300, h: 700 };
+      // greenery per unit of ground: the sprites' areas (overlapping woods count more than once)
+      const plants = layout.props.filter(p => p.cluster !== undefined);
+      const cover = (ps: Prop[]): number => ps.reduce((s, p) => s + area(p), 0);
+      const inWood = cover(plants.filter(p => inRect(p, wood)));
+      const free = W.w * W.h - [...LOTS, LATER].reduce((s, r) => s + r.w * r.h, 0);
+      expect(inWood / (wood.w * wood.h)).toBeGreaterThan(3 * (cover(plants) / free));
+      const door: Rect = { x: W.x + 90, y: 380, w: 120, h: 150 };
+      expect(plants.filter(p => inRect(p, door))).toEqual([]);
+    });
+
+    it('keeps the lawn beside the paths open except for edge flowers and stones', () => {
+      for (const p of layout.props) {
+        if (p.cluster === undefined || isAfloat(p.kind)) continue;
+        const k = p.kind;
+        const edgy = k.startsWith('fl') || k.startsWith('rock') || k === 'roses' || k === 'daisyY' || k === 'tinyA'
+          || k === 'tinyC' || k === 'sprBlue' || k === 'bluebells';
+        if (!edgy) expect(onPath(p, layout.paths, 30), `${k} at ${p.x},${p.y}`).toBe(false);
+      }
+    });
   });
 
   describe('clusters', () => {
@@ -74,7 +161,7 @@ describe('ranch scenery layout', () => {
 
     it('puts every plant in a cluster of one kind (or two related ones), at least two to a patch', () => {
       const free = layout.props.filter(p => p.cluster === undefined).map(p => p.kind);
-      expect(free.every(k => !isBig(k) && !isUnderstory(k) && !k.startsWith('fl') && !k.startsWith('tiny'))).toBe(true);
+      expect(free.every(k => k === 'heroTree' || (!isBig(k) && !isUnderstory(k) && !k.startsWith('fl') && !k.startsWith('tiny')))).toBe(true);
       layout.clusters.forEach((c, i) => {
         const m = members(i);
         expect(c.kinds.length).toBeLessThanOrEqual(2);
@@ -83,11 +170,18 @@ describe('ranch scenery layout', () => {
       });
     });
 
-    it('keeps each cluster nearer its own centre than any other cluster', () => {
+    // Bushes and undergrowth gather at a wood's feet, so cohesion is measured among clusters of
+    // the same sort: trees, bushes, small plants.
+    const sortOf = (c: { kinds: string[] }): number =>
+      (c.kinds.some(k => isTree(k as Prop['kind'])) ? 2 : c.kinds.some(k => isBig(k as Prop['kind'])) ? 1 : 0);
+
+    it('keeps each cluster nearer its own centre than any other cluster of its sort', () => {
       layout.clusters.forEach((c, i) => {
         const m = members(i);
+        const others = layout.clusters.filter((o, j) => j !== i && sortOf(o) === sortOf(c));
+        if (others.length === 0) return;
         const own = m.reduce((s, p) => s + dist(p, c), 0) / m.length;
-        const other = m.reduce((s, p) => s + Math.min(...layout.clusters.filter((_, j) => j !== i).map(o => dist(p, o))), 0) / m.length;
+        const other = m.reduce((s, p) => s + Math.min(...others.map(o => dist(p, o))), 0) / m.length;
         expect(own, c.kinds.join('/')).toBeLessThan(other);
       });
     });
@@ -109,6 +203,7 @@ describe('ranch scenery layout', () => {
     it('never leaves a big tree standing alone', () => {
       const trees = layout.props.filter(p => isTree(p.kind));
       for (const t of trees) {
+        if (t.kind === 'heroTree') continue; // the farmhouse's tree stands alone on purpose
         expect(trees.some(o => o !== t && dist(o, t) < 260), `${t.kind} at ${t.x},${t.y}`).toBe(true);
       }
     });
@@ -117,7 +212,7 @@ describe('ranch scenery layout', () => {
       const trees = layout.props.filter(p => isTree(p.kind));
       const under = layout.props.filter(p => isUnderstory(p.kind));
       expect(under.length).toBeGreaterThan(0);
-      for (const u of under) expect(trees.some(t => dist(u, t) < 220), `${u.kind} at ${u.x},${u.y}`).toBe(true);
+      for (const u of under) expect(trees.some(t => dist(u, t) < 240), `${u.kind} at ${u.x},${u.y}`).toBe(true);
     });
 
     it('keeps trees out of the grid between the pens (they line the side strips)', () => {

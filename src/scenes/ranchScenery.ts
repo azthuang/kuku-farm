@@ -2,9 +2,10 @@ import { seeded } from './ranchArt';
 import { FARMHOUSE_SIZE, SCENERY_FRAMES, type SceneryFrame } from './sceneryAtlas';
 
 /**
- * The ranch's surroundings: LPC grass, a cobblestone path from the farmhouse to every pen, trees,
- * flowers and a windmill. Everything here is pure layout plus one bake onto a canvas; the scene
- * shows that canvas as a single static image under the pens (only the windmill blades move).
+ * The ranch's surroundings: LPC grass, a cobblestone path from the farmhouse to every pen, a
+ * stream with plank bridges and a water mill, woods and flowers. Everything here is pure layout
+ * plus one bake onto a canvas; the scene shows that canvas as a single static image under the
+ * pens (only the water wheel and a few glints on the water move).
  */
 
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -32,21 +33,57 @@ export interface Prop {
 
 export interface Segment { x0: number; y0: number; x1: number; y1: number }
 
+/** One patch of nature: a wood, a thicket, a flower bed, a drift of grass, a few stones or reeds. */
+export interface Cluster { kinds: PropKind[]; x: number; y: number }
+
 export interface SceneryLayout {
   /** Path centre lines (world) and their half width. */
   paths: Segment[];
   pathHalf: number;
   props: Prop[];
   clusters: Cluster[];
-  /** World point of the windmill hub (where the blade sprite is anchored). */
-  hub: { x: number; y: number };
+  /** The stream's centre line (world), from the top edge of the world to the bottom. */
+  river: { x: number; y: number }[];
+  riverHalf: number;
+  /** Plank bridges where paths cross the stream (world rects). */
+  bridges: Rect[];
+  /** Bottom centre of the water wheel sprite (world), standing in the stream by the mill. */
+  wheel: { x: number; y: number };
+  /** Straight stretches of open water (no bridge or wheel) where glints drift downstream. */
+  flows: Segment[];
 }
 
 const TILE = 32;
 const PATH_HALF = 22;
-/** In blade frames (128 × 128) the hub sits here. */
-export const BLADE_HUB = { x: 63, y: 70 };
-export const BLADE_FRAMES = 8;
+/** Half the stream's open water, in world units (the bank tiles add a grassy edge). */
+const RIVER_HALF = 40;
+/** Clear lawn kept beside the paths (world units), except for deliberate edge flowers and stones. */
+const PATH_LAWN = 32;
+export const WHEEL_FRAMES = 4;
+
+/** World x of river vertex column `i` (the terrain's 32-px tile corners, 64 world units apart). */
+const vx = (i: number): number => SCENERY_WORLD.x + i * TILE * SCENERY_SCALE;
+const vy = (j: number): number => SCENERY_WORLD.y + j * TILE * SCENERY_SCALE;
+
+/**
+ * The stream on the terrain's tile-corner grid: for each corner row (64 world units apart) the
+ * first and last water column. It comes in at the top of the right strip, bends east past the
+ * mill, runs down beside the eastern bank and drifts back west before leaving at the bottom.
+ */
+const RIVER_ROWS: readonly (readonly [number, number])[] = Array.from({ length: 30 }, (_, j) =>
+  j <= 12 ? [25, 25] : j === 13 ? [25, 27] : j <= 21 ? [27, 27] : j === 22 ? [26, 27] : [26, 26]);
+
+export function isWater(i: number, j: number): boolean {
+  const [a, b] = RIVER_ROWS[Math.max(0, Math.min(RIVER_ROWS.length - 1, j))];
+  return i >= a && i <= b;
+}
+
+function riverLine(): { x: number; y: number }[] {
+  const pts: { x: number; y: number }[] = [{ x: vx(25), y: vy(-1) }];
+  pts.push({ x: vx(25), y: vy(13) }, { x: vx(27), y: vy(13) }, { x: vx(27), y: vy(22) }, { x: vx(26), y: vy(22) });
+  pts.push({ x: vx(26), y: vy(29) });
+  return pts;
+}
 
 function frameSize(kind: PropKind): { w: number; h: number } {
   if (kind === 'farmhouse') return FARMHOUSE_SIZE;
@@ -77,6 +114,15 @@ export function segDist(s: Segment, x: number, y: number): number {
   return Math.sqrt(px * px + py * py);
 }
 
+/** Distance from (x, y) to a polyline. */
+export function lineDist(pts: readonly { x: number; y: number }[], x: number, y: number): number {
+  let d = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    d = Math.min(d, segDist({ x0: pts[i - 1].x, y0: pts[i - 1].y, x1: pts[i].x, y1: pts[i].y }, x, y));
+  }
+  return d;
+}
+
 function nearPath(paths: readonly Segment[], x: number, y: number, d: number): boolean {
   for (const s of paths) if (segDist(s, x, y) < d) return true;
   return false;
@@ -94,6 +140,15 @@ export function onPath(p: Prop, paths: readonly Segment[], margin: number): bool
   return false;
 }
 
+/** Smallest distance from any point of the box (sampled) to the polyline or path set. */
+function boxDist(b: Rect, dist: (x: number, y: number) => number): number {
+  let d = Infinity;
+  for (let y = b.y; y <= b.y + b.h + 0.01; y += Math.min(8, b.h)) {
+    for (let x = b.x; x <= b.x + b.w + 0.01; x += Math.min(8, b.w)) d = Math.min(d, dist(x, y));
+  }
+  return d;
+}
+
 /**
  * Care pages show one 600 × 600 cell each (x 0…1200, y 0…1800), so a sprite crossing a cell
  * edge would be cut in half on both pages.
@@ -105,13 +160,14 @@ export function crossesPageEdge(b: Rect, page = 600, grid: Rect = { x: 0, y: 0, 
   return false;
 }
 
-/** Trees, shrubs and big bushes: they stand in groves and thickets and may overlap each other. */
+/** Trees, shrubs and big bushes: they stand in woods and thickets and may overlap each other. */
 export function isBig(kind: PropKind): boolean {
-  return /^(tree|shrub)/.test(kind) || kind === 'bushGreen' || kind === 'bushMid' || kind === 'bushLight' || kind === 'roundBushBig';
+  return /^(tree|shrub)/.test(kind) || kind === 'heroTree' || kind === 'bushGreen' || kind === 'bushMid'
+    || kind === 'bushLight' || kind === 'roundBushBig';
 }
 
 export function isTree(kind: PropKind): boolean {
-  return kind.startsWith('tree');
+  return kind.startsWith('tree') || kind === 'heroTree';
 }
 
 /** Things that only grow in the shade of trees. */
@@ -119,8 +175,13 @@ export function isUnderstory(kind: PropKind): boolean {
   return kind.startsWith('mush') || kind === 'toadstool' || kind.startsWith('stump') || kind === 'log';
 }
 
-/** One patch of nature: a grove, a thicket, a flower bed, a drift of grass or a few stones. */
-export interface Cluster { kinds: PropKind[]; x: number; y: number }
+/** Plants of the water's edge, and those floating on it. */
+export function isWaterside(kind: PropKind): boolean {
+  return kind.startsWith('cattail') || kind.startsWith('reed');
+}
+export function isAfloat(kind: PropKind): boolean {
+  return kind.startsWith('lily');
+}
 
 interface ClusterSpec {
   kinds: PropKind[];
@@ -132,6 +193,8 @@ interface ClusterSpec {
   n: number;
   /** Extra members of the same kind a little further out. */
   strays?: number;
+  /** Deliberately lines a path or fence (may come within a few units of the stones). */
+  edge?: boolean;
 }
 
 /** The bottom strip a prop stands on: a tree's trunk, a bush's base, a flower's whole tuft. */
@@ -142,22 +205,14 @@ function footprint(p: Prop): Rect {
   return { x: p.x - (b.w * f) / 2, y: p.y - h, w: b.w * f, h };
 }
 
-/** Does any part of the box come near a path (big plants must not hang over the stones)? */
-function boxOnPath(b: Rect, paths: readonly Segment[], margin: number): boolean {
-  for (let y = b.y; y <= b.y + b.h + 0.01; y += Math.min(8, b.h)) {
-    for (let x = b.x; x <= b.x + b.w + 0.01; x += Math.min(8, b.w)) {
-      if (nearPath(paths, x, y, PATH_HALF + margin)) return true;
-    }
-  }
-  return false;
-}
-
 /**
  * Where everything goes. `lots` are the five pens' rects and `later` the sixth ("之後擴建")
- * cell's plot; nothing but its sign may overlap them. Plants grow in clusters of one kind, as
- * in nature: groves of tall trees along the outer edges, thickets at their feet, mushrooms and
- * stumps in their shade, and flowers and grass along the paths and fences, with open lawn in
- * between. Deterministic: same layout every run.
+ * cell's plot; nothing but its sign may overlap them.
+ *
+ * The map has a clear hierarchy: the farmhouse's big tree (the largest on the map) and the stream
+ * with its mill are the two focal points; two dense woods (bottom-left, and top-right past the
+ * stream) are the secondary masses; small patches of one kind thin out away from them, and the
+ * lawn in front of the farmhouse and along the paths stays open. Deterministic.
  */
 export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout {
   const W = SCENERY_WORLD;
@@ -166,18 +221,33 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
   const centreX = (r: Rect): number => r.x + r.w / 2;
   // Each row's path runs through the band between its pens' fences and the next row.
   const rowY = [bottom(lots[0]) + 40, bottom(lots[2]) + 40, bottom(lots[4]) + 40];
-  const leftX = lots[0].x - 70;
-  const rightX = W.x + W.w - 150;
+  // The spine down the west side runs along the grid's edge, leaving the strip whole for trees.
+  const leftX = lots[0].x - 30;
+  const river = riverLine();
+  const riverAt = (y: number): number => {
+    for (let i = 1; i < river.length; i++) {
+      const a = river[i - 1];
+      const b = river[i];
+      if (a.x === b.x && y >= Math.min(a.y, b.y) && y <= Math.max(a.y, b.y)) return a.x;
+    }
+    return river[0].x;
+  };
   const house: Prop = { kind: 'farmhouse', x: W.x + 150, y: 40 + FARMHOUSE_SIZE.h * SCENERY_SCALE };
   const doorY = house.y - 12;
+
+  // Bridges carry the first row's path over to the mill and the second row's path out east.
+  const bridgeW = SCENERY_FRAMES.bridge[2] * SCENERY_SCALE;
+  const bridgeH = SCENERY_FRAMES.bridge[3] * SCENERY_SCALE;
+  const cross = [{ x: riverAt(rowY[0]), y: rowY[0] }, { x: riverAt(rowY[1]), y: rowY[1] }];
+  const bridges = cross.map(c => ({ x: c.x - bridgeW / 2, y: c.y - bridgeH / 2, w: bridgeW, h: bridgeH }));
+  const millEnd = bridges[0].x + bridges[0].w + 30;
 
   const paths: Segment[] = [
     // farmhouse door down to the first row, then along each row of pens
     { x0: house.x, y0: doorY, x1: house.x, y1: rowY[0] },
-    { x0: house.x, y0: rowY[0], x1: rightX, y1: rowY[0] },
+    { x0: house.x, y0: rowY[0], x1: millEnd, y1: rowY[0] },
     { x0: leftX, y0: rowY[0], x1: leftX, y1: rowY[2] },
-    { x0: leftX, y0: rowY[1], x1: rightX, y1: rowY[1] },
-    { x0: rightX, y0: rowY[0], x1: rightX, y1: rowY[1] },
+    { x0: leftX, y0: rowY[1], x1: W.x + W.w + 30, y1: rowY[1] },
     { x0: leftX, y0: rowY[2], x1: centreX(later), y1: rowY[2] },
   ];
   // a short apron up to each pen's fence (its gate)
@@ -185,106 +255,131 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     paths.push({ x0: centreX(r), y0: bottom(r), x1: centreX(r), y1: bottom(r) + 40 });
   }
 
-  const tower: Prop = { kind: 'tower', x: rightX, y: rowY[0] - PATH_HALF - 2 };
-  const towerH = SCENERY_FRAMES.tower[3] * SCENERY_SCALE;
-  const hub = { x: tower.x, y: tower.y - towerH + 92 };
-  const bladeSize = SCENERY_FRAMES.blade0[2] * SCENERY_SCALE;
-  const blades: Rect = {
-    x: hub.x - BLADE_HUB.x * SCENERY_SCALE, y: hub.y - BLADE_HUB.y * SCENERY_SCALE, w: bladeSize, h: bladeSize,
+  // The mill stands on the bank where the stream turns east; its wheel dips into the bend.
+  const bendY = vy(13);
+  const mill: Prop = { kind: 'mill', x: W.x + W.w - 70, y: bendY - RIVER_HALF + 8 };
+  const wheel = { x: vx(26) + 16, y: bendY + 26 };
+  const wheelBox: Rect = {
+    x: wheel.x - SCENERY_FRAMES.wheel0[2], y: wheel.y - SCENERY_FRAMES.wheel0[3] * SCENERY_SCALE,
+    w: SCENERY_FRAMES.wheel0[2] * SCENERY_SCALE, h: SCENERY_FRAMES.wheel0[3] * SCENERY_SCALE,
   };
+  // The farmhouse's big tree: the largest on the map, between the house and the woods.
+  const hero: Prop = { kind: 'heroTree', x: W.x + 140, y: 960 };
 
   const props: Prop[] = [
     house,
-    tower,
+    hero,
+    mill,
     { kind: 'mailbox', x: house.x + 46, y: doorY + 70 },
     { kind: 'veggie', x: W.x + 62, y: rowY[0] - 40 },
     { kind: 'sign', x: centreX(later), y: bottom(later) - 46 },
-    { kind: 'haystack', x: rightX + 90, y: rowY[0] - 34 },
-    { kind: 'wheat', x: rightX - 92, y: rowY[0] - 32 },
   ];
-  const hard = [...props.map(propBox), blades];
+  // Buildings, the wheel and the bridges are solid; plants may only grow in front of the big tree.
+  const hard = [...props.filter(p => p !== hero).map(propBox), wheelBox, ...bridges];
+  const heroBox = propBox(hero);
 
   // Bands just inside each cell, between a path or the world's edge and the pens' fences.
   const topBand = lots[0].y - 10;
   const band1 = lots[2].y - 10;
   const band2 = lots[4].y - 10;
+  const E = W.x + W.w;
+  // Back to front within each wood, so nearer trees overlap the ones behind.
   const specs: ClusterSpec[] = [
-    // left strip: a deciduous grove, then a conifer wood along the outer edge
-    { kinds: ['treeRound', 'treeBig'], x: W.x + 110, y: 990, sx: 16, sy: 90, n: 3 },
-    { kinds: ['bushGreen', 'bushMid'], x: W.x + 178, y: 1120, sx: 12, sy: 26, n: 2 },
-    { kinds: ['mushRed'], x: W.x + 55, y: 1110, sx: 10, sy: 12, n: 2 },
-    { kinds: ['treePine', 'treeTall'], x: W.x + 82, y: 1560, sx: 12, sy: 130, n: 4 },
-    { kinds: ['stump', 'stumpRoots'], x: W.x + 205, y: 1745, sx: 14, sy: 12, n: 2 },
-    { kinds: ['mushPurple'], x: W.x + 200, y: 1420, sx: 10, sy: 14, n: 2, strays: 1 },
-    { kinds: ['tuftA'], x: W.x + 200, y: 1300, sx: 8, sy: 14, n: 2, strays: 1 },
-    // around the farmhouse: a rose bed by the door, marigolds by the veggie patch
-    { kinds: ['roses'], x: -50, y: 500, sx: 22, sy: 12, n: 3 },
-    { kinds: ['flY'], x: W.x + 60, y: 425, sx: 22, sy: 8, n: 3, strays: 1 },
-    // right strip: shrubs above the windmill, small trees and a thicket between the paths,
-    // an oak grove below with its own thicket, stumps and mushrooms
-    { kinds: ['shrubLight', 'shrubDark'], x: rightX - 20, y: 150, sx: 50, sy: 8, n: 3 },
-    { kinds: ['treeSmall', 'shrubLolly'], x: rightX + 86, y: 860, sx: 6, sy: 110, n: 3 },
-    { kinds: ['roundBushBig', 'bushC'], x: rightX - 86, y: 900, sx: 10, sy: 90, n: 3 },
-    { kinds: ['fbRed'], x: rightX - 86, y: 1080, sx: 14, sy: 14, n: 3 },
-    { kinds: ['treeOak', 'treeBig'], x: rightX + 30, y: 1600, sx: 28, sy: 110, n: 4 },
-    { kinds: ['bushLight', 'bushGreen'], x: rightX - 60, y: 1755, sx: 34, sy: 14, n: 2 },
-    { kinds: ['mushYellow'], x: rightX - 95, y: 1560, sx: 10, sy: 10, n: 2 },
-    { kinds: ['stumpYellow'], x: rightX + 115, y: 1780, sx: 6, sy: 6, n: 1 },
-    { kinds: ['rockB', 'rockC'], x: rightX - 60, y: rowY[1] + 56, sx: 24, sy: 6, n: 2 },
-    // inside the grid: flowers and grass along the fences and paths, one kind per patch
-    { kinds: ['flY'], x: 150, y: topBand, sx: 40, sy: 3, n: 4, strays: 1 },
-    { kinds: ['tinyA'], x: 430, y: topBand, sx: 40, sy: 3, n: 4 },
-    { kinds: ['sprBlue'], x: 730, y: topBand, sx: 36, sy: 3, n: 3, strays: 1 },
-    { kinds: ['tuftA'], x: 1040, y: topBand, sx: 40, sy: 3, n: 4 },
-    { kinds: ['daisyY'], x: 170, y: band1, sx: 36, sy: 3, n: 3, strays: 1 },
-    { kinds: ['sprigA'], x: 440, y: band1, sx: 40, sy: 3, n: 4 },
-    { kinds: ['violets'], x: 770, y: band1, sx: 36, sy: 3, n: 3 },
-    { kinds: ['tinyC'], x: 1060, y: band1, sx: 40, sy: 3, n: 4 },
-    { kinds: ['flW'], x: 140, y: band2, sx: 40, sy: 3, n: 4, strays: 1 },
-    { kinds: ['rockB', 'rockC'], x: 420, y: band2, sx: 20, sy: 3, n: 2 },
-    { kinds: ['bluebells'], x: 760, y: band2, sx: 36, sy: 3, n: 3 },
-    { kinds: ['tuftC'], x: 1070, y: band2, sx: 40, sy: 3, n: 4 },
+    // focal 1: a few mushrooms in the big tree's shade
+    { kinds: ['mushRed'], x: W.x + 46, y: 985, sx: 10, sy: 8, n: 3 },
+    // secondary: the bottom-left wood, three layers deep, bushes at its feet
+    { kinds: ['treePine', 'treeTall'], x: W.x + 125, y: 1470, sx: 45, sy: 100, n: 7 },
+    { kinds: ['roundBushBig', 'bushC'], x: W.x + 125, y: 1782, sx: 50, sy: 6, n: 3 },
+    { kinds: ['stump', 'stumpRoots'], x: W.x + 208, y: 1000, sx: 8, sy: 14, n: 2 },
+    { kinds: ['mushPurple'], x: W.x + 40, y: 1700, sx: 8, sy: 40, n: 3 },
+    // by the farmhouse: a rose bed at the corner of the path, marigolds by the veggie patch
+    { kinds: ['roses'], x: -45, y: 500, sx: 12, sy: 10, n: 3, edge: true },
+    { kinds: ['flY'], x: W.x + 36, y: 418, sx: 12, sy: 6, n: 3, edge: true },
+    // secondary: the top-right wood past the stream, shrubs on the near bank
+    { kinds: ['treeTall', 'treeDark'], x: E - 76, y: 330, sx: 6, sy: 50, n: 3 },
+    { kinds: ['bushA', 'bushB'], x: E - 108, y: 500, sx: 40, sy: 3, n: 2 },
+    // the stream's banks: reeds and cattails, lily pads, stones by the bridges, a few flowers
+    { kinds: ['cattailBrown'], x: 1236, y: 300, sx: 3, sy: 60, n: 3 },
+    { kinds: ['reedA', 'reedB'], x: 1240, y: 760, sx: 4, sy: 30, n: 3 },
+    { kinds: ['lilyA', 'lilyB'], x: vx(27), y: 1010, sx: 4, sy: 50, n: 3 },
+    { kinds: ['cattailDark'], x: vx(27) - 64, y: 1290, sx: 4, sy: 24, n: 3 },
+    { kinds: ['rockB', 'rockC'], x: 1260, y: rowY[1] + 60, sx: 20, sy: 4, n: 3, edge: true },
+    { kinds: ['fbBlue'], x: 1270, y: 1000, sx: 20, sy: 24, n: 3 },
+    { kinds: ['lilyFlower', 'lilyB'], x: vx(26), y: 1620, sx: 3, sy: 60, n: 3 },
+    { kinds: ['reedA', 'reedB'], x: vx(26) - 60, y: 1500, sx: 4, sy: 30, n: 3 },
+    { kinds: ['violets'], x: 1250, y: 1640, sx: 16, sy: 50, n: 5 },
+    { kinds: ['roundBushBig', 'bushC'], x: E - 44, y: 1690, sx: 4, sy: 50, n: 3 },
+    // inside the grid: a few single-colour patches along the fences, open lawn elsewhere
+    { kinds: ['flY'], x: 170, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: ['sprBlue'], x: 760, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: ['tinyA'], x: 1070, y: topBand, sx: 30, sy: 3, n: 3, edge: true },
+    { kinds: ['daisyY'], x: 180, y: band1, sx: 36, sy: 3, n: 5, edge: true },
+    { kinds: ['tinyC'], x: 1060, y: band1, sx: 30, sy: 3, n: 3, edge: true },
+    { kinds: ['flW'], x: 150, y: band2, sx: 36, sy: 3, n: 5, edge: true },
+    { kinds: ['rockB', 'rockC'], x: 430, y: band2, sx: 20, sy: 3, n: 3, edge: true },
+    { kinds: ['bluebells'], x: 780, y: band2, sx: 36, sy: 3, n: 3, edge: true },
   ];
   const clusters: Cluster[] = specs.map(s => ({ kinds: s.kinds, x: s.x, y: s.y }));
 
-  // Each cluster has its own fixed seed, so tuning one patch never reshuffles the others.
   let rnd = seeded(20261116);
   const gauss = (): number => {
     const u = Math.max(1e-6, rnd());
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd());
   };
   const foots = props.map(footprint);
-  const placedBig: Prop[] = [];
+  const placedBig: Prop[] = props.filter(p => isBig(p.kind));
+  const toRiver = (x: number, y: number): number => lineDist(river, x, y);
+  const toPath = (x: number, y: number): number => {
+    let d = Infinity;
+    for (const s of paths) d = Math.min(d, segDist(s, x, y));
+    return d;
+  };
 
-  const fits = (p: Prop, ci: number): boolean => {
+  const fits = (p: Prop, ci: number, edge: boolean): boolean => {
     const b = propBox(p);
     if (b.x < W.x + 4 || b.y < W.y + 4 || b.x + b.w > W.x + W.w - 4 || b.y + b.h > W.y + W.h - 4) return false;
     for (const r of keepOut) if (overlaps(b, r, 8)) return false;
     if (crossesPageEdge(b)) return false;
     if (hard.some(h => overlaps(b, h, 6))) return false;
     const big = isBig(p.kind);
-    if (big ? boxOnPath(b, paths, 4) : onPath(p, paths, 4)) return false;
+    // nothing big in front of (or behind) the farmhouse's tree: it stands free
+    if (big && overlaps(b, heroBox, 16)) return false;
     const f = footprint(p);
+    // keep the lawn beside the paths open, and the water clear
+    if (big ? boxDist(b, toPath) < PATH_HALF + PATH_LAWN : onPath(p, paths, edge ? 4 : PATH_LAWN)) return false;
+    if (isAfloat(p.kind)) {
+      if (toRiver(p.x, p.y - b.h / 2) > 10 || boxDist(b, toPath) < PATH_HALF + 30) return false;
+    } else if (isWaterside(p.kind)) {
+      const d = boxDist(f, toRiver);
+      if (d < RIVER_HALF - 22 || d > RIVER_HALF + 16) return false;
+    } else if ((big ? boxDist(b, toRiver) : boxDist(f, toRiver)) < RIVER_HALF + (big ? 12 : 20)) {
+      return false;
+    }
     if (foots.some(o => overlaps(f, o, 2))) return false;
     for (const o of placedBig) {
       const ob = propBox(o);
       if (!overlaps(b, ob, 0)) continue;
-      // Trees of one grove overlap, but their trunks keep apart; nothing hides wholly behind a canopy.
-      if (big && o.cluster === ci) {
+      // Trees of one wood overlap, but their trunks keep apart; nothing hides wholly behind a canopy.
+      if (big && o.cluster !== undefined && clusters[o.cluster] && Math.abs(o.cluster - ci) <= 3
+        && specs[o.cluster].kinds.some(isBig)) {
         const dx = Math.abs(p.x - o.x);
         const dy = Math.abs(p.y - o.y);
         if (dx < 24 && dy < 48) return false;
-        if (Math.hypot(dx, dy * 1.4) < 0.6 * Math.max(b.w, ob.w)) return false;
+        if (o.cluster === ci && Math.hypot(dx, dy * 1.4) < 0.45 * Math.max(b.w, ob.w)) return false;
+        if (p.y < o.y) return false;
       } else if (p.y < o.y - (big ? 60 : 6)) {
         return false;
       }
     }
-    // Stay nearer this cluster's centre than any other, so patches never blur together.
+    // Stay nearer this cluster's centre than any other of its sort (trees, bushes, small plants),
+    // so patches never blur together while bushes and undergrowth may gather at a wood's feet.
     const own = Math.hypot(p.x - clusters[ci].x, p.y - clusters[ci].y);
-    return clusters.every((c, j) => j === ci || Math.hypot(p.x - c.x, p.y - c.y) > own);
+    const sort = (j: number): number => (specs[j].kinds.some(isTree) ? 2 : specs[j].kinds.some(isBig) ? 1 : 0);
+    return clusters.every((c, j) => j === ci || sort(j) !== sort(ci) || Math.hypot(p.x - c.x, p.y - c.y) > own);
   };
 
   specs.forEach((s, ci) => {
+    // Each cluster has its own fixed seed, so tuning one patch never reshuffles the others.
     rnd = seeded(20261116 + ci * 7919);
     const want = s.n + (s.strays ?? 0);
     for (let m = 0, tries = 0; m < want && tries < 250 * want; tries++) {
@@ -296,7 +391,7 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
         y: s.y + (first ? 0 : gauss() * s.sy * spread),
         cluster: ci,
       };
-      if (!fits(p, ci)) continue;
+      if (!fits(p, ci, !!s.edge)) continue;
       props.push(p);
       foots.push(footprint(p));
       if (isBig(p.kind)) placedBig.push(p);
@@ -304,7 +399,22 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     }
   });
 
-  return { paths, pathHalf: PATH_HALF, props, clusters, hub };
+  // Glints drift down the open stretches of the stream, clear of the bridges and the wheel.
+  const flows: Segment[] = [];
+  for (let i = 1; i < river.length; i++) {
+    const a = river[i - 1];
+    const b = river[i];
+    if (a.x !== b.x) continue;
+    let y0 = Math.max(a.y, 16);
+    const yEnd = Math.min(b.y, W.y + W.h - 16);
+    for (const br of [...bridges, wheelBox].filter(r => a.x >= r.x && a.x <= r.x + r.w).sort((p, q) => p.y - q.y)) {
+      if (br.y - 12 > y0 && br.y < yEnd) flows.push({ x0: a.x, y0, x1: a.x, y1: br.y - 12 });
+      y0 = Math.max(y0, br.y + br.h + 12);
+    }
+    if (yEnd - y0 > 60) flows.push({ x0: a.x, y0, x1: a.x, y1: yEnd });
+  }
+
+  return { paths, pathHalf: PATH_HALF, props, clusters, river, riverHalf: RIVER_HALF, bridges, wheel, flows };
 }
 
 // ---------------------------------------------------------------- bake
@@ -322,6 +432,13 @@ function noise(x: number, y: number): number {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
+
+/** Marching-squares piece for a tile whose corners (tl, tr, bl, br) are water (1) or bank (0). */
+const WATER_PIECE: Record<number, SceneryFrame> = {
+  0b0001: 'wTL', 0b0011: 'wT', 0b0010: 'wTR', 0b0101: 'wL', 0b1010: 'wR',
+  0b0100: 'wBL', 0b1100: 'wB', 0b1000: 'wBR',
+  0b1110: 'wI1110', 0b1101: 'wI1101', 0b1011: 'wI1011', 0b0111: 'wI0111',
+};
 
 /**
  * Bakes the whole scenery into `ctx` (BAKE_W × BAKE_H LPC pixels; canvas pixel (0, 0) is the
@@ -341,6 +458,23 @@ export function bakeScenery(
     for (let tx = 0; tx * TILE < BAKE_W; tx++) {
       const r = rnd();
       blit(ctx, atlas, r < 0.55 ? 'grass2' : r < 0.85 ? 'grass1' : 'grass0', tx * TILE, ty * TILE);
+    }
+  }
+
+  // the stream: LPC pond tiles with grassy banks, chosen by which tile corners are water
+  for (let ty = 0; ty * TILE < BAKE_H; ty++) {
+    for (let tx = 0; tx * TILE < BAKE_W; tx++) {
+      const m = (+isWater(tx, ty) << 3) | (+isWater(tx + 1, ty) << 2) | (+isWater(tx, ty + 1) << 1) | +isWater(tx + 1, ty + 1);
+      if (m === 0) continue;
+      if (m === 0b1111) {
+        const r = noise(tx, ty);
+        blit(ctx, atlas, r < 0.6 ? 'wC' : r < 0.75 ? 'wRip0' : r < 0.9 ? 'wRip1' : 'wRip2', tx * TILE, ty * TILE);
+      } else if (m === 0b1001 || m === 0b0110) {
+        // two diagonal corners: both outer corner pieces
+        blit(ctx, atlas, m === 0b1001 ? 'wBR' : 'wBL', tx * TILE, ty * TILE);
+      } else {
+        blit(ctx, atlas, WATER_PIECE[m], tx * TILE, ty * TILE);
+      }
     }
   }
 
@@ -409,6 +543,9 @@ export function bakeScenery(
     }
     ctx.putImageData(img, 0, 0);
   }
+
+  // plank bridges over the stream, on top of the path so it runs on across them
+  for (const b of layout.bridges) blit(ctx, atlas, 'bridge', Math.round((b.x - W0.x) / S), Math.round((b.y - W0.y) / S));
 
   // props, back to front
   const props = [...layout.props].sort((a, b) => a.y - b.y || a.x - b.x);

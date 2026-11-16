@@ -6,7 +6,7 @@ import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets
 import { VIEW } from './FieldScene';
 import { HOUSE_ART, dashedRect, drawRun, hash, seeded } from './ranchArt';
 import {
-  BAKE_H, BAKE_W, BLADE_FRAMES, BLADE_HUB, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout,
+  BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, WHEEL_FRAMES, bakeScenery, sceneryLayout,
 } from './ranchScenery';
 import { SCENERY_FRAMES } from './sceneryAtlas';
 import { PALETTES, recolor } from './recolor';
@@ -113,15 +113,15 @@ const LOTS: readonly Rect[] = Array.from({ length: PAGES }, (_, i) => cellRect(i
 const KIND_OF_LOT: readonly HouseKind[] = SPECIES_ORDER.map(s => SPECIES[s].house);
 
 /** Animals are y-sorted within [animal, animal + 0.18]; items sit above them so none is ever hidden. */
-const DEPTH = { grass: 0, scenery: 0.5, lot: 1, house: 2, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
+const DEPTH = { grass: 0, water: 0.4, scenery: 0.5, lot: 1, house: 2, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
 
 const TEX = {
   src: (sp: SpeciesId, kind: 'walk' | 'eat') => `${sp}-${kind}-src`,
   scenery: 'ranch-scenery',
   atlas: 'scenery-atlas',
   farmhouse: 'scenery-farmhouse',
-  blade: (i: number) => `blade${i}`,
-  windmill: 'windmill-turn',
+  wheel: (i: number) => `wheel${i}`,
+  waterWheel: 'water-wheel-turn',
   house: (k: HouseKind) => `ranch-house-${k}`,
   run: (k: HouseKind) => `ranch-run-${k}`,
   sheet: (sp: SpeciesId, kind: 'walk' | 'eat', coat: number) => `${sp}-${kind}-${coat}`,
@@ -861,8 +861,9 @@ export class RanchScene extends Phaser.Scene {
   }
 
   /**
-   * Grass, paths, trees, the farmhouse and the windmill, baked once into one static image under
-   * the pens (the texture outlives the scene, so a restart reuses it). Only the blades animate.
+   * Grass, paths, the stream, trees, the farmhouse and the mill, baked once into one static image
+   * under the pens (the texture outlives the scene, so a restart reuses it). Only the water wheel
+   * and a few glints on the stream move.
    * Pure background: nothing here takes input.
    */
   private buildScenery(): void {
@@ -898,21 +899,37 @@ export class RanchScene extends Phaser.Scene {
 
     const atlasTex = this.textures.get(TEX.atlas);
     atlasTex.setFilter(Phaser.Textures.FilterMode.NEAREST);
-    for (let i = 0; i < BLADE_FRAMES; i++) {
-      const [x, y, w, h] = SCENERY_FRAMES[TEX.blade(i) as keyof typeof SCENERY_FRAMES];
-      if (!atlasTex.has(TEX.blade(i))) atlasTex.add(TEX.blade(i), 0, x, y, w, h);
+    for (let i = 0; i < WHEEL_FRAMES; i++) {
+      const [x, y, w, h] = SCENERY_FRAMES[TEX.wheel(i) as keyof typeof SCENERY_FRAMES];
+      if (!atlasTex.has(TEX.wheel(i))) atlasTex.add(TEX.wheel(i), 0, x, y, w, h);
     }
-    if (!this.anims.exists(TEX.windmill)) {
+    if (!atlasTex.has('glint')) atlasTex.add('glint', 0, ...SCENERY_FRAMES.glint);
+    if (!this.anims.exists(TEX.waterWheel)) {
       this.anims.create({
-        key: TEX.windmill, repeat: -1, frameRate: 5,
-        frames: Array.from({ length: BLADE_FRAMES }, (_, i) => ({ key: TEX.atlas, frame: TEX.blade(i) })),
+        key: TEX.waterWheel, repeat: -1, frameRate: 6,
+        frames: Array.from({ length: WHEEL_FRAMES }, (_, i) => ({ key: TEX.atlas, frame: TEX.wheel(i) })),
       });
     }
-    const bladeSize = SCENERY_FRAMES.blade0[2];
-    this.add.sprite(layout.hub.x, layout.hub.y, TEX.atlas, TEX.blade(0))
-      .setOrigin(BLADE_HUB.x / bladeSize, BLADE_HUB.y / bladeSize)
-      .setScale(SCENERY_SCALE).setDepth(DEPTH.scenery)
-      .play(TEX.windmill);
+    this.add.sprite(layout.wheel.x, layout.wheel.y, TEX.atlas, TEX.wheel(0))
+      .setOrigin(0.5, 1).setScale(SCENERY_SCALE).setDepth(DEPTH.scenery)
+      .play(TEX.waterWheel);
+
+    // A few glints drift down the open water: each runs a short way and fades in and out.
+    const rnd = seeded(4242);
+    const RUN = 140;
+    const SPEED = 45; // world units per second
+    for (const f of layout.flows) {
+      const len = Math.abs(f.y1 - f.y0);
+      for (let at = 0; at + RUN <= len; at += 110) {
+        const y0 = Math.min(f.y0, f.y1) + at;
+        const x = f.x0 + Math.round((rnd() - 0.5) * 24);
+        const g = this.add.image(x, y0, TEX.atlas, 'glint').setScale(SCENERY_SCALE).setDepth(DEPTH.water).setAlpha(0);
+        const ms = (RUN / SPEED) * 1000;
+        const delay = Math.floor(rnd() * ms);
+        this.tweens.add({ targets: g, y: { from: y0, to: y0 + RUN }, duration: ms, delay, repeat: -1 });
+        this.tweens.add({ targets: g, alpha: { from: 0, to: 0.85 }, duration: ms / 2, delay, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      }
+    }
   }
 
   /** The sixth cell: a faint plot labelled for the next batch. */
