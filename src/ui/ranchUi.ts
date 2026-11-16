@@ -28,7 +28,7 @@ export interface RanchUi {
   /** 🗺️ was pressed (in either view). */
   onOverview(cb: () => void): void;
   setOverview(on: boolean): void;
-  /** The garden page's「去田裡種菜」button. */
+  /** The garden page's「去農田種菜」button. */
   onGoField(cb: () => void): void;
 }
 
@@ -48,7 +48,8 @@ export const SPECIES_UI: Record<SpeciesId, { emoji: string; name: string; house:
 };
 
 const OVERVIEW_TITLE = '🗺️ 我的牧場';
-const GARDEN_TITLE = '🌱 我的菜園';
+/** Called 農田 like the field tab (same 🌾), so the child sees one place in two views. */
+const GARDEN_TITLE = '🌾 我的農田';
 
 const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: 'treat' | 'medicine' }[] = [
   { tool: 'hand', icon: '✋', label: '摸摸' },
@@ -173,8 +174,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     if (!overview) openShop();
   });
   // On the garden page the care tools give way to one big way back to the field.
-  const goField = button('tool go-field', '', '去田裡種菜');
-  goField.append(el('span', 'tool-icon', '🌱'), el('span', 'go-field-text', '去田裡種菜'));
+  const goField = button('tool go-field', '', '去農田種菜');
+  goField.append(el('span', 'tool-icon', '🌾'), el('span', 'go-field-text', '去農田種菜'));
   goField.addEventListener('click', () => {
     if (!overview) goFieldCb();
   });
@@ -189,7 +190,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   const dotsEl = el('div', 'rn-dots');
   const dots = Array.from({ length: LOT_COUNT }, (_, i) => {
     const sp = speciesOfLot(i);
-    const d = button(sp ? 'rn-dot' : 'rn-dot rn-dot-garden', '', sp ? SPECIES_UI[sp].house : '菜園');
+    const d = button(sp ? 'rn-dot' : 'rn-dot rn-dot-garden', '', sp ? SPECIES_UI[sp].house : '農田');
     d.dataset.page = String(i);
     d.addEventListener('click', () => pageCb(i));
     dotsEl.append(d);

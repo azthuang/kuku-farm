@@ -145,7 +145,7 @@ describe('ranch pages', () => {
     const title = nav.querySelector('.rn-title')!;
     const prev = nav.querySelector<HTMLElement>('.rn-prev')!;
     const next = nav.querySelector<HTMLElement>('.rn-next')!;
-    expect(title.textContent).toBe('🌱 我的菜園 0/81');
+    expect(title.textContent).toBe('🌾 我的農田 0/81');
     expect(prev.hidden).toBe(true);
     expect(next.hidden).toBe(false);
     ui.setPage(1, status({}));
@@ -168,15 +168,17 @@ describe('ranch pages', () => {
     s.mastery['1,2'] = 6;
     s.mastery['1,3'] = 4;
     const { nav } = setup(s, 0);
-    expect(nav.querySelector('.rn-title')!.textContent).toBe('🌱 我的菜園 2/81');
+    expect(nav.querySelector('.rn-title')!.textContent).toBe('🌾 我的農田 2/81');
   });
 
-  it('on the garden page the care tools give way to「去田裡種菜」; the shop stays', () => {
+  it('on the garden page the care tools give way to「去農田種菜」; the shop stays', () => {
     const { root, ui } = setup(st(), 0);
     const bar = root.querySelector('.ranch-tools')!;
     expect(bar.classList.contains('garden')).toBe(true);
     let go = 0;
     ui.onGoField(() => { go++; });
+    // one name for one place: the ranch page, its button and the field tab all say 農田
+    expect(root.querySelector('.go-field')!.textContent).toBe('🌾去農田種菜');
     root.querySelector<HTMLElement>('.go-field')!.click();
     expect(go).toBe(1);
     toolBtn(root, 'shop').click();

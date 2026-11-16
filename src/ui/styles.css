@@ -206,9 +206,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   background: rgba(74, 58, 42, 0.3);
 }
 .rn-dot.current::after { width: 16px; height: 16px; background: var(--ink); }
-/* The garden's dot is a little sprout, bigger when it is the current page. */
+/* The garden's dot is the field tab's 🌾, bigger when it is the current page. */
 .rn-dot-garden::after, .rn-dot-garden.current::after {
-  content: '🌱'; width: auto; height: auto; border-radius: 0; background: none;
+  content: '🌾'; width: auto; height: auto; border-radius: 0; background: none;
   font-size: 14px; line-height: 1; opacity: 0.55;
 }
 .rn-dot-garden.current::after { font-size: 19px; opacity: 1; }
