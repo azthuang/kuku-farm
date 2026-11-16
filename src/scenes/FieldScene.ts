@@ -453,7 +453,9 @@ export class FieldScene extends Phaser.Scene {
     d.count.setText(String(total)).setScale(0).setVisible(true).setOrigin(0.5, 0.5);
     if (a >= 9) d.count.setPosition(left + CELL / 2, GRID_Y + 8 * CELL + CELL / 2 + 12);
     else d.count.setPosition(left + CELL / 2, GRID_Y + a * CELL + CELL / 2);
-    this.tweens.add({ targets: d.count, scaleX: 1, scaleY: 1, duration: 260, ease: 'Back.Out', easeParams: [2.4] });
+    // Keep neighbouring totals visibly apart: the text (with outline) fills at most ~78% of a cell.
+    const fit = Math.min(1, (CELL * 0.78) / d.count.width);
+    this.tweens.add({ targets: d.count, scaleX: fit, scaleY: fit, duration: 260, ease: 'Back.Out', easeParams: [2.4] });
   }
 
   private setStars(c: Cell, n: number, visible: boolean): void {
