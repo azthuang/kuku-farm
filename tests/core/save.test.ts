@@ -19,7 +19,7 @@ describe('save', () => {
     const s = createNewState(5);
     expect(parseSave(serialize(s))).toEqual({ ok: true, state: s });
     expect(parseSave('not json')).toEqual({ ok: false, error: 'invalid' });
-    expect(parseSave(JSON.stringify({ ...s, version: 4 }))).toEqual({ ok: false, error: 'newer-version' });
+    expect(parseSave(JSON.stringify({ ...s, version: 5 }))).toEqual({ ok: false, error: 'newer-version' });
     expect(parseSave(JSON.stringify({ ...s, unlocked: 12 })).ok).toBe(false);
     expect(parseSave(JSON.stringify({ ...s, inventory: { ...s.inventory, corn: -1 } })).ok).toBe(false);
     const { version: _v, ...noVersion } = s;
@@ -107,9 +107,9 @@ describe('save', () => {
     const r = parseSave(JSON.stringify(old));
     if (!r.ok) throw new Error('expected ok');
     const { growing: _g, version: _v, ...expected } = old;
-    expect(r.state.version).toBe(3);
+    expect(r.state.version).toBe(4);
     expect('growing' in r.state).toBe(false);
-    expect(r.state).toEqual({ ...expected, version: 3, ranch: createRanch(5) });
+    expect(r.state).toEqual({ ...expected, version: 4, ranch: createRanch(5) });
   });
 
   it('migrates v1 even when growing is garbage', () => {
@@ -130,7 +130,7 @@ describe('save', () => {
   it('loadFrom on a newer save reports newer and never writes', () => {
     const calls: string[] = [];
     const store = {
-      getItem: () => JSON.stringify({ ...createNewState(5), version: 4 }),
+      getItem: () => JSON.stringify({ ...createNewState(5), version: 5 }),
       setItem: (k: string) => { calls.push(k); },
     };
     expect(loadFrom(store)).toEqual({ kind: 'newer' });
@@ -158,7 +158,7 @@ describe('save', () => {
     };
     const r = parseSave(JSON.stringify(v2));
     if (!r.ok) throw new Error('expected ok');
-    expect(r.state).toEqual({ ...v2, version: 3, ranch: createRanch(777) });
+    expect(r.state).toEqual({ ...v2, version: 4, ranch: createRanch(777) });
   });
 
   function populated(): RanchState {
@@ -172,8 +172,8 @@ describe('save', () => {
         sick: true, medicated: true, neglectMs: 0, produceMs: 0, poopMs: 0, waiting: 0,
         petTimes: [], lastBrushAt: 50 },
     );
-    r.supplies = { feed: 99, treat: 3, medicine: 1 };
-    r.products = { egg: 999 };
+    r.supplies = { ...r.supplies, feed: 99, treat: 3, medicine: 1 };
+    r.products = { ...r.products, egg: 999 };
     r.nextId = 3;
     return r;
   }
@@ -203,7 +203,7 @@ describe('save', () => {
       x.animals[0].petTimes = [1, 2, 3, 4, 5];
       (x.animals[1] as unknown as { petTimes: unknown }).petTimes = ['x', null, 7];
       x.houses[0].poop = 7;
-      x.supplies = { feed: 100, treat: -3, medicine: 5000 };
+      x.supplies = { ...x.supplies, feed: 100, treat: -3, medicine: 5000 };
       x.products.egg = 1000;
     });
     if (!r.ok) throw new Error('expected ok');
@@ -214,14 +214,16 @@ describe('save', () => {
     expect(b).toMatchObject({ mood: 100, waiting: 0 });
     expect(b.petTimes).toEqual([7]);
     expect(r.state.ranch.houses[0].poop).toBe(6);
-    expect(r.state.ranch.supplies).toEqual({ feed: 99, treat: 0, medicine: 99 });
+    expect(r.state.ranch.supplies).toEqual({
+      ...createRanch(0).supplies, feed: 99, treat: 0, medicine: 99,
+    });
     expect(r.state.ranch.products.egg).toBe(999);
   });
 
   it("keeps animals over today's caps (a lowered cap must never remove a chicken)", () => {
     const many = withRanch((x) => {
-      x.houses.push({ id: 'h2', kind: 'coop', lot: 1, poop: 0 });
-      for (let i = 0; i < 9; i++) x.animals.push({ ...x.animals[0], id: `y${i}`, houseId: i < 3 ? 'h1' : 'h2' });
+      x.houses.push({ id: 'h2', kind: 'barn', lot: 1, poop: 0 });
+      for (let i = 0; i < 9; i++) x.animals.push({ ...x.animals[0], id: `y${i}`, houseId: 'h1' });
     });
     if (!many.ok) throw new Error('expected ok');
     expect(many.ranchReset).toBeUndefined();
@@ -238,6 +240,10 @@ describe('save', () => {
       ['dup house id', (r) => { r.houses.push({ id: 'h1', kind: 'coop', lot: 1, poop: 0 }); }],
       ['bad house kind', (r) => { (r.houses[0] as unknown as { kind: string }).kind = 'barn'; }],
       ['poop fraction', (r) => { r.houses[0].poop = 1.5; }],
+      ['cow in the coop', (r) => { r.animals[0].species = 'cow'; }],
+      ['two coops', (r) => { r.houses.push({ id: 'h9', kind: 'coop', lot: 0, poop: 0 }); }],
+      ['v4 supply key missing', (r) => { delete (r.supplies as Partial<typeof r.supplies>).feedCow; }],
+      ['v4 product key missing', (r) => { delete (r.products as Partial<typeof r.products>).milk; }],
       ['nextId 0', (r) => { r.nextId = 0; }],
       ['petTimes not array', (r) => { (r.animals[0] as unknown as { petTimes: unknown }).petTimes = 'x'; }],
       ['supplies missing', (r) => { (r as unknown as { supplies: unknown }).supplies = undefined; }],
@@ -299,5 +305,46 @@ describe('save', () => {
     const s = createNewState(5);
     s.ranch = populated();
     expect(parseSave(JSON.stringify({ ...s, unlocked: 0 }))).toEqual({ ok: false, error: 'invalid' });
+  });
+
+  it('migrates a v3 save to v4 keeping coop, chickens, eggs and feed', () => {
+    const r3 = populated();
+    r3.houses[0].lot = 0;
+    r3.supplies = { feed: 12, treat: 3, medicine: 1 } as RanchState['supplies'];
+    r3.products = { egg: 7 } as RanchState['products'];
+    const v3 = { ...createNewState(5), version: 3, ranch: r3 };
+    const r = parseSave(JSON.stringify(v3));
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.ranchReset).toBeUndefined();
+    const ra = r.state.ranch;
+    expect(r.state.version).toBe(4);
+    expect(ra.animals).toEqual(r3.animals);
+    expect(ra.houses).toEqual(r3.houses);
+    expect(ra.supplies).toEqual({
+      feed: 12, treat: 3, medicine: 1, feedCow: 0, feedPig: 0, feedSheep: 0, feedLlama: 0,
+    });
+    expect(ra.products).toEqual({ egg: 7, milk: 0, truffle: 0, yarn: 0, fluff: 0 });
+  });
+
+  it('round trips a v4 ranch with all five species', () => {
+    const s = createNewState(5);
+    s.unlocked = 9;
+    const r = s.ranch;
+    const kinds = [['coop', 'chicken', 0], ['barn', 'cow', 1], ['sty', 'pig', 2], ['fold', 'sheep', 3], ['hut', 'llama', 4]] as const;
+    for (const [kind, sp, lot] of kinds) {
+      r.houses.push({ id: `h-${kind}`, kind, lot, poop: 1 });
+      r.animals.push({ ...populated().animals[0], id: `a-${sp}`, species: sp, houseId: `h-${kind}` });
+    }
+    r.supplies.feedLlama = 4;
+    r.products.fluff = 3;
+    r.nextId = 20;
+    expect(parseSave(serialize(s))).toEqual({ ok: true, state: s });
+  });
+
+  it('reassigns a stale house lot instead of rejecting the save', () => {
+    const r = withRanch((x) => { x.houses[0].lot = 3; });
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.ranchReset).toBeUndefined();
+    expect(r.state.ranch.houses[0].lot).toBe(0);
   });
 });

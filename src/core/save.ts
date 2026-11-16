@@ -1,5 +1,8 @@
 import { CROP_BY_ROW, type CropId } from './levels';
-import { SPECIES, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
+import {
+  SPECIES, HOUSE_KINDS, speciesOfHouse, PRODUCT_IDS, SUPPLY_IDS,
+  type HouseKind, type ProductId, type SpeciesId, type SupplyId,
+} from './species';
 import {
   MAX_POOP, PRODUCT_CAP, PET_MAX_IN_WINDOW, createRanch,
   type Animal, type House, type RanchState,
@@ -19,9 +22,6 @@ export type ParseResult =
   | { ok: false; error: 'invalid' | 'newer-version' };
 
 const MAX_MASTERY = 6;
-const SUPPLY_IDS: readonly SupplyId[] = ['feed', 'treat', 'medicine'];
-const PRODUCT_IDS: readonly ProductId[] = ['egg'];
-const HOUSE_KINDS: readonly HouseKind[] = ['coop'];
 const CELL_KEY = /^[1-9],[1-9]$/;
 const ROW_KEY = /^[1-9]$/;
 
@@ -66,7 +66,11 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
  * must never cost the child her animals. Animal and house-capacity counts are not capped here at all
  * (the shop refuses more buys), so lowering a cap later never removes a chicken.
  */
-function validateRanch(data: unknown): RanchState {
+/** Keys a v3 save never had (new species); they start at 0. Everything else is required. */
+const V3_SUPPLY_IDS: readonly SupplyId[] = ['feed', 'treat', 'medicine'];
+const V3_PRODUCT_IDS: readonly ProductId[] = ['egg'];
+
+function validateRanch(data: unknown, version: number): RanchState {
   const o = rec(data);
 
   const houses: House[] = [];
@@ -76,8 +80,10 @@ function validateRanch(data: unknown): RanchState {
     if (typeof h.id !== 'string' || h.id === '') fail();
     if (!HOUSE_KINDS.includes(h.kind as HouseKind)) fail();
     if (!isNonNegInt(h.lot)) fail();
-    if (houses.some((x) => x.id === h.id)) fail();
-    houses.push({ id: h.id, kind: h.kind as HouseKind, lot: h.lot, poop: clamp(int(h.poop), 0, MAX_POOP) });
+    if (houses.some((x) => x.id === h.id || x.kind === h.kind)) fail(); // one house per kind
+    // The lot of a kind is fixed by its species; a stale lot is reassigned, never a reason to reject.
+    const lot = SPECIES[speciesOfHouse(h.kind as HouseKind)].lot;
+    houses.push({ id: h.id, kind: h.kind as HouseKind, lot, poop: clamp(int(h.poop), 0, MAX_POOP) });
   }
 
   const animals: Animal[] = [];
@@ -113,12 +119,14 @@ function validateRanch(data: unknown): RanchState {
   const sIn = rec(o.supplies);
   const supplies = {} as Record<SupplyId, number>;
   for (const k of SUPPLY_IDS) {
+    if (!has(sIn, k) && version < 4 && !V3_SUPPLY_IDS.includes(k)) { supplies[k] = 0; continue; }
     if (!has(sIn, k)) fail();
     supplies[k] = clamp(int(sIn[k]), 0, SUPPLY_CAP);
   }
   const pIn = rec(o.products);
   const products = {} as Record<ProductId, number>;
   for (const k of PRODUCT_IDS) {
+    if (!has(pIn, k) && version < 4 && !V3_PRODUCT_IDS.includes(k)) { products[k] = 0; continue; }
     if (!has(pIn, k)) fail();
     products[k] = clamp(int(pIn[k]), 0, PRODUCT_CAP);
   }
@@ -128,10 +136,10 @@ function validateRanch(data: unknown): RanchState {
   return { houses, animals, supplies, products, settledAt, nextId: o.nextId };
 }
 
-/** The ranch part of a v3 save, or null when it is too broken to read. */
-function tryRanch(data: unknown): RanchState | null {
+/** The ranch part of a v3/v4 save, or null when it is too broken to read. */
+function tryRanch(data: unknown, version: number): RanchState | null {
   try {
-    return validateRanch(data);
+    return validateRanch(data, version);
   } catch (e) {
     if (e instanceof Invalid) return null;
     throw e;
@@ -141,8 +149,8 @@ function tryRanch(data: unknown): RanchState | null {
 function validate(data: unknown): { state: GameState; ranchReset: boolean } {
   const o = rec(data);
   if (typeof o.version !== 'number' || Number.isNaN(o.version)) fail();
-  if (o.version > 3) throw new Newer();
-  if (o.version !== 1 && o.version !== 2 && o.version !== 3) fail();
+  if (o.version > 4) throw new Newer();
+  if (o.version !== 1 && o.version !== 2 && o.version !== 3 && o.version !== 4) fail();
   // v1 carried a `growing` map; it is ignored (even if malformed) and dropped.
 
   if (!isIntIn(o.unlocked, 1, 9)) fail();
@@ -186,11 +194,11 @@ function validate(data: unknown): { state: GameState; ranchReset: boolean } {
   if (typeof o.lastSeenAt !== 'number' || !Number.isFinite(o.lastSeenAt)) fail();
 
   // A broken ranch must never cost the field progress: keep the rest and start the ranch over.
-  const ranch = o.version === 3 ? tryRanch(o.ranch) : createRanch(o.lastSeenAt);
+  const ranch = o.version >= 3 ? tryRanch(o.ranch, o.version) : createRanch(o.lastSeenAt);
   const ranchReset = ranch === null;
 
   const state: GameState = {
-    version: 3,
+    version: 4,
     unlocked: o.unlocked,
     cleared,
     mastery,
