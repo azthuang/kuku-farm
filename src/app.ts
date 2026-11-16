@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Game, type AnswerResult, type Question } from './core/game';
 import { createNewState } from './core/state';
 import { CROP_BY_ROW, unlockedRows } from './core/levels';
+import { nextPracticeRow } from './core/practice';
 import type { Mode } from './core/mastery';
 import { exportFileName, loadFrom, parseSave, saveTo, serialize, type LoadResult } from './core/save';
 import { systemClock, systemRng } from './core/clock';
@@ -95,6 +96,11 @@ export function startApp(root: HTMLElement): void {
     }
   }
 
+  /** Glow the row to practise next on the idle basic map; none in challenge mode or during a round. */
+  function syncGlow(): void {
+    scene.setGlowRow(uiMode === 'basic' && game.mode === null ? nextPracticeRow(game.state) : null);
+  }
+
   function showIdle(hint: string = HINT[uiMode]): void {
     panel.showIdle(uiMode, hint);
   }
@@ -106,6 +112,7 @@ export function startApp(root: HTMLElement): void {
   async function showCurrent(): Promise<void> {
     const q = game.mode !== null ? game.current : null;
     if (!q) {
+      syncGlow();
       scene.render(game);
       showIdle();
       return;
@@ -197,6 +204,7 @@ export function startApp(root: HTMLElement): void {
     if (my !== epoch) return;
 
     if (game.mode === null) {
+      syncGlow();
       scene.render(game);
       const { total } = game.progress();
       showIdle(total > 0 ? `🎉 完成 ${total} 題！` : HINT[uiMode]);
@@ -211,12 +219,14 @@ export function startApp(root: HTMLElement): void {
     epoch++;
     busy = false;
     speech.cancel();
+    syncGlow();
     scene.render(game);
     layout.updateHud(game.state);
     showIdle();
   }
 
   scene.setHandlers({ onCellTap });
+  syncGlow();
   scene.render(game);
 
   panel.onSubmit(n => { void onAnswer(n); });
@@ -224,6 +234,7 @@ export function startApp(root: HTMLElement): void {
   panel.onModeChange(m => {
     if (busy || game.mode !== null) return;
     uiMode = m;
+    syncGlow();
     showIdle();
   });
   panel.onStartChallenge(() => {
@@ -268,6 +279,7 @@ export function startApp(root: HTMLElement): void {
     readOnly = false; // importing is an explicit choice to use this progress: saving resumes
     speech.setEnabled(game.state.settings.speech);
     save();
+    syncGlow();
     scene.render(game);
     layout.updateHud(game.state);
     showIdle();
