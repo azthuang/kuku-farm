@@ -293,9 +293,12 @@ export class RanchScene extends Phaser.Scene {
     const { body, shadow, box } = v;
     this.tweens.killTweensOf(body);
     this.tweens.killTweensOf(shadow);
-    body.setPosition(0, 0).setAngle(0);
-    shadow.setScale(PX);
-    if (!v.sick || kind === 'heal' || kind === 'eat') body.setScale(PX);
+    // Start every fx from a still rest pose: lying flat when sick, otherwise standing on the idle
+    // frame (stops a walk cycle so a halted chicken never moonwalks). Tweens below are relative to it.
+    this.rest(v);
+    const a0 = body.angle;
+    const y0 = body.y;
+    const sy = body.scaleY;
     const cx = box.x;
     const cy = box.y - BODY_DY;
 
@@ -314,24 +317,30 @@ export class RanchScene extends Phaser.Scene {
         v.busyUntil = now + 800;
         break;
       case 'eat':
+        body.setScale(PX).setAngle(0).setY(0);
+        shadow.setScale(PX);
         body.play(TEX.anim('eat', v.coat, v.dir === UP ? DOWN : v.dir));
         v.busyUntil = now + 1800;
         break;
       case 'brush':
         this.sparkles.explode(14, cx, cy);
-        this.tweens.add({ targets: body, angle: { from: -8, to: 8 }, duration: 110, yoyo: true, repeat: 3 });
+        this.tweens.add({
+          targets: body, angle: { from: a0 - 8, to: a0 + 8 }, duration: 110, yoyo: true, repeat: 3,
+          onComplete: () => body.setAngle(a0),
+        });
         v.busyUntil = now + 900;
         break;
       case 'heal':
         v.sick = false;
         this.setIcon(v);
         this.sparkles.explode(30, cx, cy);
-        this.stand(v);
-        body.setScale(PX * SICK_SCALE_X, PX * SICK_SCALE_Y);
+        // Stand up from lying, whether render() already cleared `sick` or not.
+        this.lie(v);
+        shadow.setScale(PX);
         this.tweens.chain({
           targets: body,
           tweens: [
-            { scaleX: PX, scaleY: PX, angle: 0, duration: 380, ease: 'Back.Out', easeParams: [2.5] },
+            { scaleX: PX, scaleY: PX, angle: 0, y: 0, duration: 380, ease: 'Back.Out', easeParams: [2.5] },
             { y: -26, duration: 170, ease: 'Quad.Out', yoyo: true },
           ],
         });
@@ -340,11 +349,14 @@ export class RanchScene extends Phaser.Scene {
         break;
       case 'weak':
         // A sick chicken lifts itself a little and sinks back.
-        this.tweens.add({ targets: body, scaleY: v.sick ? PX * 0.86 : PX * 1.06, y: -3, duration: 380, yoyo: true, ease: 'Sine.Out' });
+        this.tweens.add({ targets: body, scaleY: sy + PX * (v.sick ? 0.28 : 0.06), y: y0 - 5, duration: 380, yoyo: true, ease: 'Sine.Out' });
         v.busyUntil = now + 820;
         break;
       case 'shake':
-        this.tweens.add({ targets: body, x: { from: -5, to: 5 }, angle: { from: -6, to: 6 }, duration: 90, yoyo: true, repeat: 2 });
+        this.tweens.add({
+          targets: body, x: { from: -5, to: 5 }, angle: { from: a0 - 6, to: a0 + 6 }, duration: 90, yoyo: true, repeat: 2,
+          onComplete: () => body.setPosition(0, y0).setAngle(a0),
+        });
         v.busyUntil = now + 600;
         break;
     }
@@ -738,15 +750,7 @@ export class RanchScene extends Phaser.Scene {
     body.setPosition(0, 0).setAngle(0);
     shadow.setScale(PX).setAlpha(1);
     if (v.sick) {
-      // Lying down: the side frame squashed flat, breathing slowly (alive, just unwell).
-      const side = v.dir === LEFT ? LEFT : RIGHT;
-      v.dir = side;
-      body.anims.stop();
-      body.setTexture(TEX.sheet('walk', v.coat), side * 4)
-        .setScale(PX * SICK_SCALE_X, PX * SICK_SCALE_Y)
-        .setAngle(side === LEFT ? -SICK_TILT : SICK_TILT) // head drooping toward the ground
-        .setY(2);
-      shadow.setFrame(side).setScale(PX * 1.1, PX);
+      this.lie(v);
       this.tweens.add({ targets: body, scaleY: PX * (SICK_SCALE_Y + 0.05), duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
       v.mode = 'idle';
     } else {
@@ -755,7 +759,30 @@ export class RanchScene extends Phaser.Scene {
     }
   }
 
-  /** Stand up straight (for effects that need the full body). */
+  /** Lying down: the side frame squashed flat and drooping head-down (alive, just unwell). Static. */
+  private lie(v: AnimalView): void {
+    const side = v.dir === LEFT ? LEFT : RIGHT;
+    v.dir = side;
+    v.body.anims.stop();
+    v.body.setTexture(TEX.sheet('walk', v.coat), side * 4)
+      .setScale(PX * SICK_SCALE_X, PX * SICK_SCALE_Y)
+      .setAngle(side === LEFT ? -SICK_TILT : SICK_TILT)
+      .setPosition(0, 2);
+    v.shadow.setFrame(side).setScale(PX * 1.1, PX);
+  }
+
+  /** Still rest pose for the current state: lying when sick, else standing on the idle frame. */
+  private rest(v: AnimalView): void {
+    if (v.sick) {
+      this.lie(v);
+    } else {
+      this.stand(v);
+      v.body.setPosition(0, 0).setAngle(0);
+      v.shadow.setFrame(v.dir).setScale(PX);
+    }
+  }
+
+  /** Stand up straight on the idle frame (stops any walk/eat cycle). */
   private stand(v: AnimalView): void {
     v.body.anims.stop();
     v.body.setTexture(TEX.sheet('walk', v.coat), v.dir * 4).setScale(PX);
