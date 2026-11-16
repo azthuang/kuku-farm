@@ -1,4 +1,4 @@
-import { SPECIES, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
+import { SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
 
 const MS_HOUR = 3_600_000;
 const STEP_MS = 60_000;
@@ -62,8 +62,8 @@ export function createRanch(now: number): RanchState {
   return {
     houses: [],
     animals: [],
-    supplies: { feed: 0, treat: 0, medicine: 0 },
-    products: { egg: 0 },
+    supplies: Object.fromEntries(SUPPLY_IDS.map((k) => [k, 0])) as Record<SupplyId, number>,
+    products: Object.fromEntries(PRODUCT_IDS.map((k) => [k, 0])) as Record<ProductId, number>,
     settledAt: now,
     nextId: 1,
   };
@@ -141,8 +141,9 @@ function withAnimal(
 export function feed(r: RanchState, animalId: string, now: number): CareResult {
   return withAnimal(r, animalId, now, (a) => {
     if (a.satiety >= FEED_FULL_AT) return { ok: false, reason: 'full' };
-    if (r.supplies.feed < 1) return { ok: false, reason: 'none-left' };
-    r.supplies.feed -= 1;
+    const feedId = SPECIES[a.species].feed;
+    if (r.supplies[feedId] < 1) return { ok: false, reason: 'none-left' };
+    r.supplies[feedId] -= 1;
     a.satiety = Math.min(100, a.satiety + FEED_AMOUNT);
     a.neglectMs = 0;
     return { ok: true };

@@ -200,3 +200,45 @@ describe('actions', () => {
     expect(cleanPoop(r, 'h1')).toEqual({ ok: false, reason: 'nothing' });
   });
 });
+
+describe('species-driven care', () => {
+  function cowRanch() {
+    const r = createRanch(0);
+    r.houses.push({ id: 'h2', kind: 'barn', lot: 1, poop: 0 });
+    r.animals.push({
+      id: 'a2', species: 'cow', name: '哞哞', color: '黑白花', houseId: 'h2',
+      satiety: 100, mood: 60, sick: false, medicated: false,
+      neglectMs: 0, produceMs: 0, poopMs: 0, waiting: 0, petTimes: [], lastBrushAt: null,
+    });
+    return r;
+  }
+  it('createRanch has every supply and product key at 0', () => {
+    const r = createRanch(0);
+    expect(r.supplies).toEqual({ feed: 0, feedCow: 0, feedPig: 0, feedSheep: 0, feedLlama: 0, treat: 0, medicine: 0 });
+    expect(r.products).toEqual({ egg: 0, milk: 0, truffle: 0, yarn: 0, fluff: 0 });
+  });
+  it('feeding a cow spends feedCow, not chicken feed', () => {
+    const r = cowRanch();
+    r.animals[0].satiety = 10;
+    r.supplies.feed = 3;
+    expect(feed(r, 'a2', 0)).toEqual({ ok: false, reason: 'none-left' });
+    r.supplies.feedCow = 2;
+    expect(feed(r, 'a2', 0)).toEqual({ ok: true });
+    expect(r.supplies.feedCow).toBe(1);
+    expect(r.supplies.feed).toBe(3);
+  });
+  it('a cow makes milk every 3 h (2.25 h when happy)', () => {
+    const r = cowRanch();
+    settle(r, 2.9 * H);
+    expect(r.animals[0].waiting).toBe(0);
+    settle(r, 3 * H);
+    expect(r.animals[0].waiting).toBe(1);
+    expect(collect(r, 'a2')).toBe(1);
+    expect(r.products.milk).toBe(1);
+    expect(r.products.egg).toBe(0);
+    const h = cowRanch();
+    h.animals[0].mood = 100;
+    settle(h, 2.25 * H);
+    expect(h.animals[0].waiting).toBe(1);
+  });
+});
