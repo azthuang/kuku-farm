@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
-import { CHICKEN_PALETTES, recolor } from '../../src/scenes/recolor';
+import { CHICKEN_PALETTES, PALETTES, recolor } from '../../src/scenes/recolor';
+import { SPECIES, type SpeciesId } from '../../src/core/species';
 
 function px(rgb: number, a = 255): number[] {
   return [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, a];
@@ -80,6 +81,37 @@ describe('recolor', () => {
     const data = new Uint8ClampedArray(px(0xefe9e7));
     recolor(data, []);
     expect(Array.from(data)).toEqual(px(0xefe9e7));
+  });
+});
+
+describe('PALETTES', () => {
+  const lum = (c: number) => ((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11;
+  const ids = Object.keys(SPECIES) as SpeciesId[];
+
+  it('chicken compat export matches PALETTES.chicken', () => {
+    expect(CHICKEN_PALETTES.brown).toBe(PALETTES.chicken['棕']);
+  });
+
+  it.each(ids)('%s: has exactly the species colors, the first untouched', (id) => {
+    expect(Object.keys(PALETTES[id])).toEqual([...SPECIES[id].colors]);
+    expect(PALETTES[id][SPECIES[id].colors[0]]).toEqual([]);
+  });
+
+  describe.each(ids)('%s coats', (id) => {
+    const colors = pngColors(`public/assets/ranch/${id}_walk.png`);
+    const coats = SPECIES[id].colors.slice(1);
+
+    it.each(coats)('%s: every from exists in the sprite, none repeats, shading order kept', (name) => {
+      const swaps = PALETTES[id][name];
+      expect(swaps.length).toBeGreaterThan(0);
+      const froms = swaps.map(([f]) => f);
+      for (const f of froms) expect(colors.has(f)).toBe(true);
+      expect(new Set(froms).size).toBe(froms.length);
+      // cream cow: the dark patch colour deliberately becomes a light patch
+      const body = swaps.filter(([f]) => !(id === 'cow' && f === 0x3a3737));
+      const tos = [...body].sort((a, b) => lum(b[0]) - lum(a[0])).map(([, t]) => lum(t));
+      for (let i = 1; i < tos.length; i++) expect(tos[i]).toBeLessThan(tos[i - 1]);
+    });
   });
 });
 

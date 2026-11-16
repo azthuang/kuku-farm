@@ -1,4 +1,13 @@
-export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope';
+import type { SpeciesId } from '../core/species';
+
+export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope' | 'moo' | 'oink' | 'baa' | 'hum';
+
+const VOICES: Record<SpeciesId, SfxName> = { chicken: 'cluck', cow: 'moo', pig: 'oink', sheep: 'baa', llama: 'hum' };
+
+/** The sound an animal of this species makes. */
+export function voiceOf(species: SpeciesId): SfxName {
+  return VOICES[species];
+}
 
 export interface Sfx {
   play(name: SfxName): void;
@@ -73,6 +82,29 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
     src.stop(t + 0.26);
   }
 
+  /** A bleat: a sawtooth with a wavering pitch from a low-frequency oscillator. */
+  function vibrato(c: AudioContext, t: number, f: number, dur: number, gain: number): void {
+    const osc = c.createOscillator();
+    const lfo = c.createOscillator();
+    const depth = c.createGain();
+    const g = c.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(f, t);
+    lfo.frequency.setValueAtTime(22, t);
+    depth.gain.setValueAtTime(28, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain * level, t + 0.04);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    lfo.connect(depth);
+    depth.connect(osc.frequency);
+    osc.connect(g);
+    g.connect(c.destination);
+    osc.start(t);
+    lfo.start(t);
+    osc.stop(t + dur + 0.02);
+    lfo.stop(t + dur + 0.02);
+  }
+
   function arp(c: AudioContext, t: number, freqs: number[], step: number, dur: number, gain: number): void {
     freqs.forEach((f, i) => blip(c, t + i * step, f, f, dur, gain, 'triangle'));
   }
@@ -98,6 +130,19 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
         case 'cluck':
           blip(c, t, 520, 700, 0.07, 0.13, 'triangle');
           blip(c, t + 0.1, 480, 640, 0.08, 0.13, 'triangle');
+          break;
+        case 'moo':
+          blip(c, t, 190, 130, 0.55, 0.14, 'triangle');
+          break;
+        case 'oink':
+          blip(c, t, 320, 240, 0.09, 0.13, 'sawtooth');
+          blip(c, t + 0.14, 300, 220, 0.1, 0.13, 'sawtooth');
+          break;
+        case 'baa':
+          vibrato(c, t, 360, 0.5, 0.13);
+          break;
+        case 'hum':
+          blip(c, t, 250, 270, 0.6, 0.1, 'sine');
           break;
         case 'collect':
           arp(c, t, [660, 880, 1175], 0.07, 0.16, 0.12);

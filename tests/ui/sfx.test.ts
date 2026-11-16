@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSfx } from '../../src/ui/sfx';
+import { createSfx, voiceOf } from '../../src/ui/sfx';
+import { SPECIES, type SpeciesId } from '../../src/core/species';
 
 function fakeCtx() {
   const calls = { osc: 0, gain: 0, buf: 0, resume: 0, maxGain: 0 };
@@ -40,7 +41,18 @@ function fakeCtx() {
   return { ctx: ctx as unknown as AudioContext, calls };
 }
 
-const NAMES = ['cluck', 'collect', 'sweep', 'buy', 'heal', 'nope'] as const;
+const NAMES = ['cluck', 'collect', 'sweep', 'buy', 'heal', 'nope', 'moo', 'oink', 'baa', 'hum'] as const;
+
+describe('voiceOf', () => {
+  it('gives each species its own voice', () => {
+    expect(voiceOf('chicken')).toBe('cluck');
+    expect(voiceOf('cow')).toBe('moo');
+    expect(voiceOf('pig')).toBe('oink');
+    expect(voiceOf('sheep')).toBe('baa');
+    expect(voiceOf('llama')).toBe('hum');
+    expect(new Set((Object.keys(SPECIES) as SpeciesId[]).map(voiceOf)).size).toBe(5);
+  });
+});
 
 describe('createSfx', () => {
   it('does not create the context or any node when disabled', () => {

@@ -6,4 +6,4 @@
 
 | 檔案 | 來源網址 | 作者 | 授權 |
 | --- | --- | --- | --- |
-| public/assets/ranch/chicken_*.png | https://opengameart.org/content/lpc-style-farm-animals | Daniel Eddeland | CC-BY 3.0（原作雙授權 CC-BY 3.0 / GPL 2.0，本專案採用 CC-BY 3.0） |
+| public/assets/ranch/{chicken,cow,pig,sheep,llama}_{walk,eat}.png、chicken/cow/llama_shadow.png（羊駝檔由 llama_walk_0 / llama_eat_0 改名） | https://opengameart.org/content/lpc-style-farm-animals | Daniel Eddeland | CC-BY 3.0（原作雙授權 CC-BY 3.0 / GPL 2.0，本專案採用 CC-BY 3.0） |
