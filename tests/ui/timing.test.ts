@@ -14,6 +14,6 @@ describe('countRowTiming', () => {
 
   it('gives small blocks the full speech wait and shortens big ones', () => {
     expect(countRowTiming(2)).toEqual({ minMs: 800, speechMaxMs: 1500 });
-    expect(countRowTiming(9)).toEqual({ minMs: 800, speechMaxMs: 888 });
+    expect(countRowTiming(9)).toEqual({ minMs: 800, speechMaxMs: 861 });
   });
 });

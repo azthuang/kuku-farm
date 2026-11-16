@@ -170,11 +170,14 @@ export function startApp(root: HTMLElement): void {
         }
       } else {
         panel.showWrong(r.q, r.correctAnswer);
-        // Count the block row by row: 「四、八」, then 「是二四得八」.
+        // Count the block row by row: 「四、八」, then 「是二四得八」. sayAndWait restarts its
+        // timeout when the voice starts, so race it against a hard per-row cap as well: the whole
+        // count must stay under COUNT_MAX_MS even with a slow speech engine.
         const t = countRowTiming(r.q.a);
         await scene.playCount(r.q, async (_row, total) => {
           if (my !== epoch) return;
-          await Promise.all([speech.sayAndWait(toChineseNumber(total), t.speechMaxMs), delay(t.minMs)]);
+          const spoken = speech.sayAndWait(toChineseNumber(total), t.speechMaxMs);
+          await Promise.all([Promise.race([spoken, delay(t.speechMaxMs)]), delay(t.minMs)]);
         });
         if (my !== epoch) return;
         await Promise.all([

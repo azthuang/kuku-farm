@@ -4,12 +4,14 @@ export const COUNT_MAX_MS = 8000;
 export const ROW_SPEECH_MAX_MS = 1500;
 /** Each row stays lit at least this long, also with speech off (never below 500 ms). */
 export const ROW_MIN_MS = 800;
+/** Kept back from the budget for timer and animation overhead between rows. */
+const SLACK_MS = 250;
 
 /**
  * Per-row timing for counting `rows` rows: wait for the spoken total up to `speechMaxMs`, but at
  * least `minMs`. Big blocks get shorter rows so rows × speechMaxMs ≤ COUNT_MAX_MS.
  */
 export function countRowTiming(rows: number): { minMs: number; speechMaxMs: number } {
-  const speechMaxMs = Math.min(ROW_SPEECH_MAX_MS, Math.floor(COUNT_MAX_MS / Math.max(1, rows)));
+  const speechMaxMs = Math.min(ROW_SPEECH_MAX_MS, Math.floor((COUNT_MAX_MS - SLACK_MS) / Math.max(1, rows)));
   return { minMs: Math.min(ROW_MIN_MS, speechMaxMs), speechMaxMs };
 }
