@@ -87,6 +87,17 @@ export function onPath(p: Prop, paths: readonly Segment[], margin: number): bool
   return false;
 }
 
+/**
+ * Care pages show one 600 × 600 cell each (x 0…1200, y 0…1800), so a sprite crossing a cell
+ * edge would be cut in half on both pages.
+ */
+export function crossesPageEdge(b: Rect, page = 600, grid: Rect = { x: 0, y: 0, w: 1200, h: 1800 }): boolean {
+  for (let x = grid.x; x <= grid.x + grid.w; x += page) if (b.x < x && b.x + b.w > x) return true;
+  if (b.x + b.w <= grid.x || b.x >= grid.x + grid.w) return false;
+  for (let y = grid.y + page; y < grid.y + grid.h; y += page) if (b.y < y && b.y + b.h > y) return true;
+  return false;
+}
+
 const SMALL: readonly [PropKind, number][] = [
   ['tinyA', 5], ['tinyB', 5], ['tinyC', 4], ['tinyD', 4], ['sprigA', 4], ['sprigB', 4],
   ['tuftA', 4], ['tuftC', 3], ['sprBlue', 2], ['sprRed', 2], ['sprYellow', 2],
@@ -150,7 +161,7 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     { kind: 'shrubDark', x: W.x + 162, y: 1700 },
     { kind: 'log', x: W.x + 196, y: 1560 },
     // right strip between the paths and below
-    { kind: 'treeDark', x: rightX - 90, y: 920 },
+    { kind: 'treeDark', x: rightX - 86, y: 920 },
     { kind: 'treeTall', x: rightX + 87, y: 860 },
     { kind: 'bushMid', x: rightX + 86, y: 1050 },
     { kind: 'roundBushBig', x: rightX - 84, y: 1060 },
@@ -181,7 +192,7 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
   for (let tries = 0; tries < 3000 && placed < 120; tries++) {
     const p: Prop = { kind: pick(), x: W.x + rnd() * W.w, y: W.y + rnd() * W.h };
     const b = propBox(p);
-    if (blocked(b, 8) || onPath(p, paths, 4)) continue;
+    if (blocked(b, 8) || crossesPageEdge(b) || onPath(p, paths, 4)) continue;
     if (boxes.some(o => overlaps(b, o, 10))) continue;
     props.push(p);
     boxes.push(b);

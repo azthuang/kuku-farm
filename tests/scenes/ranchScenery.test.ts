@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BLADE_HUB, SCENERY_SCALE, SCENERY_WORLD, onPath, overlaps, propBox, sceneryLayout, segDist, type Rect,
+  BLADE_HUB, SCENERY_SCALE, SCENERY_WORLD, crossesPageEdge, onPath, overlaps, propBox, sceneryLayout, segDist, type Rect,
 } from '../../src/scenes/ranchScenery';
 import { SCENERY_FRAMES } from '../../src/scenes/sceneryAtlas';
 
@@ -28,6 +28,10 @@ describe('ranch scenery layout', () => {
       if (p.kind === 'sign') expect(inside(b, LATER)).toBe(true);
       else expect(overlaps(b, LATER), `${p.kind} at ${p.x},${p.y}`).toBe(false);
     }
+  });
+
+  it('never cuts a prop in half at a care page edge', () => {
+    for (const p of layout.props) expect(crossesPageEdge(propBox(p)), `${p.kind} at ${p.x},${p.y}`).toBe(false);
   });
 
   it('keeps props off the paths (the path starts at the farmhouse door)', () => {
