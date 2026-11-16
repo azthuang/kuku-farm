@@ -33,7 +33,7 @@ export const ASSET_RES = 2;
 export const SIZE = { plot: 58, lock: 40, crop: 64, star: 20, sparkle: 16 };
 
 const R = ASSET_RES;
-const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
+export const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
 
 type G = Phaser.GameObjects.Graphics;
 
