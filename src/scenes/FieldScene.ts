@@ -89,6 +89,7 @@ export class FieldScene extends Phaser.Scene {
   /** Row to practise next (idle map, basic mode), or null for no glow. */
   private glowRow: number | null = null;
   private glowRing!: Phaser.GameObjects.Graphics;
+  private glowFill!: Phaser.GameObjects.Graphics;
   private plus!: Text;
   private bigCrop!: Img;
   private sparkles!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -365,6 +366,7 @@ export class FieldScene extends Phaser.Scene {
     this.plus.setVisible(false);
     this.bigCrop.setVisible(false);
     this.glowRing.clear().setVisible(false).setAlpha(1);
+    this.glowFill.clear().setVisible(false).setAlpha(1);
   }
 
   private resetCrop(c: Cell): void {
@@ -393,10 +395,13 @@ export class FieldScene extends Phaser.Scene {
     const g = this.glowRow;
     if (g !== null && open.has(g)) {
       const top = GRID_Y + (g - 1) * CELL;
-      this.glowRing.clear()
-        .lineStyle(6, GOLD, 1).strokeRoundedRect(GRID_X + 1, top + 1, 9 * CELL - 2, CELL - 2, 12)
+      this.glowFill.clear()
+        .fillStyle(0xfff1a8, 0.2).fillRoundedRect(GRID_X + 1, top + 1, 9 * CELL - 2, CELL - 2, 12)
         .setVisible(true).setAlpha(1);
-      this.tweens.add({ targets: this.glowRing, alpha: 0.3, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      this.glowRing.clear()
+        .lineStyle(12, GOLD, 1).strokeRoundedRect(GRID_X + 3, top + 3, 9 * CELL - 6, CELL - 6, 10)
+        .setVisible(true).setAlpha(1);
+      this.tweens.add({ targets: [this.glowRing, this.glowFill], alpha: 0.65, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     }
   }
 
@@ -532,6 +537,7 @@ export class FieldScene extends Phaser.Scene {
 
   private buildEffects(): void {
     this.glowRing = this.add.graphics().setDepth(3.5).setVisible(false);
+    this.glowFill = this.add.graphics().setDepth(1.2).setVisible(false);
     this.plus = this.add.text(0, 0, '', textStyle(34, '#ffffff', '#4f9a35', 8))
       .setOrigin(0.5).setDepth(10).setVisible(false);
     this.bigCrop = this.add.image(0, 0, ASSETS.crop.wheat).setDepth(8).setVisible(false);
