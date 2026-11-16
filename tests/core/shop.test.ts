@@ -66,6 +66,26 @@ describe('shop', () => {
     expect(s.ranch.animals[0].color).toBe('黑');
   });
 
+  it('a new animal takes a coat its species does not have yet', () => {
+    const s = rich(st());
+    buy(s, 'coop', 0, () => 0);
+    for (let i = 0; i < 3; i++) buy(s, 'chicken', 0, () => 0); // rng 0 = first of what is left
+    expect(s.ranch.animals.map((a) => a.color)).toEqual(['白', '棕', '黑']);
+    buy(s, 'chicken', 0, () => 0.99); // every coat taken: any coat again
+    expect(s.ranch.animals[3].color).toBe('黑');
+  });
+
+  it('coats of other species do not count', () => {
+    const s = rich(st());
+    s.inventory.potato = 900;
+    buy(s, 'coop', 0, () => 0);
+    buy(s, 'chicken', 0, () => 0);
+    expect(s.ranch.animals[0].color).toBe('白');
+    s.ranch.animals.push({ ...s.ranch.animals[0], id: 'x', species: 'sheep', color: '棕' });
+    buy(s, 'chicken', 0, () => 0);
+    expect(s.ranch.animals.at(-1)!.color).toBe('棕');
+  });
+
   it('supplies: +5 feed, cap 99', () => {
     const s = coop(rich(st()));
     buy(s, 'feed', 0, () => 0);

@@ -130,6 +130,12 @@ function unusedNames(r: RanchState, sp: SpeciesId, except?: Animal): string[] {
   return SPECIES[sp].names.filter((n) => !used.has(n));
 }
 
+/** Coats this species does not have yet, so a new animal looks different while it can. */
+function unusedColors(r: RanchState, sp: SpeciesId): string[] {
+  const used = new Set(r.animals.filter((a) => a.species === sp).map((a) => a.color));
+  return SPECIES[sp].colors.filter((c) => !used.has(c));
+}
+
 function pickFrom<T>(list: readonly T[], rng: Rng): T {
   return list[Math.min(list.length - 1, Math.floor(rng() * list.length))];
 }
@@ -151,10 +157,11 @@ export function buy(
   if (k.t === 'animal') {
     const sp = SPECIES[k.sp];
     const names = unusedNames(r, k.sp);
+    const colors = unusedColors(r, k.sp);
     const animal: Animal = {
       id: `a${r.nextId++}`, species: k.sp,
       name: pickFrom(names.length ? names : sp.names, rng),
-      color: pickFrom(sp.colors, rng),
+      color: pickFrom(colors.length ? colors : sp.colors, rng),
       houseId: openHouse(r, k.sp)!.id,
       satiety: 100, mood: MOOD_START, sick: false, medicated: false,
       neglectMs: 0, produceMs: 0, poopMs: 0, waiting: 0, petTimes: [], lastBrushAt: null,
