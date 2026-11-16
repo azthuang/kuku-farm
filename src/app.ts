@@ -6,12 +6,19 @@ import type { Mode } from './core/mastery';
 import { exportFileName, loadFrom, parseSave, saveTo, serialize, type LoadResult } from './core/save';
 import { systemClock, systemRng } from './core/clock';
 import { chantText, questionText, toChineseNumber } from './core/chant';
-import { createLayout } from './ui/layout';
+import { createLayout, type Tab } from './ui/layout';
 import { createSpeech } from './ui/speech';
 import { createPanel } from './ui/panel';
 import { countTiming } from './ui/timing';
 import { FieldScene, VIEW } from './scenes/FieldScene';
+import { RanchScene } from './scenes/RanchScene';
 import { ASSET_RES } from './scenes/assets';
+import {
+  brush, cleanPoop, collect, feed, giveMedicine, giveTreat, pet, settle, type CareResult,
+} from './core/ranch';
+import { buy, type ShopItemId } from './core/shop';
+import { createSfx } from './ui/sfx';
+import { createRanchUi, type Tool } from './ui/ranchUi';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
 const CHANT_WAIT_MS = 3000;
@@ -21,6 +28,10 @@ const WRONG_HOLD_MS = 1500;
 /** Exported blob URLs stay valid long enough for slow mobile download sheets. */
 const EXPORT_URL_TTL_MS = 40_000;
 const HINT: Record<Mode, string> = { basic: '點一列開始', challenge: '準備好了就開始！' };
+/** The ranch is settled and redrawn this often while its tab is on screen. */
+const RANCH_TICK_MS = 1000;
+/** A scene still booting/loading can't be slept or woken yet: look again after this long. */
+const SCENE_RETRY_MS = 100;
 
 const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -44,11 +55,18 @@ export function startApp(root: HTMLElement): void {
     game.state.settings.speech,
   );
   const say = (text: string): void => speech.say(text);
+  const sfx = createSfx(() => {
+    const w = window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+    const Ctor = w.AudioContext ?? w.webkitAudioContext;
+    return Ctor ? new Ctor() : null;
+  }, game.state.settings.sound);
   // Browsers only allow speech after a user gesture. A touch pointerdown is not a user
   // activation on iOS, so unlock on pointerup / touchend / click, and keep trying on later
-  // gestures until an utterance has actually started.
+  // gestures until an utterance has actually started. Sound effects resume their AudioContext on
+  // the same gestures (synchronously, while the gesture still counts as a user activation).
   const UNLOCK_EVENTS = ['pointerup', 'touchend', 'click'] as const;
   const tryUnlock = (): void => {
+    sfx.unlock();
     void speech.unlock().then(done => {
       if (done) UNLOCK_EVENTS.forEach(t => document.removeEventListener(t, tryUnlock, true));
     });
@@ -60,6 +78,8 @@ export function startApp(root: HTMLElement): void {
   const layout = createLayout(root, game.state);
   const panel = createPanel(layout.panel);
   const scene = new FieldScene();
+  const ranchScene = new RanchScene();
+  const ranchUi = createRanchUi(layout.ranch);
   const phaser = new Phaser.Game({
     type: Phaser.AUTO,
     parent: layout.stage,
@@ -70,7 +90,7 @@ export function startApp(root: HTMLElement): void {
     audio: { noAudio: true },
     disableContextMenu: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: scene,
+    scene: [scene, ranchScene],
   });
 
   let uiMode: Mode = 'basic';
@@ -79,6 +99,8 @@ export function startApp(root: HTMLElement): void {
   /** Bumped on round start, exit and import; an in-flight answer sequence stops when it changes. */
   let epoch = 0;
   let saveFailShown = false;
+  let tab: Tab = 'field';
+  let tool: Tool = 'hand';
 
   function save(): void {
     if (readOnly) return;
@@ -113,7 +135,7 @@ export function startApp(root: HTMLElement): void {
     const my = epoch;
     panel.showQuestion(q, game.progress());
     await scene.plant(q);
-    if (my !== epoch || busy || game.current !== q) return;
+    if (my !== epoch || busy || game.current !== q || tab !== 'field') return;
     say(questionText(q.a, q.b));
   }
 
@@ -267,8 +289,12 @@ export function startApp(root: HTMLElement): void {
     game = new Game(r.state, clock, rng);
     readOnly = false; // importing is an explicit choice to use this progress: saving resumes
     speech.setEnabled(game.state.settings.speech);
+    sfx.setEnabled(game.state.settings.sound);
+    settle(game.state.ranch, clock.now());
     save();
     scene.render(game);
+    ranchScene.render(game.state.ranch);
+    ranchUi.update(game.state);
     layout.updateHud(game.state);
     showIdle();
     layout.toast('✅ 已匯入存檔');
@@ -281,12 +307,212 @@ export function startApp(root: HTMLElement): void {
     phaser.scale.refresh();
   };
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(refit).observe(layout.stage);
-  layout.onTab(tab => {
-    if (tab === 'field') requestAnimationFrame(refit);
+  // ---------------------------------------------------------------- tabs and the ranch
+
+  let sceneRetry: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Runs the current tab's scene and sleeps the other. A scene that is still booting or loading
+   * cannot be slept or woken yet, so look again shortly until both are settled.
+   */
+  function applyScenes(): void {
+    clearTimeout(sceneRetry);
+    sceneRetry = undefined;
+    const S = Phaser.Scenes;
+    let retry = false;
+    for (const key of ['field', 'ranch'] as const) {
+      const sys = phaser.scene.getScene(key)?.sys;
+      if (!sys || sys.isTransitioning()) {
+        retry = true;
+        continue;
+      }
+      const st = sys.settings.status;
+      if (key === tab) {
+        if (st === S.SLEEPING) phaser.scene.wake(key);
+        else if (st === S.PAUSED) phaser.scene.resume(key);
+        else if (st <= S.INIT || st === S.SHUTDOWN) {
+          phaser.scene.start(key); // first visit (booted but never started)
+          retry = true;
+        } else if (st < S.RUNNING) retry = true; // loading or creating
+      } else if (st === S.RUNNING || st === S.PAUSED) {
+        phaser.scene.sleep(key);
+      } else if (st > S.INIT && st < S.RUNNING) {
+        retry = true; // still starting: sleep it once it is up
+      }
+    }
+    if (retry) sceneRetry = setTimeout(applyScenes, SCENE_RETRY_MS);
+  }
+
+  let ranchTick: ReturnType<typeof setInterval> | undefined;
+
+  function tickRanch(): void {
+    settle(game.state.ranch, clock.now());
+    ranchScene.render(game.state.ranch);
+  }
+
+  /** Settles and redraws every second, only while the ranch is actually on screen. */
+  function syncRanchTick(): void {
+    if (tab === 'ranch' && document.visibilityState === 'visible') {
+      if (ranchTick === undefined) {
+        tickRanch();
+        ranchTick = setInterval(tickRanch, RANCH_TICK_MS);
+      }
+    } else if (ranchTick !== undefined) {
+      clearInterval(ranchTick);
+      ranchTick = undefined;
+    }
+  }
+
+  /** After any ranch action or purchase: redraw, refresh the toolbar and shop, and save. */
+  function ranchChanged(): void {
+    ranchScene.render(game.state.ranch);
+    ranchUi.update(game.state);
+    save();
+  }
+
+  const SUPPLY_OF: Partial<Record<Tool, ShopItemId>> = { feed: 'feed', treat: 'treat', medicine: 'medicine' };
+
+  function onAnimal(id: string): void {
+    const r = game.state.ranch;
+    const now = clock.now();
+    const used = tool;
+    let res: CareResult;
+    switch (used) {
+      case 'hand': res = pet(r, id, now); break;
+      case 'feed': res = feed(r, id, now); break;
+      case 'brush': res = brush(r, id, now); break;
+      case 'treat': res = giveTreat(r, id, now); break;
+      case 'medicine': res = giveMedicine(r, id, now); break;
+    }
+    ranchChanged();
+    if (!res.ok) {
+      ranchScene.fx(id, 'shake');
+      sfx.play('nope');
+      // Ran out mid-use (the button is grey now): show where to get more.
+      const item = SUPPLY_OF[used];
+      if (res.reason === 'none-left' && item) ranchUi.openShop(item);
+      return;
+    }
+    switch (used) {
+      case 'hand':
+        if (res.healed) {
+          ranchScene.fx(id, 'heal');
+          sfx.play('heal');
+        } else if (r.animals.find(a => a.id === id)?.sick) {
+          ranchScene.fx(id, 'weak'); // not well until it has had medicine
+          layout.toast('🤒 要先吃藥 💊');
+        } else {
+          ranchScene.fx(id, 'jump');
+          sfx.play('cluck');
+        }
+        break;
+      case 'feed':
+        ranchScene.fx(id, 'eat');
+        sfx.play('cluck');
+        break;
+      case 'brush':
+        ranchScene.fx(id, 'brush');
+        sfx.play('sweep');
+        break;
+      case 'treat':
+        ranchScene.fx(id, 'treat');
+        sfx.play('cluck');
+        break;
+      case 'medicine':
+        ranchScene.fx(id, 'weak');
+        layout.toast('✋ 再摸摸牠');
+        break;
+    }
+  }
+
+  function onPoop(houseId: string): void {
+    settle(game.state.ranch, clock.now()); // cleanPoop does not settle by itself
+    const res = cleanPoop(game.state.ranch, houseId);
+    ranchChanged();
+    sfx.play(res.ok ? 'sweep' : 'nope');
+  }
+
+  function onEgg(animalId: string): void {
+    const r = game.state.ranch;
+    settle(r, clock.now());
+    const n = collect(r, animalId);
+    if (n <= 0) {
+      ranchChanged();
+      sfx.play('nope'); // the egg store is full (999)
+      return;
+    }
+    // flyFrom hides each egg it launches; render right after so the scene drops exactly those.
+    const flights: Promise<void>[] = [];
+    for (let i = 0; i < n; i++) flights.push(ranchScene.flyFrom(animalId, '🥚'));
+    ranchChanged();
+    sfx.play('collect');
+    void Promise.all(flights).then(() => {
+      layout.updateHud(game.state);
+      layout.bumpCrop('egg');
+    });
+  }
+
+  ranchScene.setHandlers({
+    onAnimal,
+    onPoop,
+    onEgg,
+    onLot: () => ranchUi.openShop('coop'),
+  });
+  ranchScene.render(game.state.ranch);
+  ranchUi.update(game.state);
+  ranchUi.onTool(t => { tool = t; });
+  ranchUi.onBuy(item => {
+    const res = buy(game.state, item, clock.now(), rng);
+    ranchChanged();
+    if (!res.ok) {
+      sfx.play('nope');
+      return;
+    }
+    sfx.play('buy');
+    ranchUi.celebrate(item);
+    layout.updateHud(game.state);
+    if (item === 'coop') {
+      ranchUi.openShop('chicken'); // next step: a chicken to live in it
+    } else if (item === 'chicken') {
+      ranchUi.closeShop(); // let the child watch the new chicken arrive
+      if (res.animalId) ranchScene.fx(res.animalId, 'jump');
+    } else {
+      tool = item; // just bought supplies: ready to use them
+      ranchUi.setTool(item);
+    }
+  });
+
+  layout.onSoundToggle(on => {
+    game.state.settings.sound = on;
+    sfx.setEnabled(on);
+    if (on) {
+      sfx.unlock(); // no context exists while sound is off; this tap is the gesture that allows one
+      sfx.play('cluck');
+    }
+    save();
+  });
+
+  layout.onTab(t => {
+    tab = t;
+    applyScenes();
+    requestAnimationFrame(refit);
+    if (t === 'ranch') {
+      settle(game.state.ranch, clock.now());
+      ranchScene.render(game.state.ranch);
+      ranchUi.update(game.state);
+    } else {
+      ranchUi.closeShop();
+      // A question planted while the ranch was open was not spoken: say it now.
+      const q = game.mode !== null ? game.current : null;
+      if (q && !busy) say(questionText(q.a, q.b));
+    }
+    syncRanchTick();
+    save();
   });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') save();
+    syncRanchTick();
   });
   window.addEventListener('pagehide', save);
 
