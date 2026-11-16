@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 import Phaser from 'phaser';
 import { HUNGRY_SHOW_AT, MOOD_HAPPY, pageStatus, type Animal, type House, type PageStatus, type RanchState } from '../core/ranch';
-import { FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfLot, type HouseKind, type SpeciesId } from '../core/species';
+import { FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_EMOJI, SPECIES_ORDER, speciesOfLot, type HouseKind, type SpeciesId } from '../core/species';
+import { drawSack } from '../ui/feedIcon';
 import type { Garden } from '../core/garden';
 import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets';
 import { VIEW } from './FieldScene';
@@ -228,7 +229,7 @@ interface AnimalView {
   name: string;
   iconKey: string;
   sick: boolean;
-  /** Shows 🍽️ (satiety ≤ HUNGRY_SHOW_AT). */
+  /** Shows the feed-sack sign (satiety ≤ HUNGRY_SHOW_AT). */
   hungry: boolean;
   /** Satiety 0: walks slowly and sits a lot. */
   starving: boolean;
@@ -842,7 +843,7 @@ export class RanchScene extends Phaser.Scene {
 
   /**
    * Emoji baked once to a smooth (linear-filtered) texture; returns its key. `badge` puts it on a
-   * small white disc so faint glyphs (🍽️) still read over the dirt.
+   * small white disc so it still reads over the dirt.
    */
   private emojiTex(emoji: string, badge = false): string {
     const key = `emoji:${badge ? 'b:' : ''}${emoji}`;
@@ -864,6 +865,26 @@ export class RanchScene extends Phaser.Scene {
     ctx.textBaseline = 'middle';
     ctx.font = `${Math.round(EMOJI_PX * (badge ? 0.6 : 0.78))}px ${EMOJI_FONT}`;
     ctx.fillText(emoji, c, c + 3);
+    tex.refresh();
+    return key;
+  }
+
+  /** The species' feed sack on a badge disc (the hungry sign), baked once; returns its key. */
+  private sackTex(sp: SpeciesId): string {
+    const key = `sack:${sp}`;
+    if (this.textures.exists(key)) return key;
+    const tex = this.textures.createCanvas(key, EMOJI_PX, EMOJI_PX);
+    if (!tex) return '__MISSING';
+    const ctx = tex.context;
+    const c = EMOJI_PX / 2;
+    ctx.beginPath();
+    ctx.arc(c, c, c - 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,248,225,0.96)';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#c99a68';
+    ctx.stroke();
+    drawSack(ctx, c, c + 1, EMOJI_PX * 0.72, SPECIES_EMOJI[sp], EMOJI_FONT);
     tex.refresh();
     return key;
   }
@@ -905,7 +926,7 @@ export class RanchScene extends Phaser.Scene {
 
     return {
       lot, kind: KIND_OF_LOT[lot], rect, plus, lock, lockCrop, lockCropKey: '', state: '',
-      badges: this.buildBadges(rect),
+      badges: this.buildBadges(rect, speciesOfLot(lot) ?? 'chicken'),
     };
   }
 
@@ -1063,11 +1084,12 @@ export class RanchScene extends Phaser.Scene {
     g.labels.forEach((l, i) => l.setColor(i + 1 === garden.glowRow ? '#ffe680' : '#ffffff'));
   }
 
-  /** Overview corner badges (🍽️ 🤒 💩 product×n), sized to read at the overview zoom. */
-  private buildBadges(rect: Rect): Badges {
+  /** Overview corner badges (feed sack when hungry, 🤒 💩 product×n), sized to read at the overview zoom. */
+  private buildBadges(rect: Rect, sp: SpeciesId): Badges {
     const bg = this.add.graphics();
     const make = (e: string) => this.emoji(0, 0, e, SIZE.badge, true).setVisible(false);
-    const hungry = make('🍽️');
+    // hungry: that species' feed sack, like the feed button that answers it
+    const hungry = this.add.image(0, 0, this.sackTex(sp)).setScale(SIZE.badge / EMOJI_PX).setVisible(false);
     const sick = make('🤒');
     const poop = make('💩');
     const product = make('🥚');
@@ -1204,7 +1226,7 @@ export class RanchScene extends Phaser.Scene {
     const label = this.add.text(0, 0, '', {
       fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#4a3a2a', resolution: ASSET_RES,
     }).setOrigin(0.5, 0.5);
-    const icon = this.emoji(0, 0, '🍽️', SIZE.icon, true).setVisible(false);
+    const icon = this.emoji(0, 0, '🤒', SIZE.icon, true).setVisible(false); // setIcon picks the sign
     const heart = this.emoji(0, 0, '💗', SIZE.icon, true).setVisible(false);
     const tag = this.add.container(0, 0, [pill, label, icon, heart]).setDepth(DEPTH.tag).setVisible(this.tagsShown);
 
@@ -1273,14 +1295,14 @@ export class RanchScene extends Phaser.Scene {
   }
 
   private setIcon(v: AnimalView): void {
-    const key = v.sick ? '🤒' : v.hungry ? '🍽️' : '';
+    const key = v.sick ? '🤒' : v.hungry ? 'sack' : '';
     if (key === v.iconKey) return;
     v.iconKey = key;
     if (!key) {
       v.icon.setVisible(false);
       return;
     }
-    v.icon.setTexture(this.emojiTex(key, true)).setVisible(true);
+    v.icon.setTexture(key === 'sack' ? this.sackTex(v.sp) : this.emojiTex(key, true)).setVisible(true);
     v.heart.setVisible(false);
     const s = SIZE.icon / EMOJI_PX;
     v.icon.setScale(0);

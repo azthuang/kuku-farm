@@ -4,7 +4,7 @@ import { feedIcon } from './feedIcon';
 import { checkBuy, lockHint, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
 import { gardenOf } from '../core/garden';
 import {
-  FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfLot,
+  FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_EMOJI, SPECIES_ORDER, speciesOfLot,
   type HouseKind, type ProductId, type SpeciesId, type SupplyId,
 } from '../core/species';
 import type { GameState } from '../core/state';
@@ -40,11 +40,11 @@ const GHOST_CLICK_MS = 350;
 
 /** Per species: page emoji, animal name, house name. */
 export const SPECIES_UI: Record<SpeciesId, { emoji: string; name: string; house: string }> = {
-  chicken: { emoji: '🐔', name: '雞', house: '雞舍' },
-  cow: { emoji: '🐄', name: '牛', house: '牛棚' },
-  pig: { emoji: '🐖', name: '豬', house: '豬圈' },
-  sheep: { emoji: '🐑', name: '綿羊', house: '羊圈' },
-  llama: { emoji: '🦙', name: '羊駝', house: '羊駝屋' },
+  chicken: { emoji: SPECIES_EMOJI.chicken, name: '雞', house: '雞舍' },
+  cow: { emoji: SPECIES_EMOJI.cow, name: '牛', house: '牛棚' },
+  pig: { emoji: SPECIES_EMOJI.pig, name: '豬', house: '豬圈' },
+  sheep: { emoji: SPECIES_EMOJI.sheep, name: '綿羊', house: '羊圈' },
+  llama: { emoji: SPECIES_EMOJI.llama, name: '羊駝', house: '羊駝屋' },
 };
 
 const OVERVIEW_TITLE = '🗺️ 我的牧場';
