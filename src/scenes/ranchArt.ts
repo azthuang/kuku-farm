@@ -337,6 +337,48 @@ export function drawRun(ctx: Ctx, w: number, h: number, kind: HouseKind): void {
     for (let x = 0; x <= w - 4; x += 18) post(ctx, x, top);
     post(ctx, w - 4, top);
   }
+  drawGate(ctx, w, h, g.base);
+}
+
+/** Colours of the gate that are not in the plain fence (the gate test looks for its brace). */
+export const GATE = { brace: '#5c3a1e', board: '#c98a4e', rail: '#e6b47c', latch: '#f2c94c' } as const;
+
+/**
+ * Where the gate sits in a run of w × h sprite pixels: the middle of the front fence, where the
+ * cobblestone path from the farmhouse meets the pen.
+ */
+export function gateRect(w: number, h: number): { x: number; y: number; w: number; h: number } {
+  return { x: Math.round(w / 2) - 13, y: h - 18, w: 26, h: 18 };
+}
+
+/** A closed two-leaf farm gate between two taller posts, Z-braced like a barn door. */
+function drawGate(ctx: Ctx, w: number, h: number, ground: string): void {
+  const r = gateRect(w, h);
+  const top = h - 16;
+  const cx = r.x + 13;
+  // clear the plain fence post that stood here
+  px(ctx, ground, cx - 9, top, 18, 1);
+  for (const [lx, flip] of [[cx - 9, false], [cx, true]] as const) {
+    px(ctx, WOOD.line, lx, top + 1, 9, 14);
+    px(ctx, GATE.board, lx + 1, top + 2, 7, 12);
+    for (let x = lx + 3; x < lx + 8; x += 2) px(ctx, WOOD.mid, x, top + 2, 1, 12);
+    px(ctx, GATE.rail, lx + 1, top + 3, 7, 2);
+    px(ctx, GATE.rail, lx + 1, top + 10, 7, 2);
+    // the diagonal brace runs from the hinge side's bottom to the middle's top
+    for (let i = 0; i < 6; i++) {
+      const bx = flip ? lx + 7 - i : lx + 1 + i;
+      px(ctx, GATE.brace, bx, top + 9 - i, 1, 2);
+    }
+  }
+  px(ctx, WOOD.line, cx, top + 1, 1, 14);
+  px(ctx, GATE.latch, cx - 1, top + 7, 2, 2);
+  // taller gate posts with caps
+  for (const x of [r.x, r.x + r.w - 4]) {
+    px(ctx, WOOD.line, x, top - 2, 4, 17);
+    px(ctx, WOOD.mid, x, top - 1, 3, 15);
+    px(ctx, WOOD.light, x, top - 1, 1, 15);
+    px(ctx, '#f0c48a', x, top - 2, 3, 1);
+  }
 }
 
 function post(ctx: Ctx, x: number, y: number): void {

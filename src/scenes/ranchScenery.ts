@@ -49,6 +49,8 @@ export interface SceneryLayout {
   bridges: Rect[];
   /** Bottom centre of the water wheel sprite (world), standing in the stream by the mill. */
   wheel: { x: number; y: number };
+  /** Which way the water runs where the wheel dips into it (unit vector, world axes). */
+  wheelFlow: { dx: number; dy: number };
   /** Straight stretches of open water (no bridge or wheel) where glints drift downstream. */
   flows: Segment[];
 }
@@ -60,6 +62,34 @@ const RIVER_HALF = 40;
 /** Clear lawn kept beside the paths (world units), except for deliberate edge flowers and stones. */
 const PATH_LAWN = 32;
 export const WHEEL_FRAMES = 4;
+/** water-wheel.png's frames, played 0 -> 3, turn the wheel clockwise on screen (measured). */
+export const WHEEL_SHEET_CLOCKWISE = true;
+
+/**
+ * Frame order that turns the wheel with the stream. The wheel dips its bottom into the water, so
+ * the bottom paddles move with the flow: water running east (dx > 0) turns it anticlockwise.
+ */
+export function wheelFrameOrder(flow: { dx: number }): number[] {
+  const clockwise = flow.dx < 0;
+  const order = Array.from({ length: WHEEL_FRAMES }, (_, i) => i);
+  return clockwise === WHEEL_SHEET_CLOCKWISE ? order : order.reverse();
+}
+
+/**
+ * The map's small flowers: four species, each a single bloom and a clump. They grow in patches,
+ * in loose singles and pairs, and mix at the edges of neighbouring patches.
+ */
+export const FLOWERS = {
+  white: ['flW', 'daisyW'],
+  yellow: ['flY', 'daisyY'],
+  blue: ['flBlue', 'bluebells'],
+  red: ['flRose', 'fbRed'],
+} as const satisfies Record<string, readonly SceneryFrame[]>;
+const FLOWER_KINDS: readonly PropKind[] = Object.values(FLOWERS).flat();
+
+export function isFlower(kind: PropKind): boolean {
+  return FLOWER_KINDS.includes(kind);
+}
 
 /** World x of river vertex column `i` (the terrain's 32-px tile corners, 64 world units apart). */
 const vx = (i: number): number => SCENERY_WORLD.x + i * TILE * SCENERY_SCALE;
@@ -140,12 +170,25 @@ export function onPath(p: Prop, paths: readonly Segment[], margin: number): bool
   return false;
 }
 
-/** Smallest distance from any point of the box (sampled) to the polyline or path set. */
-function boxDist(b: Rect, dist: (x: number, y: number) => number): number {
-  let d = Infinity;
-  for (let y = b.y; y <= b.y + b.h + 0.01; y += Math.min(8, b.h)) {
-    for (let x = b.x; x <= b.x + b.w + 0.01; x += Math.min(8, b.w)) d = Math.min(d, dist(x, y));
+/** Distance between a box and a segment (exact for the axis-aligned paths and stream). */
+function rectSegDist(r: Rect, s: Segment): number {
+  if (s.x0 !== s.x1 && s.y0 !== s.y1) {
+    // a slanted segment: sample the box
+    let d = Infinity;
+    for (let y = r.y; y <= r.y + r.h + 0.01; y += Math.min(8, r.h || 8)) {
+      for (let x = r.x; x <= r.x + r.w + 0.01; x += Math.min(8, r.w || 8)) d = Math.min(d, segDist(s, x, y));
+    }
+    return d;
   }
+  const gx = Math.max(0, Math.min(s.x0, s.x1) - (r.x + r.w), r.x - Math.max(s.x0, s.x1));
+  const gy = Math.max(0, Math.min(s.y0, s.y1) - (r.y + r.h), r.y - Math.max(s.y0, s.y1));
+  return Math.hypot(gx, gy);
+}
+
+/** Smallest distance from a box to any of the segments. */
+function boxDist(b: Rect, segs: readonly Segment[]): number {
+  let d = Infinity;
+  for (const s of segs) d = Math.min(d, rectSegDist(b, s));
   return d;
 }
 
@@ -195,6 +238,8 @@ interface ClusterSpec {
   strays?: number;
   /** Deliberately lines a path or fence (may come within a few units of the stones). */
   edge?: boolean;
+  /** How far apart members of a wood stand, as a share of a tree's width (default 0.45). */
+  gap?: number;
 }
 
 /** The bottom strip a prop stands on: a tree's trunk, a bush's base, a flower's whole tuft. */
@@ -288,13 +333,17 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     // focal 1: a few mushrooms in the big tree's shade
     { kinds: ['mushRed'], x: W.x + 46, y: 985, sx: 10, sy: 8, n: 3 },
     // secondary: the bottom-left wood, three layers deep, bushes at its feet
-    { kinds: ['treePine', 'treeTall'], x: W.x + 125, y: 1470, sx: 45, sy: 100, n: 7 },
+    { kinds: ['treePine', 'treeTall'], x: W.x + 125, y: 1470, sx: 50, sy: 110, n: 5, gap: 0.8 },
     { kinds: ['roundBushBig', 'bushC'], x: W.x + 125, y: 1782, sx: 50, sy: 6, n: 3 },
     { kinds: ['stump', 'stumpRoots'], x: W.x + 208, y: 1000, sx: 8, sy: 14, n: 2 },
     { kinds: ['mushPurple'], x: W.x + 40, y: 1700, sx: 8, sy: 40, n: 3 },
     // by the farmhouse: a rose bed at the corner of the path, marigolds by the veggie patch
-    { kinds: ['roses'], x: -45, y: 500, sx: 12, sy: 10, n: 3, edge: true },
-    { kinds: ['flY'], x: W.x + 36, y: 418, sx: 12, sy: 6, n: 3, edge: true },
+    { kinds: [...FLOWERS.red], x: -45, y: 500, sx: 12, sy: 10, n: 3, edge: true },
+    { kinds: [FLOWERS.yellow[0]], x: W.x + 40, y: 425, sx: 24, sy: 8, n: 3, edge: true },
+    // meadow flowers in the left strip, at the edges of the big tree's lawn and the wood
+    { kinds: [...FLOWERS.white], x: W.x + 240, y: 1150, sx: 20, sy: 40, n: 5, edge: true },
+    { kinds: [...FLOWERS.yellow], x: W.x + 60, y: 1140, sx: 30, sy: 20, n: 3, strays: 2 },
+    { kinds: [...FLOWERS.blue], x: W.x + 250, y: 1740, sx: 16, sy: 30, n: 3, edge: true },
     // secondary: the top-right wood past the stream, shrubs on the near bank
     { kinds: ['treeTall', 'treeDark'], x: E - 76, y: 330, sx: 6, sy: 50, n: 3 },
     { kinds: ['bushA', 'bushB'], x: E - 108, y: 500, sx: 40, sy: 3, n: 2 },
@@ -304,20 +353,28 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     { kinds: ['lilyA', 'lilyB'], x: vx(27), y: 1010, sx: 4, sy: 50, n: 3 },
     { kinds: ['cattailDark'], x: vx(27) - 64, y: 1290, sx: 4, sy: 24, n: 3 },
     { kinds: ['rockB', 'rockC'], x: 1260, y: rowY[1] + 60, sx: 20, sy: 4, n: 3, edge: true },
-    { kinds: ['fbBlue'], x: 1270, y: 1000, sx: 20, sy: 24, n: 3 },
+    { kinds: [...FLOWERS.blue], x: 1270, y: 1000, sx: 20, sy: 30, n: 5 },
+    { kinds: [...FLOWERS.yellow], x: 1250, y: 900, sx: 16, sy: 20, n: 3 },
     { kinds: ['lilyFlower', 'lilyB'], x: vx(26), y: 1620, sx: 3, sy: 60, n: 3 },
     { kinds: ['reedA', 'reedB'], x: vx(26) - 60, y: 1500, sx: 4, sy: 30, n: 3 },
-    { kinds: ['violets'], x: 1250, y: 1640, sx: 16, sy: 50, n: 5 },
+    { kinds: [...FLOWERS.white], x: 1250, y: 1640, sx: 16, sy: 50, n: 5 },
+    { kinds: [...FLOWERS.red], x: 1240, y: 1760, sx: 16, sy: 10, n: 3 },
     { kinds: ['roundBushBig', 'bushC'], x: E - 44, y: 1690, sx: 4, sy: 50, n: 3 },
     // inside the grid: a few single-colour patches along the fences, open lawn elsewhere
-    { kinds: ['flY'], x: 170, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
-    { kinds: ['sprBlue'], x: 760, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
-    { kinds: ['tinyA'], x: 1070, y: topBand, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: ['daisyY'], x: 180, y: band1, sx: 36, sy: 3, n: 5, edge: true },
-    { kinds: ['tinyC'], x: 1060, y: band1, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: ['flW'], x: 150, y: band2, sx: 36, sy: 3, n: 5, edge: true },
+    // (neighbouring patches of different flowers mix where they meet)
+    { kinds: [...FLOWERS.yellow], x: 150, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.white], x: 280, y: topBand, sx: 30, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.blue], x: 760, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: ['tuftA'], x: 1070, y: topBand, sx: 30, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.white], x: 160, y: band1, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.red], x: 290, y: band1, sx: 30, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.blue], x: 830, y: band1, sx: 30, sy: 3, n: 3, edge: true },
+    { kinds: ['tuftC'], x: 1060, y: band1, sx: 30, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.white], x: 140, y: band2, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.yellow], x: 260, y: band2, sx: 30, sy: 3, n: 3, edge: true },
     { kinds: ['rockB', 'rockC'], x: 430, y: band2, sx: 20, sy: 3, n: 3, edge: true },
-    { kinds: ['bluebells'], x: 780, y: band2, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.blue], x: 780, y: band2, sx: 36, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.red], x: 1020, y: band2, sx: 30, sy: 3, n: 3, edge: true },
   ];
   const clusters: Cluster[] = specs.map(s => ({ kinds: s.kinds, x: s.x, y: s.y }));
 
@@ -329,14 +386,15 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
   const foots = props.map(footprint);
   const placedBig: Prop[] = props.filter(p => isBig(p.kind));
   const toRiver = (x: number, y: number): number => lineDist(river, x, y);
-  const toPath = (x: number, y: number): number => {
-    let d = Infinity;
-    for (const s of paths) d = Math.min(d, segDist(s, x, y));
-    return d;
-  };
+  const riverSegs: Segment[] = river.slice(1).map((q, i) => ({ x0: river[i].x, y0: river[i].y, x1: q.x, y1: q.y }));
 
+  // The lawn straight in front of the farmhouse door stays clear.
+  const doorLawn: Rect = { x: house.x - 60, y: house.y + 4, w: 120, h: rowY[0] - PATH_HALF - house.y - 8 };
+
+  /** `ci` is the cluster the prop grows in, or -1 for a loose flower. */
   const fits = (p: Prop, ci: number, edge: boolean): boolean => {
     const b = propBox(p);
+    if (!isBig(p.kind) && overlaps(footprint(p), doorLawn)) return false;
     if (b.x < W.x + 4 || b.y < W.y + 4 || b.x + b.w > W.x + W.w - 4 || b.y + b.h > W.y + W.h - 4) return false;
     for (const r of keepOut) if (overlaps(b, r, 8)) return false;
     if (crossesPageEdge(b)) return false;
@@ -346,13 +404,15 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     if (big && overlaps(b, heroBox, 16)) return false;
     const f = footprint(p);
     // keep the lawn beside the paths open, and the water clear
-    if (big ? boxDist(b, toPath) < PATH_HALF + PATH_LAWN : onPath(p, paths, edge ? 4 : PATH_LAWN)) return false;
+    // (small plants: the bottom of the sprite, as onPath measures it)
+    const base: Rect = big ? b : { x: b.x, y: b.y + b.h - Math.min(b.h, 24), w: b.w, h: Math.min(b.h, 24) };
+    if (boxDist(base, paths) < PATH_HALF + (big || !edge ? PATH_LAWN : 4)) return false;
     if (isAfloat(p.kind)) {
-      if (toRiver(p.x, p.y - b.h / 2) > 10 || boxDist(b, toPath) < PATH_HALF + 30) return false;
+      if (toRiver(p.x, p.y - b.h / 2) > 10 || boxDist(b, paths) < PATH_HALF + 30) return false;
     } else if (isWaterside(p.kind)) {
-      const d = boxDist(f, toRiver);
+      const d = boxDist(f, riverSegs);
       if (d < RIVER_HALF - 22 || d > RIVER_HALF + 16) return false;
-    } else if ((big ? boxDist(b, toRiver) : boxDist(f, toRiver)) < RIVER_HALF + (big ? 12 : 20)) {
+    } else if ((big ? boxDist(b, riverSegs) : boxDist(f, riverSegs)) < RIVER_HALF + (big ? 12 : 20)) {
       return false;
     }
     if (foots.some(o => overlaps(f, o, 2))) return false;
@@ -360,12 +420,12 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
       const ob = propBox(o);
       if (!overlaps(b, ob, 0)) continue;
       // Trees of one wood overlap, but their trunks keep apart; nothing hides wholly behind a canopy.
-      if (big && o.cluster !== undefined && clusters[o.cluster] && Math.abs(o.cluster - ci) <= 3
+      if (big && ci >= 0 && o.cluster !== undefined && clusters[o.cluster] && Math.abs(o.cluster - ci) <= 3
         && specs[o.cluster].kinds.some(isBig)) {
         const dx = Math.abs(p.x - o.x);
         const dy = Math.abs(p.y - o.y);
         if (dx < 24 && dy < 48) return false;
-        if (o.cluster === ci && Math.hypot(dx, dy * 1.4) < 0.45 * Math.max(b.w, ob.w)) return false;
+        if (o.cluster === ci && Math.hypot(dx, dy * 1.4) < (specs[ci].gap ?? 0.45) * Math.max(b.w, ob.w)) return false;
         if (p.y < o.y) return false;
       } else if (p.y < o.y - (big ? 60 : 6)) {
         return false;
@@ -373,6 +433,8 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     }
     // Stay nearer this cluster's centre than any other of its sort (trees, bushes, small plants),
     // so patches never blur together while bushes and undergrowth may gather at a wood's feet.
+    // Flowers may wander into a neighbouring patch: meadows mix at their edges.
+    if (ci < 0 || isFlower(p.kind)) return true;
     const own = Math.hypot(p.x - clusters[ci].x, p.y - clusters[ci].y);
     const sort = (j: number): number => (specs[j].kinds.some(isTree) ? 2 : specs[j].kinds.some(isBig) ? 1 : 0);
     return clusters.every((c, j) => j === ci || sort(j) !== sort(ci) || Math.hypot(p.x - c.x, p.y - c.y) > own);
@@ -399,6 +461,28 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     }
   });
 
+  // Loose flowers over the open lawn: singles and pairs (sometimes of two species), anywhere they
+  // fit, but never in a wood's shade.
+  rnd = seeded(5150);
+  const singles = Object.values(FLOWERS).map(k => k[0]);
+  let loose = 0;
+  for (let tries = 0; tries < 4000 && loose < 34; tries++) {
+    const a: Prop = { kind: singles[Math.floor(rnd() * singles.length)], x: W.x + rnd() * W.w, y: W.y + rnd() * W.h };
+    if (!fits(a, -1, true)) continue;
+    props.push(a);
+    foots.push(footprint(a));
+    loose++;
+    if (rnd() < 0.45) {
+      const kind = rnd() < 0.6 ? a.kind : singles[Math.floor(rnd() * singles.length)];
+      const ang = rnd() * Math.PI * 2;
+      const b: Prop = { kind, x: a.x + Math.cos(ang) * 30, y: a.y + Math.sin(ang) * 18 };
+      if (fits(b, -1, true)) {
+        props.push(b);
+        foots.push(footprint(b));
+      }
+    }
+  }
+
   // Glints drift down the open stretches of the stream, clear of the bridges and the wheel.
   const flows: Segment[] = [];
   for (let i = 1; i < river.length; i++) {
@@ -414,7 +498,9 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     if (yEnd - y0 > 60) flows.push({ x0: a.x, y0, x1: a.x, y1: yEnd });
   }
 
-  return { paths, pathHalf: PATH_HALF, props, clusters, river, riverHalf: RIVER_HALF, bridges, wheel, flows };
+  // At the wheel the stream runs east along the bend.
+  const wheelFlow = { dx: 1, dy: 0 };
+  return { paths, pathHalf: PATH_HALF, props, clusters, river, riverHalf: RIVER_HALF, bridges, wheel, wheelFlow, flows };
 }
 
 // ---------------------------------------------------------------- bake

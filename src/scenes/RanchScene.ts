@@ -6,7 +6,7 @@ import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets
 import { VIEW } from './FieldScene';
 import { HOUSE_ART, dashedRect, drawRun, hash, seeded } from './ranchArt';
 import {
-  BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, WHEEL_FRAMES, bakeScenery, sceneryLayout,
+  BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout, wheelFrameOrder,
 } from './ranchScenery';
 import { SCENERY_FRAMES } from './sceneryAtlas';
 import { PALETTES, recolor } from './recolor';
@@ -899,7 +899,7 @@ export class RanchScene extends Phaser.Scene {
 
     const atlasTex = this.textures.get(TEX.atlas);
     atlasTex.setFilter(Phaser.Textures.FilterMode.NEAREST);
-    for (let i = 0; i < WHEEL_FRAMES; i++) {
+    for (const i of wheelFrameOrder(layout.wheelFlow)) {
       const [x, y, w, h] = SCENERY_FRAMES[TEX.wheel(i) as keyof typeof SCENERY_FRAMES];
       if (!atlasTex.has(TEX.wheel(i))) atlasTex.add(TEX.wheel(i), 0, x, y, w, h);
     }
@@ -907,7 +907,8 @@ export class RanchScene extends Phaser.Scene {
     if (!this.anims.exists(TEX.waterWheel)) {
       this.anims.create({
         key: TEX.waterWheel, repeat: -1, frameRate: 6,
-        frames: Array.from({ length: WHEEL_FRAMES }, (_, i) => ({ key: TEX.atlas, frame: TEX.wheel(i) })),
+        // turning with the stream: its paddles dip in and are pushed along by the water
+        frames: wheelFrameOrder(layout.wheelFlow).map(i => ({ key: TEX.atlas, frame: TEX.wheel(i) })),
       });
     }
     this.add.sprite(layout.wheel.x, layout.wheel.y, TEX.atlas, TEX.wheel(0))

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SCENERY_SCALE, SCENERY_WORLD, crossesPageEdge, isAfloat, isBig, isTree, isUnderstory, isWater, isWaterside, lineDist,
-  onPath, overlaps, propBox, sceneryLayout, segDist, type Prop, type Rect,
+  FLOWERS, SCENERY_SCALE, SCENERY_WORLD, WHEEL_SHEET_CLOCKWISE, crossesPageEdge, isAfloat, isBig, isFlower, isTree,
+  isUnderstory, isWater, isWaterside, lineDist, onPath, overlaps, propBox, sceneryLayout, segDist, wheelFrameOrder,
+  type Prop, type Rect,
 } from '../../src/scenes/ranchScenery';
+import { GATE, drawRun, gateRect } from '../../src/scenes/ranchArt';
+import { SPECIES, SPECIES_ORDER } from '../../src/core/species';
 import { SCENERY_FRAMES } from '../../src/scenes/sceneryAtlas';
 
 // Same geometry as RanchScene: 600-wide cells on a 2 × 3 grid, the lot inset (30, 80, 540, 440).
@@ -97,6 +100,16 @@ describe('ranch scenery layout', () => {
       expect(crossings).toBeGreaterThanOrEqual(1);
     });
 
+    it('turns the water wheel with the stream: its dipped paddles move the way the water runs', () => {
+      // At the bend the water runs east, so the bottom of the wheel moves east: anticlockwise.
+      expect(layout.wheelFlow).toEqual({ dx: 1, dy: 0 });
+      const order = wheelFrameOrder(layout.wheelFlow);
+      const sheetOrder = [0, 1, 2, 3];
+      expect(WHEEL_SHEET_CLOCKWISE).toBe(true);
+      expect(order).toEqual([...sheetOrder].reverse());
+      expect(wheelFrameOrder({ dx: -1 })).toEqual(sheetOrder);
+    });
+
     it('turns the water wheel in the stream beside the mill', () => {
       expect(toRiver(layout.wheel.x, layout.wheel.y - 30)).toBeLessThan(layout.riverHalf);
       const mill = layout.props.find(p => p.kind === 'mill');
@@ -148,8 +161,7 @@ describe('ranch scenery layout', () => {
       for (const p of layout.props) {
         if (p.cluster === undefined || isAfloat(p.kind)) continue;
         const k = p.kind;
-        const edgy = k.startsWith('fl') || k.startsWith('rock') || k === 'roses' || k === 'daisyY' || k === 'tinyA'
-          || k === 'tinyC' || k === 'sprBlue' || k === 'bluebells';
+        const edgy = isFlower(k) || k.startsWith('rock');
         if (!edgy) expect(onPath(p, layout.paths, 30), `${k} at ${p.x},${p.y}`).toBe(false);
       }
     });
@@ -161,7 +173,8 @@ describe('ranch scenery layout', () => {
 
     it('puts every plant in a cluster of one kind (or two related ones), at least two to a patch', () => {
       const free = layout.props.filter(p => p.cluster === undefined).map(p => p.kind);
-      expect(free.every(k => k === 'heroTree' || (!isBig(k) && !isUnderstory(k) && !k.startsWith('fl') && !k.startsWith('tiny')))).toBe(true);
+      // only the farmhouse's tree and loose meadow flowers grow outside a cluster
+      expect(free.every(k => k === 'heroTree' || isFlower(k) || (!isBig(k) && !isUnderstory(k)))).toBe(true);
       layout.clusters.forEach((c, i) => {
         const m = members(i);
         expect(c.kinds.length).toBeLessThanOrEqual(2);
@@ -219,6 +232,78 @@ describe('ranch scenery layout', () => {
       for (const t of layout.props.filter(p => isBig(p.kind))) {
         const b = propBox(t);
         expect(b.x + b.w <= 0 || b.x >= 1200, `${t.kind} at ${t.x},${t.y}`).toBe(true);
+      }
+    });
+  });
+
+  describe('meadow flowers', () => {
+    const flowers = layout.props.filter(p => isFlower(p.kind));
+    const species = (k: Prop['kind']): string =>
+      Object.entries(FLOWERS).find(([, ks]) => (ks as readonly string[]).includes(k))?.[0] ?? '';
+
+    it('uses three or four species, and only those', () => {
+      const used = new Set(flowers.map(p => species(p.kind)));
+      expect(used.size).toBeGreaterThanOrEqual(3);
+      expect(used.size).toBeLessThanOrEqual(4);
+      const otherFlowers = ['sprBlue', 'sprRed', 'sprYellow', 'flLily', 'flRed', 'daisyY_', 'roses', 'violets', 'fbBlue',
+        'fbPurple', 'fbYellow', 'tinyA', 'tinyB', 'tinyC', 'tinyD'];
+      expect(layout.props.filter(p => otherFlowers.includes(p.kind))).toEqual([]);
+    });
+
+    it('spreads them over the whole map: both strips and every quarter of the grid', () => {
+      const regions: Rect[] = [
+        { x: -300, y: 0, w: 300, h: 1800 }, { x: 1200, y: 0, w: 300, h: 1800 },
+        { x: 0, y: 0, w: 600, h: 900 }, { x: 600, y: 0, w: 600, h: 900 },
+        { x: 0, y: 900, w: 600, h: 900 }, { x: 600, y: 900, w: 600, h: 900 },
+      ];
+      for (const r of regions) {
+        expect(flowers.some(p => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h), JSON.stringify(r)).toBe(true);
+      }
+    });
+
+    it('grows them both in patches and as loose singles and pairs', () => {
+      const inPatches = flowers.filter(p => p.cluster !== undefined);
+      const loose = flowers.filter(p => p.cluster === undefined);
+      expect(inPatches.length).toBeGreaterThanOrEqual(20);
+      expect(loose.length).toBeGreaterThanOrEqual(15);
+      // some loose flowers stand alone (no flower within 60 units)
+      expect(loose.some(p => !flowers.some(o => o !== p && Math.hypot(o.x - p.x, o.y - p.y) < 60))).toBe(true);
+    });
+  });
+
+  describe('pen gates', () => {
+    // A run is LOT_IN_CELL (540 x 440 world units) at 2.5 world units per sprite pixel.
+    const W = 540 / 2.5;
+    const H = 440 / 2.5;
+
+    it('puts the gate in the middle of the front fence, where the path meets the pen', () => {
+      const g = gateRect(W, H);
+      expect(g.x + g.w / 2).toBe(W / 2);
+      expect(g.y + g.h).toBe(H);
+      for (const r of LOTS) {
+        const gx = r.x + (g.x + g.w / 2) * 2.5;
+        const gy = r.y + (g.y + g.h) * 2.5;
+        expect(layout.paths.some(s => segDist(s, gx, gy) < 1), `gate at ${gx},${gy}`).toBe(true);
+      }
+    });
+
+    it('draws a braced gate into every kind of pen', () => {
+      for (const sp of SPECIES_ORDER) {
+        const kind = SPECIES[sp].house;
+        const fills: { style: string; x: number; y: number; w: number; h: number }[] = [];
+        const ctx = {
+          fillStyle: '',
+          fillRect(x: number, y: number, w: number, h: number) { fills.push({ style: String(this.fillStyle), x, y, w, h }); },
+        };
+        drawRun(ctx as unknown as CanvasRenderingContext2D, W, H, kind);
+        const g = gateRect(W, H);
+        const brace = fills.filter(f => f.style === GATE.brace);
+        expect(brace.length, kind).toBeGreaterThan(4);
+        for (const f of brace) {
+          expect(f.x >= g.x && f.x + f.w <= g.x + g.w && f.y >= g.y && f.y + f.h <= g.y + g.h, kind).toBe(true);
+        }
+        // the gate is drawn last, over the fence
+        expect(fills[fills.length - 1].y).toBeLessThan(H);
       }
     });
   });
