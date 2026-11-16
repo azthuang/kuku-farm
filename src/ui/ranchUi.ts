@@ -1,6 +1,10 @@
 import { CROP_BY_ROW, type CropId } from '../core/levels';
-import { checkBuy, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
-import type { SupplyId } from '../core/species';
+import type { PageStatus } from '../core/ranch';
+import { checkBuy, lockHint, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
+import {
+  PRODUCT_EMOJI, SPECIES, SPECIES_ORDER,
+  type HouseKind, type ProductId, type SpeciesId, type SupplyId,
+} from '../core/species';
 import type { GameState } from '../core/state';
 
 export type Tool = 'hand' | 'feed' | 'brush' | 'treat' | 'medicine';
@@ -9,11 +13,19 @@ export interface RanchUi {
   setTool(t: Tool): void;
   onTool(cb: (t: Tool) => void): void;
   update(state: GameState): void;
+  /** Opens the shop: the species of `focus` (or of the current page), then medicine and treats. */
   openShop(focus?: ShopItemId): void;
   closeShop(): void;
   onBuy(cb: (item: ShopItemId) => void): void;
   /** Stars on a shop row after a purchase. */
   celebrate(item: ShopItemId): void;
+  /** Current page (0 … 4) and every page's status (for the dots). Cheap: call it every tick. */
+  setPage(index: number, status: readonly PageStatus[]): void;
+  /** ◀ ▶ or a dot asked for page `index`. */
+  onPage(cb: (index: number) => void): void;
+  /** 🗺️ was pressed (in either view). */
+  onOverview(cb: () => void): void;
+  setOverview(on: boolean): void;
 }
 
 /**
@@ -22,26 +34,60 @@ export interface RanchUi {
  */
 const GHOST_CLICK_MS = 350;
 
-const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: SupplyId }[] = [
+/** Per species: page emoji, animal name, house name, feed emoji (the toolbar's 🌾 button). */
+export const SPECIES_UI: Record<SpeciesId, { emoji: string; name: string; house: string; feed: string }> = {
+  chicken: { emoji: '🐔', name: '雞', house: '雞舍', feed: '🌾' },
+  cow: { emoji: '🐄', name: '牛', house: '牛棚', feed: '🌽' },
+  pig: { emoji: '🐖', name: '豬', house: '豬圈', feed: '🥔' },
+  sheep: { emoji: '🐑', name: '綿羊', house: '羊圈', feed: '🍅' },
+  llama: { emoji: '🦙', name: '羊駝', house: '羊駝屋', feed: '🎃' },
+};
+
+const OVERVIEW_TITLE = '🗺️ 我的牧場';
+
+const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: 'treat' | 'medicine' }[] = [
   { tool: 'hand', icon: '✋', label: '摸摸' },
-  { tool: 'feed', icon: '🌾', label: '飼料', supply: 'feed' },
+  { tool: 'feed', icon: '🌾', label: '飼料' },
   { tool: 'brush', icon: '🪮', label: '刷毛' },
   { tool: 'treat', icon: '🍪', label: '零食', supply: 'treat' },
   { tool: 'medicine', icon: '💊', label: '藥', supply: 'medicine' },
 ];
 
-const ITEMS: readonly { item: ShopItemId; icon: string; name: string }[] = [
-  { item: 'coop', icon: '🏠', name: '雞舍' },
-  { item: 'chicken', icon: '🐔', name: '雞' },
-  { item: 'feed', icon: '🌾', name: `飼料 ×${SUPPLY_AMOUNT.feed}` },
-  { item: 'treat', icon: '🍪', name: `零食 ×${SUPPLY_AMOUNT.treat}` },
+const SHARED: readonly { item: ShopItemId; icon: string; name: string }[] = [
   { item: 'medicine', icon: '💊', name: `藥 ×${SUPPLY_AMOUNT.medicine}` },
+  { item: 'treat', icon: '🍪', name: `零食 ×${SUPPLY_AMOUNT.treat}` },
 ];
+
+function speciesItems(sp: SpeciesId): { item: ShopItemId; icon: string; name: string }[] {
+  const d = SPECIES[sp];
+  const ui = SPECIES_UI[sp];
+  return [
+    { item: d.house, icon: '🏠', name: ui.house },
+    { item: sp, icon: ui.emoji, name: ui.name },
+    { item: d.feed, icon: ui.feed, name: `飼料 ×${SUPPLY_AMOUNT[d.feed]}` },
+  ];
+}
+
+/** The species a shop item belongs to, or null for the shared medicine and treats. */
+function speciesOfItem(item: ShopItemId): SpeciesId | null {
+  for (const sp of SPECIES_ORDER) {
+    const d = SPECIES[sp];
+    if (item === sp || item === d.house || item === d.feed) return sp;
+  }
+  return null;
+}
 
 const CROP_EMOJI = Object.fromEntries(
   Object.values(CROP_BY_ROW).map(c => [c.id, c.emoji]),
 ) as Record<CropId, string>;
-const priceEmoji = (k: string): string => (k === 'egg' ? '🥚' : CROP_EMOJI[k as CropId] ?? k);
+const priceEmoji = (k: string): string => PRODUCT_EMOJI[k as ProductId] ?? CROP_EMOJI[k as CropId] ?? k;
+
+/** 「解鎖 4× 就有 🥔」 for a locked house (「練 …」 once that level is open), else null. */
+export function lockText(state: GameState, kind: HouseKind): string | null {
+  const h = lockHint(state, kind);
+  if (!h) return null;
+  return `${h.unlocked ? '練' : '解鎖'} ${h.row}× 就有 ${CROP_BY_ROW[h.row].emoji}`;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -50,72 +96,138 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
   return e;
 }
 
-/** Ranch toolbar (pick a tool, then tap an animal) and the barter shop sheet. Pure DOM. */
-export function createRanchUi(root: HTMLElement): RanchUi {
+function button(cls: string, text: string, label?: string): HTMLButtonElement {
+  const b = el('button', cls, text);
+  b.type = 'button';
+  if (label) b.setAttribute('aria-label', label);
+  return b;
+}
+
+interface Row { row: HTMLElement; price: HTMLElement; btn: HTMLButtonElement }
+
+/**
+ * Ranch toolbar (pick a tool, then tap an animal), page navigation over the stage (title, 🗺️,
+ * ◀ ▶, dots) and the barter shop sheet. Pure DOM.
+ */
+export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   let toolCb: (t: Tool) => void = () => {};
   let buyCb: (item: ShopItemId) => void = () => {};
+  let pageCb: (index: number) => void = () => {};
+  let overviewCb: () => void = () => {};
   let tool: Tool = 'hand';
   let state: GameState | null = null;
   let ignoreUntil = 0;
+  let page = 0;
+  let overview = false;
+  let shopSpecies: SpeciesId = 'chicken';
+  let focusItem: ShopItemId | null = null;
+
+  const pageSpecies = (): SpeciesId => SPECIES_ORDER[page];
+
+  // ---------------------------------------------------------------- toolbar
 
   const bar = el('div', 'ranch-tools');
-  const toolBtns = new Map<Tool, { btn: HTMLButtonElement; count: HTMLElement | null }>();
+  const toolBtns = new Map<Tool, { btn: HTMLButtonElement; icon: HTMLElement; count: HTMLElement | null }>();
   for (const t of TOOLS) {
-    const btn = el('button', 'tool');
-    btn.type = 'button';
+    const btn = button('tool', '', t.label);
     btn.dataset.tool = t.tool;
-    btn.setAttribute('aria-label', t.label);
-    btn.append(el('span', 'tool-icon', t.icon));
-    const count = t.supply ? el('b', 'tool-count', '0') : null;
+    const icon = el('span', 'tool-icon', t.icon);
+    btn.append(icon);
+    const count = t.tool === 'feed' || t.supply ? el('b', 'tool-count', '0') : null;
     if (count) btn.append(count);
     btn.addEventListener('click', () => {
-      if (t.supply && state && state.ranch.supplies[t.supply] < 1) {
+      if (overview) return;
+      const s = state;
+      if (s && t.tool === 'feed') {
+        const sp = pageSpecies();
+        const d = SPECIES[sp];
+        if (!s.ranch.houses.some(h => h.kind === d.house)) {
+          openShop(d.house);
+          return;
+        }
+        if (s.ranch.supplies[d.feed] < 1) {
+          openShop(d.feed);
+          return;
+        }
+      } else if (s && t.supply && s.ranch.supplies[t.supply] < 1) {
         openShop(t.supply);
         return;
       }
       setTool(t.tool);
       toolCb(t.tool);
     });
-    toolBtns.set(t.tool, { btn, count });
+    toolBtns.set(t.tool, { btn, icon, count });
     bar.append(btn);
   }
-  const shopBtn = el('button', 'tool tool-shop');
-  shopBtn.type = 'button';
+  const shopBtn = button('tool tool-shop', '', '商店');
   shopBtn.dataset.tool = 'shop';
-  shopBtn.setAttribute('aria-label', '商店');
   shopBtn.append(el('span', 'tool-icon', '🛒'));
-  shopBtn.addEventListener('click', () => openShop());
+  shopBtn.addEventListener('click', () => {
+    if (!overview) openShop();
+  });
   bar.append(shopBtn);
+
+  // ---------------------------------------------------------------- page navigation
+
+  const title = el('div', 'rn-title', '');
+  const mapBtn = button('rn-map', '🗺️', '全景');
+  const prev = button('rn-prev', '◀', '上一頁');
+  const next = button('rn-next', '▶', '下一頁');
+  const dotsEl = el('div', 'rn-dots');
+  const dots = SPECIES_ORDER.map((sp, i) => {
+    const d = button('rn-dot', '', SPECIES_UI[sp].house);
+    d.dataset.page = String(i);
+    d.addEventListener('click', () => pageCb(i));
+    dotsEl.append(d);
+    return d;
+  });
+  prev.addEventListener('click', () => { if (page > 0) pageCb(page - 1); });
+  next.addEventListener('click', () => { if (page < SPECIES_ORDER.length - 1) pageCb(page + 1); });
+  mapBtn.addEventListener('click', () => overviewCb());
+  nav?.replaceChildren(title, mapBtn, prev, next, dotsEl);
+
+  function renderNav(): void {
+    const sp = pageSpecies();
+    title.textContent = overview ? OVERVIEW_TITLE : `${SPECIES_UI[sp].emoji} ${SPECIES_UI[sp].house}`;
+    mapBtn.classList.toggle('active', overview);
+    prev.hidden = overview || page === 0;
+    next.hidden = overview || page === SPECIES_ORDER.length - 1;
+    dotsEl.hidden = overview;
+    dots.forEach((d, i) => d.classList.toggle('current', i === page));
+  }
+
+  // ---------------------------------------------------------------- shop
 
   const shop = el('div', 'shop');
   shop.hidden = true;
   const sheet = el('div', 'shop-sheet');
   const head = el('div', 'shop-head');
   head.append(el('span', 'shop-title', '🛒 商店'));
-  const close = el('button', 'shop-close', '✕');
-  close.type = 'button';
-  close.setAttribute('aria-label', '關閉');
+  const close = button('shop-close', '✕', '關閉');
   head.append(close);
   const list = el('div', 'shop-list');
   sheet.append(head, list);
   shop.append(sheet);
 
-  const rows = new Map<ShopItemId, { row: HTMLElement; price: HTMLElement; btn: HTMLButtonElement }>();
-  for (const it of ITEMS) {
+  /** Rows are built once per item and updated in place (a rebuild would drop the purchase stars). */
+  const rows = new Map<ShopItemId, Row>();
+  function rowOf(it: { item: ShopItemId; icon: string; name: string }): Row {
+    let r = rows.get(it.item);
+    if (r) return r;
     const row = el('div', 'shop-row');
     row.dataset.item = it.item;
     const what = el('div', 'shop-what');
     what.append(el('span', 'shop-icon', it.icon), el('span', 'shop-name', it.name));
     const price = el('div', 'price');
-    const btn = el('button', 'buy');
-    btn.type = 'button';
+    const btn = button('buy', '買');
     btn.addEventListener('click', () => {
       if (Date.now() < ignoreUntil || btn.disabled) return;
       buyCb(it.item);
     });
     row.append(what, price, btn);
-    list.append(row);
-    rows.set(it.item, { row, price, btn });
+    r = { row, price, btn };
+    rows.set(it.item, r);
+    return r;
   }
 
   close.addEventListener('click', () => {
@@ -134,56 +246,94 @@ export function createRanchUi(root: HTMLElement): RanchUi {
 
   function renderTools(s: GameState): void {
     for (const t of TOOLS) {
-      const { btn, count } = toolBtns.get(t.tool)!;
-      if (!t.supply || !count) continue;
-      const n = s.ranch.supplies[t.supply];
-      count.textContent = String(n);
-      btn.classList.toggle('empty', n < 1);
+      const { btn, icon, count } = toolBtns.get(t.tool)!;
+      if (!count) continue;
+      if (t.tool === 'feed') {
+        const sp = pageSpecies();
+        const d = SPECIES[sp];
+        const n = s.ranch.supplies[d.feed];
+        const noHouse = !s.ranch.houses.some(h => h.kind === d.house);
+        icon.textContent = SPECIES_UI[sp].feed;
+        count.textContent = String(n);
+        // Grey but still tappable (it opens the shop), so a class, not the disabled attribute.
+        btn.classList.toggle('nohouse', noHouse);
+        btn.classList.toggle('empty', noHouse || n < 1);
+      } else if (t.supply) {
+        const n = s.ranch.supplies[t.supply as SupplyId];
+        count.textContent = String(n);
+        btn.classList.toggle('empty', n < 1);
+      }
     }
   }
 
+  function renderRow(s: GameState, item: ShopItemId, r: Row): void {
+    const { price, btn } = r;
+    const check = checkBuy(s, item);
+    price.replaceChildren();
+    btn.classList.remove('full', 'need', 'locked');
+    if (!check.ok && check.reason === 'locked') {
+      const kind = item as HouseKind;
+      const h = lockHint(s, kind);
+      price.classList.add('is-locked');
+      price.append(
+        el('span', 'lock-icon', `🔒${h ? CROP_BY_ROW[h.row].emoji : ''}`),
+        el('span', 'lock-hint', lockText(s, kind) ?? ''),
+      );
+      btn.textContent = '🔒';
+      btn.classList.add('locked');
+      btn.disabled = true;
+      return;
+    }
+    price.classList.remove('is-locked');
+    for (const [k, n] of Object.entries(priceOf(s, item))) {
+      const have = k in s.ranch.products ? s.ranch.products[k as ProductId] : s.inventory[k as CropId];
+      const chip = el('span', 'cost');
+      chip.append(el('span', '', priceEmoji(k)), el('b', have >= (n ?? 0) ? '' : 'short', String(n)));
+      price.append(chip);
+    }
+    if (check.ok) {
+      btn.textContent = '買';
+      btn.disabled = false;
+    } else if (check.reason === 'full') {
+      btn.textContent = '住滿了';
+      btn.classList.add('full');
+      btn.disabled = true;
+    } else if (check.reason === 'need-house') {
+      const sp = speciesOfItem(item) ?? 'chicken';
+      btn.textContent = `先蓋${SPECIES_UI[sp].house}`;
+      btn.classList.add('need');
+      btn.disabled = true;
+    } else {
+      btn.textContent = '買';
+      btn.disabled = true;
+    }
+  }
+
+  /** Puts the shown species' rows, then the shared ones, into the list and refreshes them. */
   function renderShop(s: GameState): void {
-    for (const it of ITEMS) {
-      const { price, btn } = rows.get(it.item)!;
-      const check = checkBuy(s, it.item);
-      price.replaceChildren();
-      for (const [k, n] of Object.entries(priceOf(s, it.item))) {
-        const have = k === 'egg' ? s.ranch.products.egg : s.inventory[k as CropId];
-        const chip = el('span', 'cost');
-        const num = el('b', have >= (n ?? 0) ? '' : 'short', String(n));
-        chip.append(el('span', '', priceEmoji(k)), num);
-        price.append(chip);
-      }
-      btn.classList.remove('full', 'need');
-      if (check.ok) {
-        btn.textContent = '買';
-        btn.disabled = false;
-      } else if (check.reason === 'full') {
-        btn.textContent = '住滿了';
-        btn.classList.add('full');
-        btn.disabled = true;
-      } else if (check.reason === 'need-house') {
-        btn.textContent = '先蓋雞舍';
-        btn.classList.add('need');
-        btn.disabled = true;
-      } else {
-        btn.textContent = '買';
-        btn.disabled = true;
-      }
+    const items = [...speciesItems(shopSpecies), ...SHARED];
+    const wanted = items.map(it => rowOf(it).row);
+    const shown = Array.from(list.children);
+    if (shown.length !== wanted.length || shown.some((c, i) => c !== wanted[i])) list.replaceChildren(...wanted);
+    for (const it of items) {
+      const r = rowOf(it);
+      renderRow(s, it.item, r);
+      r.row.classList.toggle('focus', it.item === focusItem);
     }
   }
 
   function update(s: GameState): void {
     state = s;
     renderTools(s);
-    renderShop(s);
+    if (!shop.hidden) renderShop(s);
   }
 
   function openShop(focus?: ShopItemId): void {
+    shopSpecies = (focus && speciesOfItem(focus)) || pageSpecies();
+    focusItem = focus ?? null;
     if (state) renderShop(state);
     ignoreUntil = Date.now() + GHOST_CLICK_MS;
     shop.hidden = false;
-    for (const [k, { row }] of rows) row.classList.toggle('focus', k === focus);
     const target = focus ? rows.get(focus)?.row : null;
     if (target) target.scrollIntoView?.({ block: 'nearest' });
     else list.scrollTop = 0;
@@ -203,11 +353,37 @@ export function createRanchUi(root: HTMLElement): RanchUi {
     r.row.append(star);
   }
 
+  function setPage(index: number, status: readonly PageStatus[]): void {
+    const i = Math.max(0, Math.min(SPECIES_ORDER.length - 1, Math.round(index)));
+    if (i !== page) {
+      page = i;
+      if (state) renderTools(state);
+    }
+    renderNav();
+    // Toggling an already-set class does not restart the bounce, so this is safe every tick.
+    dots.forEach((d, k) => {
+      const p = status[k];
+      d.classList.toggle('attention', !!p && (p.hungry || p.sick || p.poop || p.products > 0));
+    });
+  }
+
+  function setOverview(on: boolean): void {
+    overview = on;
+    bar.classList.toggle('off', on);
+    for (const { btn } of toolBtns.values()) btn.disabled = on;
+    shopBtn.disabled = on;
+    if (on) closeShop();
+    renderNav();
+  }
+
   setTool('hand');
+  renderNav();
 
   return {
-    setTool, update, openShop, closeShop, celebrate,
+    setTool, update, openShop, closeShop, celebrate, setPage, setOverview,
     onTool: cb => { toolCb = cb; },
     onBuy: cb => { buyCb = cb; },
+    onPage: cb => { pageCb = cb; },
+    onOverview: cb => { overviewCb = cb; },
   };
 }

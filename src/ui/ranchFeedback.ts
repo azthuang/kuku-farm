@@ -1,6 +1,7 @@
 import type { CareResult } from '../core/ranch';
 import type { ShopItemId } from '../core/shop';
-import type { SfxName } from './sfx';
+import { SPECIES, type SpeciesId } from '../core/species';
+import { voiceOf, type SfxName } from './sfx';
 import type { Tool } from './ranchUi';
 
 export type CareFx = 'jump' | 'eat' | 'brush' | 'treat' | 'heal' | 'weak' | 'shake';
@@ -18,33 +19,39 @@ export interface CareFeedback {
 export const TOAST_NEEDS_MEDICINE = '🤒 要先吃藥 💊';
 export const TOAST_PAT_AGAIN = '✋ 再摸摸牠';
 
-const SUPPLY_OF: Partial<Record<Tool, ShopItemId>> = { feed: 'feed', treat: 'treat', medicine: 'medicine' };
+/** The supply a tool uses on an animal of this species (feed is per species). */
+function supplyOf(tool: Tool, species: SpeciesId): ShopItemId | undefined {
+  if (tool === 'feed') return SPECIES[species].feed;
+  return tool === 'treat' || tool === 'medicine' ? tool : undefined;
+}
 
-function pat(stillSick: boolean): CareFeedback {
+function pat(stillSick: boolean, voice: SfxName): CareFeedback {
   return stillSick
     ? { fx: 'weak', toast: TOAST_NEEDS_MEDICINE } // not well until it has had medicine
-    : { fx: 'jump', sound: 'cluck' };
+    : { fx: 'jump', sound: voice };
 }
 
 /**
  * What the child sees and hears after using `tool` on an animal. `stillSick` is the animal's
  * state after the action. A pat or brush on cooldown looks like a normal one (the hand always
  * works; the core just stops counting the mood gain); only a wrong target shakes its head.
+ * Happy answers use the species' own voice (cluck, moo, oink, baa, hum).
  */
-export function careFeedback(tool: Tool, res: CareResult, stillSick: boolean): CareFeedback {
+export function careFeedback(tool: Tool, res: CareResult, stillSick: boolean, species: SpeciesId): CareFeedback {
+  const voice = voiceOf(species);
   if (!res.ok) {
     if (res.reason === 'cooldown') {
-      if (tool === 'hand') return pat(stillSick);
+      if (tool === 'hand') return pat(stillSick, voice);
       if (tool === 'brush') return { fx: 'brush', sound: 'sweep' };
     }
-    const shop = res.reason === 'none-left' ? SUPPLY_OF[tool] : undefined;
+    const shop = res.reason === 'none-left' ? supplyOf(tool, species) : undefined;
     return shop ? { fx: 'shake', sound: 'nope', shop } : { fx: 'shake', sound: 'nope' };
   }
   switch (tool) {
-    case 'hand': return res.healed ? { fx: 'heal', sound: 'heal' } : pat(stillSick);
-    case 'feed': return { fx: 'eat', sound: 'cluck' };
+    case 'hand': return res.healed ? { fx: 'heal', sound: 'heal' } : pat(stillSick, voice);
+    case 'feed': return { fx: 'eat', sound: voice };
     case 'brush': return { fx: 'brush', sound: 'sweep' };
-    case 'treat': return { fx: 'treat', sound: 'cluck' };
+    case 'treat': return { fx: 'treat', sound: voice };
     case 'medicine': return { fx: 'weak', toast: TOAST_PAT_AGAIN, nextTool: 'hand' };
   }
 }

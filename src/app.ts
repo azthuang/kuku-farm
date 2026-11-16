@@ -15,12 +15,15 @@ import { FieldScene, VIEW } from './scenes/FieldScene';
 import { RanchScene, type RanchView } from './scenes/RanchScene';
 import { ASSET_RES } from './scenes/assets';
 import {
-  brush, cleanPoop, collect, feed, giveMedicine, giveTreat, pet, settle, type CareResult,
+  brush, cleanPoop, collect, feed, giveMedicine, giveTreat, pageStatus, pet, settle, type CareResult,
 } from './core/ranch';
-import { buy, isLocked, lockHint, nextName } from './core/shop';
-import { HOUSE_KINDS, SPECIES, SPECIES_ORDER, type HouseKind } from './core/species';
+import { buy, isLocked, lockHint, nextName, type ShopItemId } from './core/shop';
+import {
+  FEED_IDS, HOUSE_KINDS, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfHouse,
+  type HouseKind, type SpeciesId,
+} from './core/species';
 import { createSfx, voiceOf } from './ui/sfx';
-import { createRanchUi, type Tool } from './ui/ranchUi';
+import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
 import { careFeedback } from './ui/ranchFeedback';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
@@ -87,7 +90,7 @@ export function startApp(root: HTMLElement): void {
   const panel = createPanel(layout.panel);
   const scene = new FieldScene();
   const ranchScene = new RanchScene();
-  const ranchUi = createRanchUi(layout.ranch);
+  const ranchUi = createRanchUi(layout.ranch, layout.ranchNav);
   const phaser = new Phaser.Game({
     type: Phaser.AUTO,
     parent: layout.stage,
@@ -109,6 +112,9 @@ export function startApp(root: HTMLElement): void {
   let saveFailShown = false;
   let tab: Tab = 'field';
   let tool: Tool = 'hand';
+  /** Ranch page (0 … 4, SPECIES_ORDER) and whether the zoomed-out overview is showing. */
+  let ranchPage = 0;
+  let ranchOverview = false;
 
   function save(): void {
     if (readOnly) return;
@@ -314,6 +320,7 @@ export function startApp(root: HTMLElement): void {
     scene.render(game);
     renderRanch();
     ranchUi.update(game.state);
+    goPage(0, false); // a different ranch: start at the first page, not the overview
     layout.updateHud(game.state);
     showIdle();
     // The file's ranch was unreadable: the field progress came in, the ranch starts over.
@@ -384,6 +391,33 @@ export function startApp(root: HTMLElement): void {
   function tickRanch(): void {
     settle(game.state.ranch, clock.now());
     renderRanch();
+    syncNav();
+  }
+
+  /** Title, arrows and dots (with their attention colour) from the current ranch state. */
+  function syncNav(): void {
+    ranchUi.setPage(ranchPage, pageStatus(game.state.ranch));
+  }
+
+  /** Care view of page `i` (from a swipe, the arrows, a dot or an overview tap). */
+  function goPage(i: number, animate = tab === 'ranch'): void {
+    ranchPage = Math.max(0, Math.min(SPECIES_ORDER.length - 1, i));
+    ranchOverview = false;
+    ranchScene.showPage(ranchPage, animate);
+    ranchUi.setOverview(false);
+    syncNav();
+  }
+
+  /** The map button: into the overview, or back to the page the child came from. */
+  function toggleOverview(): void {
+    if (ranchOverview) {
+      goPage(ranchPage);
+      return;
+    }
+    ranchOverview = true;
+    ranchScene.showOverview(tab === 'ranch');
+    ranchUi.setOverview(true);
+    syncNav();
   }
 
   /** Settles and redraws every second, only while the ranch is actually on screen. */
@@ -403,6 +437,7 @@ export function startApp(root: HTMLElement): void {
   function ranchChanged(): void {
     renderRanch();
     ranchUi.update(game.state);
+    syncNav();
     save();
   }
 
@@ -426,7 +461,8 @@ export function startApp(root: HTMLElement): void {
       case 'medicine': res = giveMedicine(r, id, now); break;
     }
     ranchChanged();
-    const fb = careFeedback(used, res, r.animals.find(a => a.id === id)?.sick ?? false);
+    const a = r.animals.find(x => x.id === id);
+    const fb = careFeedback(used, res, a?.sick ?? false, a?.species ?? SPECIES_ORDER[ranchPage]);
     ranchScene.fx(id, fb.fx);
     if (fb.sound) sfx.play(fb.sound);
     if (fb.toast) layout.toast(fb.toast);
@@ -441,24 +477,33 @@ export function startApp(root: HTMLElement): void {
     sfx.play(res.ok ? 'sweep' : 'nope');
   }
 
+  /** A product beside an animal was tapped: collect it, fly it to the HUD and bump its count. */
   function onEgg(animalId: string): void {
     const r = game.state.ranch;
     settle(r, clock.now());
+    const animal = r.animals.find(x => x.id === animalId);
+    const product = SPECIES[animal?.species ?? 'chicken'].product;
     const n = collect(r, animalId);
     if (n <= 0) {
       ranchChanged();
-      sfx.play('nope'); // the egg store is full (999)
+      sfx.play('nope'); // that product's store is full (999)
       return;
     }
-    // flyFrom hides each egg it launches; render right after so the scene drops exactly those.
+    // flyFrom hides each item it launches; render right after so the scene drops exactly those.
     const flights: Promise<void>[] = [];
-    for (let i = 0; i < n; i++) flights.push(ranchScene.flyFrom(animalId, '🥚'));
+    for (let i = 0; i < n; i++) flights.push(ranchScene.flyFrom(animalId, PRODUCT_EMOJI[product]));
     ranchChanged();
     sfx.play('collect');
     void Promise.all(flights).then(() => {
       layout.updateHud(game.state);
-      layout.bumpCrop('egg');
+      layout.bumpCrop(product);
     });
+  }
+
+  /** The tool a purchase hands the child: any species' feed is the feed tool; treats and medicine are themselves. */
+  function toolFor(item: ShopItemId): Tool | null {
+    if ((FEED_IDS as readonly string[]).includes(item)) return 'feed';
+    return item === 'treat' || item === 'medicine' ? item : null;
   }
 
   ranchScene.setHandlers({
@@ -466,10 +511,16 @@ export function startApp(root: HTMLElement): void {
     onPoop,
     onEgg,
     onLot: lot => ranchUi.openShop(SPECIES[SPECIES_ORDER[lot]].house),
-    // Task 5: page dots/arrows, the overview button and the 🔒 hint toast build on these.
-    onLockedLot: () => sfx.play('nope'),
-    onPageTap: i => ranchScene.showPage(i),
-    onSwipe: d => ranchScene.showPage(ranchScene.page + d),
+    onLockedLot: kind => {
+      const hint = lockText(game.state, kind);
+      if (hint) layout.toast(`🔒 ${hint}`);
+      sfx.play('nope');
+    },
+    onPageTap: i => goPage(i),
+    onSwipe: d => {
+      const i = ranchPage + d;
+      if (!ranchOverview && i >= 0 && i < SPECIES_ORDER.length) goPage(i);
+    },
     onTag: id => {
       nextName(game.state.ranch, id); // the scene pops the tag when the name changes
       ranchChanged();
@@ -478,12 +529,15 @@ export function startApp(root: HTMLElement): void {
     onIdleVoice: id => {
       // The scene only runs on the ranch tab; the guard also covers a hidden page.
       const a = game.state.ranch.animals.find(x => x.id === id);
-      if (a && tab === 'ranch' && document.visibilityState === 'visible') sfx.ambient(voiceOf(a.species));
+      if (a && !a.sick && tab === 'ranch' && document.visibilityState === 'visible') sfx.ambient(voiceOf(a.species));
     },
   });
   renderRanch();
   ranchUi.update(game.state);
+  syncNav();
   ranchUi.onTool(selectTool);
+  ranchUi.onPage(i => goPage(i));
+  ranchUi.onOverview(toggleOverview);
   ranchUi.onBuy(item => {
     const res = buy(game.state, item, clock.now(), rng);
     ranchChanged();
@@ -494,13 +548,17 @@ export function startApp(root: HTMLElement): void {
     sfx.play('buy');
     ranchUi.celebrate(item);
     layout.updateHud(game.state);
-    if (item === 'coop') {
-      ranchUi.openShop('chicken'); // next step: a chicken to live in it
-    } else if (item === 'chicken') {
-      ranchUi.closeShop(); // let the child watch the new chicken arrive
-      if (res.animalId) ranchScene.fx(res.animalId, 'jump');
+    if ((HOUSE_KINDS as readonly string[]).includes(item)) {
+      ranchUi.openShop(speciesOfHouse(item as HouseKind)); // next step: an animal to live in it
+    } else if ((SPECIES_ORDER as readonly string[]).includes(item)) {
+      ranchUi.closeShop(); // let the child watch the new animal arrive
+      if (res.animalId) {
+        ranchScene.fx(res.animalId, 'jump');
+        sfx.play(voiceOf(item as SpeciesId));
+      }
     } else {
-      selectTool(item); // just bought supplies: ready to use them
+      const t = toolFor(item);
+      if (t) selectTool(t); // just bought supplies: ready to use them
     }
   });
 
@@ -522,6 +580,7 @@ export function startApp(root: HTMLElement): void {
       settle(game.state.ranch, clock.now());
       renderRanch();
       ranchUi.update(game.state);
+      syncNav();
     } else {
       ranchUi.closeShop();
       // A question planted while the ranch was open was not spoken: say it now.

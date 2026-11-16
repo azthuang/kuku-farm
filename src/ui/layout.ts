@@ -1,5 +1,6 @@
 import { CROP_BY_ROW, LEVEL_ORDER, unlockedRows, type CropId } from '../core/levels';
 import type { GameState } from '../core/state';
+import { PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, type ProductId } from '../core/species';
 
 /** Save files are a few KB; anything this large is not ours. */
 const MAX_IMPORT_BYTES = 1024 * 1024;
@@ -11,9 +12,11 @@ export interface Layout {
   panel: HTMLElement;
   /** The ranch toolbar slot (shown instead of the panel on the ranch tab). */
   ranch: HTMLElement;
-  /** Redraws the HUD; on the ranch tab it leads with the egg count. */
+  /** Ranch page navigation over the stage (title, 🗺️, ◀ ▶, dots); shown on the ranch tab. */
+  ranchNav: HTMLElement;
+  /** Redraws the HUD; on the ranch tab it leads with the products the child has (or can get). */
   updateHud(s: GameState): void;
-  bumpCrop(id: CropId | 'egg'): void;
+  bumpCrop(id: CropId | ProductId): void;
   onTab(cb: (tab: Tab) => void): void;
   onExport(cb: () => void): void;
   onImport(cb: (text: string) => void): void;
@@ -40,6 +43,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
       </header>
       <main class="stage-wrap">
         <div class="stage"></div>
+        <div class="ranch-nav" hidden></div>
       </main>
       <section class="panel"></section>
       <section class="ranch" hidden></section>
@@ -71,6 +75,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   const stage = q<HTMLElement>('.stage');
   const panel = q<HTMLElement>('.panel');
   const ranch = q<HTMLElement>('.ranch');
+  const ranchNav = q<HTMLElement>('.ranch-nav');
   const cropsEl = q<HTMLElement>('.hud-crops');
   const levelEl = q<HTMLElement>('.hud-level');
   const toastEl = q<HTMLElement>('.toast');
@@ -80,12 +85,12 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   const credits = q<HTMLElement>('.set-credits');
   const file = q<HTMLInputElement>('.set-file');
 
-  const counts = new Map<CropId | 'egg', HTMLElement>();
+  const counts = new Map<CropId | ProductId, HTMLElement>();
   let lastState = s;
 
-  function hudItem(id: CropId | 'egg', emoji: string, value: number): void {
+  function hudItem(id: CropId | ProductId, emoji: string, value: number, product = false): void {
     const item = document.createElement('span');
-    item.className = id === 'egg' ? 'hud-crop hud-egg' : 'hud-crop';
+    item.className = product ? `hud-crop hud-product hud-${id}` : 'hud-crop';
     const em = document.createElement('span');
     em.textContent = emoji;
     const n = document.createElement('b');
@@ -101,7 +106,14 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
     const scrollLeft = cropsEl.scrollLeft; // replaceChildren() would snap the strip back to the start
     cropsEl.replaceChildren();
     counts.clear();
-    if (tab === 'ranch') hudItem('egg', '🥚', st.ranch.products.egg);
+    if (tab === 'ranch') {
+      // Products the child has, or can get (an animal of that species lives on the ranch).
+      for (const sp of SPECIES_ORDER) {
+        const p = SPECIES[sp].product;
+        const n = st.ranch.products[p];
+        if (n > 0 || st.ranch.animals.some(a => a.species === sp)) hudItem(p, PRODUCT_EMOJI[p], n, true);
+      }
+    }
     for (const r of unlockedRows(st.unlocked)) {
       const c = CROP_BY_ROW[r];
       hudItem(c.id, c.emoji, st.inventory[c.id] ?? 0);
@@ -113,7 +125,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
     sound.checked = st.settings.sound;
   }
 
-  function bumpCrop(id: CropId | 'egg'): void {
+  function bumpCrop(id: CropId | ProductId): void {
     const n = counts.get(id);
     if (!n) return;
     // The strip scrolls at narrow widths: bring the counter into view first.
@@ -131,8 +143,9 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
       root.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === btn));
       stage.parentElement!.classList.toggle('show-ranch', tab === 'ranch');
       ranch.hidden = tab !== 'ranch';
+      ranchNav.hidden = tab !== 'ranch';
       panel.classList.toggle('tab-hidden', tab !== 'field');
-      cropsEl.scrollLeft = 0; // the egg counter comes and goes at the front of the strip
+      cropsEl.scrollLeft = 0; // the product counters come and go at the front of the strip
       updateHud(lastState);
       tabCb(tab);
     });
@@ -171,7 +184,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   updateHud(s);
 
   return {
-    stage, panel, ranch, updateHud, bumpCrop, toast,
+    stage, panel, ranch, ranchNav, updateHud, bumpCrop, toast,
     onTab: cb => { tabCb = cb; },
     onExport: cb => { exportCb = cb; },
     onImport: cb => { importCb = cb; },
