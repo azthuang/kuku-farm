@@ -30,23 +30,44 @@ describe('settle', () => {
     expect(r2.houses[0].poop).toBe(6);
   });
 
-  it('gets sick only after 24h of neglect (36.5h in)', () => {
+  it('gets sick only after 48h of neglect (60.5h in)', () => {
     const r = mk();
-    settle(r, T0 + 36 * H);
+    settle(r, T0 + 24 * H);
+    expect(r.animals[0].sick).toBe(false); // a day away: hungry and dirty, never sick
+    settle(r, T0 + 60 * H);
     expect(r.animals[0].sick).toBe(false);
-    settle(r, T0 + 37 * H);
+    settle(r, T0 + 61 * H);
     expect(r.animals[0].sick).toBe(true);
   });
 
   it('feeding resets neglect', () => {
     const r = mk();
     r.supplies.feed = 5;
-    settle(r, T0 + 12.5 * H + 23 * H);
+    settle(r, T0 + 12.5 * H + 47 * H);
     expect(r.animals[0].sick).toBe(false);
-    expect(feed(r, 'a1', T0 + 35.5 * H).ok).toBe(true);
+    expect(feed(r, 'a1', T0 + 59.5 * H).ok).toBe(true);
     expect(r.animals[0].neglectMs).toBe(0);
-    settle(r, T0 + 58.5 * H);
+    settle(r, T0 + 59.5 * H + 6.25 * H + 47 * H);
     expect(r.animals[0].sick).toBe(false);
+  });
+
+  it('one feed from empty (to 50) on a dirty coop is not sick 48h later', () => {
+    const r = mk({ satiety: 0 });
+    r.houses[0].poop = 3;
+    r.supplies.feed = 1;
+    expect(feed(r, 'a1', T0).ok).toBe(true);
+    expect(r.animals[0].satiety).toBe(50);
+    settle(r, T0 + 48 * H);
+    expect(r.houses[0].poop).toBeGreaterThanOrEqual(3);
+    expect(r.animals[0].sick).toBe(false);
+  });
+
+  it('healing never lowers satiety or mood', () => {
+    const r = mk({ sick: true, satiety: 80, mood: 90 });
+    r.supplies.medicine = 1;
+    expect(giveMedicine(r, 'a1', T0).ok).toBe(true);
+    expect(pet(r, 'a1', T0)).toEqual({ ok: true, healed: true });
+    expect(r.animals[0]).toMatchObject({ sick: false, satiety: 80, mood: 90 });
   });
 
   it('sick animals do not produce or poop; medicine then pet heals', () => {

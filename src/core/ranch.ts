@@ -6,7 +6,8 @@ const MAX_SETTLE_MS = 30 * 24 * MS_HOUR;
 
 export const MAX_POOP = 6;
 export const SICK_POOP = 3;
-export const SICK_AFTER_MS = 24 * MS_HOUR;
+/** Hungry and dirty for this long makes an animal sick (a day away must never do it). */
+export const SICK_AFTER_MS = 48 * MS_HOUR;
 export const FEED_AMOUNT = 50;
 /** At or above this satiety a chicken counts as full: feeding it shakes its head and uses no feed. */
 export const FEED_FULL_AT = 90;
@@ -153,8 +154,9 @@ export function pet(r: RanchState, animalId: string, now: number): CareResult {
     if (a.sick && a.medicated) {
       a.sick = false;
       a.medicated = false;
-      a.satiety = HEAL_SATIETY;
-      a.mood = HEAL_MOOD;
+      // Healing only ever helps: a hen fed or cheered while sick keeps what she has.
+      a.satiety = Math.max(a.satiety, HEAL_SATIETY);
+      a.mood = Math.max(a.mood, HEAL_MOOD);
       a.neglectMs = 0;
       return { ok: true, healed: true };
     }
