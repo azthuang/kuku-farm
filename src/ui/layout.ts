@@ -64,7 +64,9 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
           <button type="button" class="set-btn set-credits-btn">📜 素材來源</button>
           <div class="set-credits" hidden>
             農場動物圖：Daniel Eddeland（LPC style farm animals），授權 CC-BY 3.0<br />
-            <span class="set-url">https://opengameart.org/content/lpc-style-farm-animals</span>
+            <span class="set-url">https://opengameart.org/content/lpc-style-farm-animals</span><br />
+            牧場景觀：[LPC] Terrains、Trees、Flowers / Plants / Fungi / Wood、Thatched-roof Cottage（bluecarrot16 等，CC-BY-SA 3.0）與 [LPC] Farm（bluecarrot16、TheraHedwig、Ivan Voirol，CC-BY 4.0）；拼合圖以 CC-BY-SA 3.0 釋出，完整作者見 assets/scenery/CREDITS-*.txt<br />
+            <span class="set-url">https://opengameart.org/content/lpc-terrains</span>
           </div>
           <button type="button" class="set-btn set-close">關閉</button>
         </div>

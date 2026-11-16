@@ -2,7 +2,7 @@ import type Phaser from 'phaser';
 import type { HouseKind } from '../core/species';
 
 /**
- * Procedural pixel art for the ranch: grass, fenced runs and one house per kind. Everything is
+ * Procedural pixel art for the ranch: fenced runs and one house per kind. Everything is
  * drawn at sprite-pixel resolution on a canvas and shown NEAREST-scaled by the scene.
  */
 
@@ -48,30 +48,6 @@ export function dashedRect(g: Phaser.GameObjects.Graphics, x: number, y: number,
 }
 
 const WOOD = { light: '#e0a868', mid: '#b8773f', dark: '#7a4a24', line: '#5a3418' };
-
-/** Grass for one page cell, g × g sprite pixels. */
-export function drawGrass(ctx: Ctx, g: number): void {
-  const rnd = seeded(7);
-  px(ctx, '#8fd16a', 0, 0, g, g);
-  for (let i = 0; i < 70; i++) px(ctx, '#a3dc80', Math.floor(rnd() * g), Math.floor(rnd() * g));
-  for (let i = 0; i < 150; i++) {
-    const x = Math.floor(rnd() * (g - 3));
-    const y = Math.floor(rnd() * (g - 2));
-    px(ctx, '#77bd55', x, y + 1);
-    px(ctx, '#77bd55', x + 1, y);
-    px(ctx, '#77bd55', x + 2, y + 1);
-  }
-  for (let i = 0; i < 22; i++) {
-    const x = 1 + Math.floor(rnd() * (g - 3));
-    const y = 1 + Math.floor(rnd() * (g - 3));
-    const petal = rnd() < 0.5 ? '#ffffff' : '#ffb3c7';
-    px(ctx, petal, x - 1, y);
-    px(ctx, petal, x + 1, y);
-    px(ctx, petal, x, y - 1);
-    px(ctx, petal, x, y + 1);
-    px(ctx, '#ffd23f', x, y);
-  }
-}
 
 // ---------------------------------------------------------------- houses
 

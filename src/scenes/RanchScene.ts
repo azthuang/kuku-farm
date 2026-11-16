@@ -4,7 +4,11 @@ import { HUNGRY_SHOW_AT, MOOD_HAPPY, pageStatus, type Animal, type House, type P
 import { PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, type HouseKind, type SpeciesId } from '../core/species';
 import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets';
 import { VIEW } from './FieldScene';
-import { HOUSE_ART, dashedRect, drawGrass, drawRun, hash, seeded } from './ranchArt';
+import { HOUSE_ART, dashedRect, drawRun, hash, seeded } from './ranchArt';
+import {
+  BAKE_H, BAKE_W, BLADE_FRAMES, BLADE_HUB, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout,
+} from './ranchScenery';
+import { SCENERY_FRAMES } from './sceneryAtlas';
 import { PALETTES, recolor } from './recolor';
 
 /** World units per scenery pixel: 5 canvas pixels at camera zoom ASSET_RES, so every pixel stays square. */
@@ -109,11 +113,15 @@ const LOTS: readonly Rect[] = Array.from({ length: PAGES }, (_, i) => cellRect(i
 const KIND_OF_LOT: readonly HouseKind[] = SPECIES_ORDER.map(s => SPECIES[s].house);
 
 /** Animals are y-sorted within [animal, animal + 0.18]; items sit above them so none is ever hidden. */
-const DEPTH = { grass: 0, lot: 1, house: 2, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
+const DEPTH = { grass: 0, scenery: 0.5, lot: 1, house: 2, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
 
 const TEX = {
   src: (sp: SpeciesId, kind: 'walk' | 'eat') => `${sp}-${kind}-src`,
-  grass: 'ranch-grass',
+  scenery: 'ranch-scenery',
+  atlas: 'scenery-atlas',
+  farmhouse: 'scenery-farmhouse',
+  blade: (i: number) => `blade${i}`,
+  windmill: 'windmill-turn',
   house: (k: HouseKind) => `ranch-house-${k}`,
   run: (k: HouseKind) => `ranch-run-${k}`,
   sheet: (sp: SpeciesId, kind: 'walk' | 'eat', coat: number) => `${sp}-${kind}-${coat}`,
@@ -373,6 +381,9 @@ export class RanchScene extends Phaser.Scene {
       const f = key === 'ck-shadow' ? 32 : 128;
       if (!this.textures.exists(key)) this.load.spritesheet(key, `${base}${file}`, { frameWidth: f, frameHeight: f });
     }
+    const scenery = `${import.meta.env.BASE_URL}assets/scenery/`;
+    if (!this.textures.exists(TEX.atlas)) this.load.image(TEX.atlas, `${scenery}scenery.png`);
+    if (!this.textures.exists(TEX.farmhouse)) this.load.image(TEX.farmhouse, `${scenery}farmhouse.png`);
   }
 
   create(): void {
@@ -391,10 +402,7 @@ export class RanchScene extends Phaser.Scene {
     }
     this.makeSceneryTextures();
 
-    for (let i = 0; i < COLS * ROWS; i++) {
-      this.add.image((i % COLS) * VIEW, Math.floor(i / COLS) * VIEW, TEX.grass)
-        .setOrigin(0).setScale(PX).setDepth(DEPTH.grass);
-    }
+    this.buildScenery();
     LOTS.forEach((rect, lot) => this.lots.push(this.buildLot(lot, rect)));
     this.buildLaterPlot(cellRect(PAGES));
     this.sparkles = this.add.particles(0, 0, ASSETS.sparkle, {
@@ -774,8 +782,6 @@ export class RanchScene extends Phaser.Scene {
   }
 
   private makeSceneryTextures(): void {
-    const G = VIEW / PX;
-    this.pixelTex(TEX.grass, G, G, ctx => drawGrass(ctx, G));
     const w = LOT_IN_CELL.w / PX;
     const h = LOT_IN_CELL.h / PX;
     for (const kind of KIND_OF_LOT) {
@@ -852,6 +858,61 @@ export class RanchScene extends Phaser.Scene {
       lot, kind: KIND_OF_LOT[lot], rect, plus, lock, lockCrop, lockCropKey: '', state: '',
       badges: this.buildBadges(rect),
     };
+  }
+
+  /**
+   * Grass, paths, trees, the farmhouse and the windmill, baked once into one static image under
+   * the pens (the texture outlives the scene, so a restart reuses it). Only the blades animate.
+   * Pure background: nothing here takes input.
+   */
+  private buildScenery(): void {
+    const later = cellRect(PAGES);
+    const layout = sceneryLayout(LOTS, later);
+    const hasAtlas = this.textures.exists(TEX.atlas);
+    if (!this.textures.exists(TEX.scenery)) {
+      const tex = this.textures.createCanvas(TEX.scenery, BAKE_W, BAKE_H);
+      if (tex) {
+        const ctx = tex.context;
+        if (hasAtlas) {
+          const atlas = this.textures.get(TEX.atlas).getSourceImage() as CanvasImageSource;
+          const house = this.textures.exists(TEX.farmhouse)
+            ? this.textures.get(TEX.farmhouse).getSourceImage() as CanvasImageSource
+            : null;
+          bakeScenery(ctx, atlas, house, layout, [...LOTS, later], () => {
+            const c = document.createElement('canvas');
+            c.width = BAKE_W;
+            c.height = BAKE_H;
+            return c;
+          });
+        } else {
+          ctx.fillStyle = '#3f8a3a';
+          ctx.fillRect(0, 0, BAKE_W, BAKE_H);
+        }
+        tex.refresh();
+        tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+      }
+    }
+    this.add.image(SCENERY_WORLD.x, SCENERY_WORLD.y, TEX.scenery)
+      .setOrigin(0).setScale(SCENERY_SCALE).setDepth(DEPTH.grass);
+    if (!hasAtlas) return;
+
+    const atlasTex = this.textures.get(TEX.atlas);
+    atlasTex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    for (let i = 0; i < BLADE_FRAMES; i++) {
+      const [x, y, w, h] = SCENERY_FRAMES[TEX.blade(i) as keyof typeof SCENERY_FRAMES];
+      if (!atlasTex.has(TEX.blade(i))) atlasTex.add(TEX.blade(i), 0, x, y, w, h);
+    }
+    if (!this.anims.exists(TEX.windmill)) {
+      this.anims.create({
+        key: TEX.windmill, repeat: -1, frameRate: 5,
+        frames: Array.from({ length: BLADE_FRAMES }, (_, i) => ({ key: TEX.atlas, frame: TEX.blade(i) })),
+      });
+    }
+    const bladeSize = SCENERY_FRAMES.blade0[2];
+    this.add.sprite(layout.hub.x, layout.hub.y, TEX.atlas, TEX.blade(0))
+      .setOrigin(BLADE_HUB.x / bladeSize, BLADE_HUB.y / bladeSize)
+      .setScale(SCENERY_SCALE).setDepth(DEPTH.scenery)
+      .play(TEX.windmill);
   }
 
   /** The sixth cell: a faint plot labelled for the next batch. */
