@@ -22,7 +22,13 @@ export const BAKE_H = SCENERY_WORLD.h / SCENERY_SCALE;
 export type PropKind = SceneryFrame | 'farmhouse';
 
 /** A sprite standing with its bottom centre at (x, y) in world units. */
-export interface Prop { kind: PropKind; x: number; y: number }
+export interface Prop {
+  kind: PropKind;
+  x: number;
+  y: number;
+  /** Index into SceneryLayout.clusters for plants that grow in one. */
+  cluster?: number;
+}
 
 export interface Segment { x0: number; y0: number; x1: number; y1: number }
 
@@ -31,6 +37,7 @@ export interface SceneryLayout {
   paths: Segment[];
   pathHalf: number;
   props: Prop[];
+  clusters: Cluster[];
   /** World point of the windmill hub (where the blade sprite is anchored). */
   hub: { x: number; y: number };
 }
@@ -98,17 +105,59 @@ export function crossesPageEdge(b: Rect, page = 600, grid: Rect = { x: 0, y: 0, 
   return false;
 }
 
-const SMALL: readonly [PropKind, number][] = [
-  ['tinyA', 5], ['tinyB', 5], ['tinyC', 4], ['tinyD', 4], ['sprigA', 4], ['sprigB', 4],
-  ['tuftA', 4], ['tuftC', 3], ['sprBlue', 2], ['sprRed', 2], ['sprYellow', 2],
-  ['flW', 3], ['flY', 3], ['flLily', 2], ['flRed', 2], ['daisyW', 2], ['daisyY', 2],
-  ['fbBlue', 1], ['fbRed', 1], ['fbYellow', 1], ['fbPurple', 1], ['bluebells', 1], ['roses', 1], ['violets', 1],
-  ['rockB', 2], ['rockC', 1], ['mushRed', 1], ['mushYellow', 1], ['mushPurple', 1], ['bushA', 1], ['bushC', 1],
-];
+/** Trees, shrubs and big bushes: they stand in groves and thickets and may overlap each other. */
+export function isBig(kind: PropKind): boolean {
+  return /^(tree|shrub)/.test(kind) || kind === 'bushGreen' || kind === 'bushMid' || kind === 'bushLight' || kind === 'roundBushBig';
+}
+
+export function isTree(kind: PropKind): boolean {
+  return kind.startsWith('tree');
+}
+
+/** Things that only grow in the shade of trees. */
+export function isUnderstory(kind: PropKind): boolean {
+  return kind.startsWith('mush') || kind === 'toadstool' || kind.startsWith('stump') || kind === 'log';
+}
+
+/** One patch of nature: a grove, a thicket, a flower bed, a drift of grass or a few stones. */
+export interface Cluster { kinds: PropKind[]; x: number; y: number }
+
+interface ClusterSpec {
+  kinds: PropKind[];
+  x: number;
+  y: number;
+  /** Gaussian spread (world units) of the members around the centre. */
+  sx: number;
+  sy: number;
+  n: number;
+  /** Extra members of the same kind a little further out. */
+  strays?: number;
+}
+
+/** The bottom strip a prop stands on: a tree's trunk, a bush's base, a flower's whole tuft. */
+function footprint(p: Prop): Rect {
+  const b = propBox(p);
+  const f = isTree(p.kind) ? 0.36 : isBig(p.kind) ? 0.7 : 0.9;
+  const h = Math.min(b.h, isBig(p.kind) ? 22 : 18);
+  return { x: p.x - (b.w * f) / 2, y: p.y - h, w: b.w * f, h };
+}
+
+/** Does any part of the box come near a path (big plants must not hang over the stones)? */
+function boxOnPath(b: Rect, paths: readonly Segment[], margin: number): boolean {
+  for (let y = b.y; y <= b.y + b.h + 0.01; y += Math.min(8, b.h)) {
+    for (let x = b.x; x <= b.x + b.w + 0.01; x += Math.min(8, b.w)) {
+      if (nearPath(paths, x, y, PATH_HALF + margin)) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Where everything goes. `lots` are the five pens' rects and `later` the sixth ("之後擴建")
- * cell's plot; nothing but its sign may overlap them. Deterministic: same layout every run.
+ * cell's plot; nothing but its sign may overlap them. Plants grow in clusters of one kind, as
+ * in nature: groves of tall trees along the outer edges, thickets at their feet, mushrooms and
+ * stumps in their shade, and flowers and grass along the paths and fences, with open lawn in
+ * between. Deterministic: same layout every run.
  */
 export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout {
   const W = SCENERY_WORLD;
@@ -139,6 +188,10 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
   const tower: Prop = { kind: 'tower', x: rightX, y: rowY[0] - PATH_HALF - 2 };
   const towerH = SCENERY_FRAMES.tower[3] * SCENERY_SCALE;
   const hub = { x: tower.x, y: tower.y - towerH + 92 };
+  const bladeSize = SCENERY_FRAMES.blade0[2] * SCENERY_SCALE;
+  const blades: Rect = {
+    x: hub.x - BLADE_HUB.x * SCENERY_SCALE, y: hub.y - BLADE_HUB.y * SCENERY_SCALE, w: bladeSize, h: bladeSize,
+  };
 
   const props: Prop[] = [
     house,
@@ -146,60 +199,112 @@ export function sceneryLayout(lots: readonly Rect[], later: Rect): SceneryLayout
     { kind: 'mailbox', x: house.x + 46, y: doorY + 70 },
     { kind: 'veggie', x: W.x + 62, y: rowY[0] - 40 },
     { kind: 'sign', x: centreX(later), y: bottom(later) - 46 },
-    // right strip, around the windmill
     { kind: 'haystack', x: rightX + 90, y: rowY[0] - 34 },
     { kind: 'wheat', x: rightX - 92, y: rowY[0] - 32 },
-    { kind: 'treeSmall', x: rightX - 84, y: 150 },
-    { kind: 'shrubLolly', x: rightX + 96, y: 128 },
-    // left strip below the house
-    { kind: 'treeRound', x: W.x + 112, y: 870 },
-    { kind: 'treePine', x: W.x + 64, y: 1140 },
-    { kind: 'bushGreen', x: W.x + 176, y: 1010 },
-    { kind: 'treeOak', x: W.x + 116, y: 1440 },
-    { kind: 'stumpDaisy', x: W.x + 200, y: 1250 },
-    { kind: 'treeTall', x: W.x + 70, y: 1730 },
-    { kind: 'shrubDark', x: W.x + 162, y: 1700 },
-    { kind: 'log', x: W.x + 196, y: 1560 },
-    // right strip between the paths and below
-    { kind: 'treeDark', x: rightX - 86, y: 920 },
-    { kind: 'treeTall', x: rightX + 87, y: 860 },
-    { kind: 'bushMid', x: rightX + 86, y: 1050 },
-    { kind: 'roundBushBig', x: rightX - 84, y: 1060 },
-    { kind: 'treeBig', x: rightX + 2, y: 1520 },
-    { kind: 'treeSmall', x: rightX + 98, y: 1740 },
-    { kind: 'bushLight', x: rightX - 66, y: 1760 },
-    { kind: 'stumpYellow', x: rightX + 110, y: 1310 },
-    { kind: 'toadstool', x: rightX - 104, y: 1300 },
-    { kind: 'bushB', x: rightX + 90, y: 700 },
   ];
+  const hard = [...props.map(propBox), blades];
 
-  const blocked = (b: Rect, pad: number): boolean => {
-    if (b.x < W.x + 4 || b.y < W.y + 4 || b.x + b.w > W.x + W.w - 4 || b.y + b.h > W.y + W.h - 4) return true;
-    for (const r of keepOut) if (overlaps(b, r, pad)) return true;
-    return false;
-  };
+  // Bands just inside each cell, between a path or the world's edge and the pens' fences.
+  const topBand = lots[0].y - 10;
+  const band1 = lots[2].y - 10;
+  const band2 = lots[4].y - 10;
+  const specs: ClusterSpec[] = [
+    // left strip: a deciduous grove, then a conifer wood along the outer edge
+    { kinds: ['treeRound', 'treeBig'], x: W.x + 110, y: 990, sx: 16, sy: 90, n: 3 },
+    { kinds: ['bushGreen', 'bushMid'], x: W.x + 178, y: 1120, sx: 12, sy: 26, n: 2 },
+    { kinds: ['mushRed'], x: W.x + 55, y: 1110, sx: 10, sy: 12, n: 2 },
+    { kinds: ['treePine', 'treeTall'], x: W.x + 82, y: 1560, sx: 12, sy: 130, n: 4 },
+    { kinds: ['stump', 'stumpRoots'], x: W.x + 205, y: 1745, sx: 14, sy: 12, n: 2 },
+    { kinds: ['mushPurple'], x: W.x + 200, y: 1420, sx: 10, sy: 14, n: 2, strays: 1 },
+    { kinds: ['tuftA'], x: W.x + 200, y: 1300, sx: 8, sy: 14, n: 2, strays: 1 },
+    // around the farmhouse: a rose bed by the door, marigolds by the veggie patch
+    { kinds: ['roses'], x: -50, y: 500, sx: 22, sy: 12, n: 3 },
+    { kinds: ['flY'], x: W.x + 60, y: 425, sx: 22, sy: 8, n: 3, strays: 1 },
+    // right strip: shrubs above the windmill, small trees and a thicket between the paths,
+    // an oak grove below with its own thicket, stumps and mushrooms
+    { kinds: ['shrubLight', 'shrubDark'], x: rightX - 20, y: 150, sx: 50, sy: 8, n: 3 },
+    { kinds: ['treeSmall', 'shrubLolly'], x: rightX + 86, y: 860, sx: 6, sy: 110, n: 3 },
+    { kinds: ['roundBushBig', 'bushC'], x: rightX - 86, y: 900, sx: 10, sy: 90, n: 3 },
+    { kinds: ['fbRed'], x: rightX - 86, y: 1080, sx: 14, sy: 14, n: 3 },
+    { kinds: ['treeOak', 'treeBig'], x: rightX + 30, y: 1600, sx: 28, sy: 110, n: 4 },
+    { kinds: ['bushLight', 'bushGreen'], x: rightX - 60, y: 1755, sx: 34, sy: 14, n: 2 },
+    { kinds: ['mushYellow'], x: rightX - 95, y: 1560, sx: 10, sy: 10, n: 2 },
+    { kinds: ['stumpYellow'], x: rightX + 115, y: 1780, sx: 6, sy: 6, n: 1 },
+    { kinds: ['rockB', 'rockC'], x: rightX - 60, y: rowY[1] + 56, sx: 24, sy: 6, n: 2 },
+    // inside the grid: flowers and grass along the fences and paths, one kind per patch
+    { kinds: ['flY'], x: 150, y: topBand, sx: 40, sy: 3, n: 4, strays: 1 },
+    { kinds: ['tinyA'], x: 430, y: topBand, sx: 40, sy: 3, n: 4 },
+    { kinds: ['sprBlue'], x: 730, y: topBand, sx: 36, sy: 3, n: 3, strays: 1 },
+    { kinds: ['tuftA'], x: 1040, y: topBand, sx: 40, sy: 3, n: 4 },
+    { kinds: ['daisyY'], x: 170, y: band1, sx: 36, sy: 3, n: 3, strays: 1 },
+    { kinds: ['sprigA'], x: 440, y: band1, sx: 40, sy: 3, n: 4 },
+    { kinds: ['violets'], x: 770, y: band1, sx: 36, sy: 3, n: 3 },
+    { kinds: ['tinyC'], x: 1060, y: band1, sx: 40, sy: 3, n: 4 },
+    { kinds: ['flW'], x: 140, y: band2, sx: 40, sy: 3, n: 4, strays: 1 },
+    { kinds: ['rockB', 'rockC'], x: 420, y: band2, sx: 20, sy: 3, n: 2 },
+    { kinds: ['bluebells'], x: 760, y: band2, sx: 36, sy: 3, n: 3 },
+    { kinds: ['tuftC'], x: 1070, y: band2, sx: 40, sy: 3, n: 4 },
+  ];
+  const clusters: Cluster[] = specs.map(s => ({ kinds: s.kinds, x: s.x, y: s.y }));
 
-  // Small things scattered over the free grass, never on a path or another prop.
-  const rnd = seeded(20261116);
-  const total = SMALL.reduce((s, [, w]) => s + w, 0);
-  const pick = (): PropKind => {
-    let t = rnd() * total;
-    for (const [k, w] of SMALL) if ((t -= w) < 0) return k;
-    return SMALL[0][0];
+  // Each cluster has its own fixed seed, so tuning one patch never reshuffles the others.
+  let rnd = seeded(20261116);
+  const gauss = (): number => {
+    const u = Math.max(1e-6, rnd());
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd());
   };
-  const boxes = props.map(propBox);
-  let placed = 0;
-  for (let tries = 0; tries < 3000 && placed < 120; tries++) {
-    const p: Prop = { kind: pick(), x: W.x + rnd() * W.w, y: W.y + rnd() * W.h };
+  const foots = props.map(footprint);
+  const placedBig: Prop[] = [];
+
+  const fits = (p: Prop, ci: number): boolean => {
     const b = propBox(p);
-    if (blocked(b, 8) || crossesPageEdge(b) || onPath(p, paths, 4)) continue;
-    if (boxes.some(o => overlaps(b, o, 10))) continue;
-    props.push(p);
-    boxes.push(b);
-    placed++;
-  }
+    if (b.x < W.x + 4 || b.y < W.y + 4 || b.x + b.w > W.x + W.w - 4 || b.y + b.h > W.y + W.h - 4) return false;
+    for (const r of keepOut) if (overlaps(b, r, 8)) return false;
+    if (crossesPageEdge(b)) return false;
+    if (hard.some(h => overlaps(b, h, 6))) return false;
+    const big = isBig(p.kind);
+    if (big ? boxOnPath(b, paths, 4) : onPath(p, paths, 4)) return false;
+    const f = footprint(p);
+    if (foots.some(o => overlaps(f, o, 2))) return false;
+    for (const o of placedBig) {
+      const ob = propBox(o);
+      if (!overlaps(b, ob, 0)) continue;
+      // Trees of one grove overlap, but their trunks keep apart; nothing hides wholly behind a canopy.
+      if (big && o.cluster === ci) {
+        const dx = Math.abs(p.x - o.x);
+        const dy = Math.abs(p.y - o.y);
+        if (dx < 24 && dy < 48) return false;
+        if (Math.hypot(dx, dy * 1.4) < 0.6 * Math.max(b.w, ob.w)) return false;
+      } else if (p.y < o.y - (big ? 60 : 6)) {
+        return false;
+      }
+    }
+    // Stay nearer this cluster's centre than any other, so patches never blur together.
+    const own = Math.hypot(p.x - clusters[ci].x, p.y - clusters[ci].y);
+    return clusters.every((c, j) => j === ci || Math.hypot(p.x - c.x, p.y - c.y) > own);
+  };
 
-  return { paths, pathHalf: PATH_HALF, props, hub };
+  specs.forEach((s, ci) => {
+    rnd = seeded(20261116 + ci * 7919);
+    const want = s.n + (s.strays ?? 0);
+    for (let m = 0, tries = 0; m < want && tries < 250 * want; tries++) {
+      const spread = m < s.n ? 1 : 2.2;
+      const first = m === 0 && tries === 0;
+      const p: Prop = {
+        kind: s.kinds[m % s.kinds.length],
+        x: s.x + (first ? 0 : gauss() * s.sx * spread),
+        y: s.y + (first ? 0 : gauss() * s.sy * spread),
+        cluster: ci,
+      };
+      if (!fits(p, ci)) continue;
+      props.push(p);
+      foots.push(footprint(p));
+      if (isBig(p.kind)) placedBig.push(p);
+      m++;
+    }
+  });
+
+  return { paths, pathHalf: PATH_HALF, props, clusters, hub };
 }
 
 // ---------------------------------------------------------------- bake
