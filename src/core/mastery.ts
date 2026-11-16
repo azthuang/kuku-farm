@@ -31,10 +31,17 @@ export function weightedPick<T>(items: T[], weights: number[], rng: Rng): number
   return items.length - 1;
 }
 
-/** Weight of the i-th crop in the pool is r^i, r = 0.7 + 0.1 * stars. */
+/** Base of the fall-off below the row's own crop; each star makes the own crop more likely. */
+export const CROP_FALLOFF = 0.65;
+export const CROP_FALLOFF_PER_STAR = 0.1;
+
+/**
+ * Weights for a pool ordered by unlock with the question's own crop last: the own crop weighs 1,
+ * each step down weighs r times less, r = 0.65 − 0.1 × stars.
+ */
 export function cropWeights(poolSize: number, stars: number): number[] {
-  const r = 0.7 + 0.1 * stars;
-  return Array.from({ length: poolSize }, (_, i) => Math.pow(r, i));
+  const r = CROP_FALLOFF - CROP_FALLOFF_PER_STAR * stars;
+  return Array.from({ length: poolSize }, (_, i) => Math.pow(r, poolSize - 1 - i));
 }
 
 export function pickCrop(pool: Crop[], stars: number, rng: Rng): CropId {

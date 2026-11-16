@@ -34,3 +34,12 @@ export function nextRow(unlocked: number): number | null {
 export function cropPool(unlocked: number): Crop[] {
   return LEVEL_ORDER.slice(0, unlocked).map(r => CROP_BY_ROW[r]);
 }
+
+/**
+ * Crops a question from this row can grow: the crops of every level up to and including it,
+ * in unlock order, so the row's own crop is last. Rare crops come from practising hard levels.
+ */
+export function cropPoolForRow(row: number): Crop[] {
+  const i = LEVEL_ORDER.indexOf(row);
+  return LEVEL_ORDER.slice(0, i + 1).map(r => CROP_BY_ROW[r]);
+}

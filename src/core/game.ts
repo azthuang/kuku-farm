@@ -1,5 +1,5 @@
 import type { Clock, Rng } from './clock';
-import { LEVEL_ORDER, cropPool, unlockedRows, type CropId } from './levels';
+import { LEVEL_ORDER, cropPoolForRow, unlockedRows, type CropId } from './levels';
 import { applyAnswer, challengeWeight, pickCrop, starsOf, weightedPick, type Mode } from './mastery';
 import { CROP_CAP, cellKey, type GameState } from './state';
 
@@ -69,7 +69,7 @@ export class Game {
 
   private makeQuestion(a: number, b: number): Question {
     const stars = starsOf(this.state.mastery[cellKey(a, b)] ?? 0);
-    const crop = pickCrop(cropPool(this.state.unlocked), stars, this.rng);
+    const crop = pickCrop(cropPoolForRow(a), stars, this.rng);
     return { a, b, crop };
   }
 

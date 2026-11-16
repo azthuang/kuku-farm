@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyAnswer, starsOf, challengeWeight, weightedPick, cropWeights, pickCrop } from '../../src/core/mastery';
-import { cropPool } from '../../src/core/levels';
+import { cropPoolForRow } from '../../src/core/levels';
 
 describe('mastery', () => {
   it('applyAnswer', () => {
@@ -15,18 +15,19 @@ describe('mastery', () => {
   it('starsOf', () => {
     expect([0, 1, 2, 3, 4, 5, 6].map(starsOf)).toEqual([0, 0, 1, 1, 2, 2, 3]);
   });
-  it('cropWeights', () => {
+  it('cropWeights: the row own crop (last) weighs most; more stars favour it more', () => {
     const w = cropWeights(3, 0);
-    [1, 0.7, 0.49].forEach((v, i) => expect(w[i]).toBeCloseTo(v));
-    cropWeights(9, 3).forEach(v => expect(v).toBeCloseTo(1));
+    [0.4225, 0.65, 1].forEach((v, i) => expect(w[i]).toBeCloseTo(v));
+    const w3 = cropWeights(3, 3);
+    [0.1225, 0.35, 1].forEach((v, i) => expect(w3[i]).toBeCloseTo(v));
+    // level 7 (8 crops) at 0 stars: own crop about 36%
+    const w7 = cropWeights(8, 0);
+    expect(w7[7] / w7.reduce((a, b) => a + b, 0)).toBeCloseTo(0.36, 2);
   });
   it('pickCrop', () => {
-    expect(pickCrop(cropPool(2), 0, () => 0)).toBe('wheat');
-    expect(pickCrop(cropPool(2), 0, () => 0.99)).toBe('carrot');
-  });
-  it('challengeWeight', () => {
-    expect(challengeWeight(0)).toBe(7);
-    expect(challengeWeight(6)).toBe(1);
+    expect(pickCrop(cropPoolForRow(2), 0, () => 0)).toBe('wheat');
+    expect(pickCrop(cropPoolForRow(2), 0, () => 0.99)).toBe('carrot');
+    expect(pickCrop(cropPoolForRow(1), 3, () => 0.5)).toBe('wheat');
   });
   it('weightedPick', () => {
     expect(weightedPick(['a', 'b'], [7, 1], () => 0.8)).toBe(0);
