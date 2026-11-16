@@ -1,11 +1,12 @@
 import type { CropId } from './levels';
+import { createRanch, type RanchState } from './ranch';
 
 export const CROP_CAP = 999;
 
 export interface DailyStat { answered: number; correct: number }
 
 export interface GameState {
-  version: 2;
+  version: 3;
   unlocked: number;
   cleared: Record<number, number[]>;
   mastery: Record<string, number>;
@@ -13,11 +14,12 @@ export interface GameState {
   daily: Record<string, DailyStat>;
   settings: { speech: boolean; sound: boolean };
   lastSeenAt: number;
+  ranch: RanchState;
 }
 
 export function createNewState(now: number): GameState {
   return {
-    version: 2,
+    version: 3,
     unlocked: 1,
     cleared: {},
     mastery: {},
@@ -28,6 +30,7 @@ export function createNewState(now: number): GameState {
     daily: {},
     settings: { speech: true, sound: true },
     lastSeenAt: now,
+    ranch: createRanch(now),
   };
 }
 

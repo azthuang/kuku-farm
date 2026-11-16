@@ -1,4 +1,9 @@
 import { CROP_BY_ROW, type CropId } from './levels';
+import { SPECIES, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
+import {
+  MAX_POOP, PRODUCT_CAP, PET_MAX_IN_WINDOW, createRanch,
+  type Animal, type House, type RanchState,
+} from './ranch';
 import { CROP_CAP, type DailyStat, type GameState } from './state';
 
 export const SAVE_KEY = 'kuku-farm-save';
@@ -9,6 +14,11 @@ export type ParseResult =
   | { ok: false; error: 'invalid' | 'newer-version' };
 
 const MAX_MASTERY = 6;
+const MAX_ANIMALS_SAVED = 10; // mirrors shop.MAX_ANIMALS
+const SUPPLY_CAP_SAVED = 99; // mirrors shop.SUPPLY_CAP
+const SUPPLY_IDS: readonly SupplyId[] = ['feed', 'treat', 'medicine'];
+const PRODUCT_IDS: readonly ProductId[] = ['egg'];
+const HOUSE_KINDS: readonly HouseKind[] = ['coop'];
 const CELL_KEY = /^[1-9],[1-9]$/;
 const ROW_KEY = /^[1-9]$/;
 
@@ -33,11 +43,81 @@ function rec(v: unknown): Record<string, unknown> {
   return isRecord(v) ? v : fail();
 }
 
+function has(o: Record<string, unknown>, k: string): boolean {
+  return Object.prototype.hasOwnProperty.call(o, k);
+}
+
+function isFiniteIn(v: unknown, min: number, max: number): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+}
+
+function validateRanch(data: unknown): RanchState {
+  const o = rec(data);
+
+  const houses: House[] = [];
+  if (!Array.isArray(o.houses)) fail();
+  for (const hv of o.houses) {
+    const h = rec(hv);
+    if (typeof h.id !== 'string' || h.id === '') fail();
+    if (!HOUSE_KINDS.includes(h.kind as HouseKind)) fail();
+    if (!isNonNegInt(h.lot) || !isIntIn(h.poop, 0, MAX_POOP)) fail();
+    if (houses.some((x) => x.id === h.id)) fail();
+    houses.push({ id: h.id, kind: h.kind as HouseKind, lot: h.lot, poop: h.poop });
+  }
+
+  const animals: Animal[] = [];
+  if (!Array.isArray(o.animals) || o.animals.length > MAX_ANIMALS_SAVED) fail();
+  for (const av of o.animals) {
+    const a = rec(av);
+    if (typeof a.id !== 'string' || a.id === '') fail();
+    if (animals.some((x) => x.id === a.id)) fail();
+    if (typeof a.species !== 'string' || !has(SPECIES, a.species)) fail();
+    const sp = SPECIES[a.species as SpeciesId];
+    if (typeof a.name !== 'string' || typeof a.color !== 'string') fail();
+    const house = houses.find((h) => h.id === a.houseId);
+    if (!house || house.kind !== sp.house) fail();
+    if (!isFiniteIn(a.satiety, 0, 100) || !isFiniteIn(a.mood, 0, 100)) fail();
+    if (typeof a.sick !== 'boolean' || typeof a.medicated !== 'boolean') fail();
+    if (!isFiniteIn(a.neglectMs, 0, Infinity) || !isFiniteIn(a.produceMs, 0, Infinity)
+      || !isFiniteIn(a.poopMs, 0, Infinity)) fail();
+    if (!isIntIn(a.waiting, 0, sp.maxWaiting)) fail();
+    if (!Array.isArray(a.petTimes) || a.petTimes.length > PET_MAX_IN_WINDOW
+      || !a.petTimes.every((t) => typeof t === 'number' && Number.isFinite(t))) fail();
+    if (a.lastBrushAt !== null && !(typeof a.lastBrushAt === 'number' && Number.isFinite(a.lastBrushAt))) fail();
+    if (animals.filter((x) => x.houseId === a.houseId).length >= sp.houseCapacity) fail();
+    animals.push({
+      id: a.id, species: a.species as SpeciesId, name: a.name, color: a.color, houseId: a.houseId as string,
+      satiety: a.satiety, mood: a.mood, sick: a.sick, medicated: a.medicated,
+      neglectMs: a.neglectMs, produceMs: a.produceMs, poopMs: a.poopMs, waiting: a.waiting,
+      petTimes: [...(a.petTimes as number[])], lastBrushAt: a.lastBrushAt as number | null,
+    });
+  }
+
+  const sIn = rec(o.supplies);
+  const supplies = {} as Record<SupplyId, number>;
+  for (const k of SUPPLY_IDS) {
+    const n = has(sIn, k) ? sIn[k] : undefined;
+    if (!isIntIn(n, 0, SUPPLY_CAP_SAVED)) fail();
+    supplies[k] = n;
+  }
+  const pIn = rec(o.products);
+  const products = {} as Record<ProductId, number>;
+  for (const k of PRODUCT_IDS) {
+    const n = has(pIn, k) ? pIn[k] : undefined;
+    if (!isIntIn(n, 0, PRODUCT_CAP)) fail();
+    products[k] = n;
+  }
+
+  if (typeof o.settledAt !== 'number' || !Number.isFinite(o.settledAt)) fail();
+  if (!isIntIn(o.nextId, 1, Number.MAX_SAFE_INTEGER)) fail();
+  return { houses, animals, supplies, products, settledAt: o.settledAt, nextId: o.nextId };
+}
+
 function validate(data: unknown): GameState {
   const o = rec(data);
   if (typeof o.version !== 'number' || Number.isNaN(o.version)) fail();
-  if (o.version > 2) throw new Newer();
-  if (o.version !== 1 && o.version !== 2) fail();
+  if (o.version > 3) throw new Newer();
+  if (o.version !== 1 && o.version !== 2 && o.version !== 3) fail();
   // v1 carried a `growing` map; it is ignored (even if malformed) and dropped.
 
   if (!isIntIn(o.unlocked, 1, 9)) fail();
@@ -80,8 +160,10 @@ function validate(data: unknown): GameState {
 
   if (typeof o.lastSeenAt !== 'number' || !Number.isFinite(o.lastSeenAt)) fail();
 
+  const ranch = o.version === 3 ? validateRanch(o.ranch) : createRanch(o.lastSeenAt);
+
   return {
-    version: 2,
+    version: 3,
     unlocked: o.unlocked,
     cleared,
     mastery,
@@ -89,6 +171,7 @@ function validate(data: unknown): GameState {
     daily,
     settings: { speech: sIn.speech, sound: sIn.sound },
     lastSeenAt: o.lastSeenAt,
+    ranch,
   };
 }
 

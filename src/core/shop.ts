@@ -6,7 +6,7 @@ import { SPECIES, type ProductId, type SupplyId } from './species';
 
 export type ShopItemId = 'coop' | 'chicken' | 'feed' | 'treat' | 'medicine';
 export type Price = Partial<Record<CropId | ProductId, number>>;
-export type ShopState = GameState & { ranch: RanchState };
+export type ShopState = GameState;
 export type CheckResult = { ok: true } | { ok: false; reason: 'short' | 'full' | 'need-house' };
 
 export const MAX_ANIMALS = 10;
