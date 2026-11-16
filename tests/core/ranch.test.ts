@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  FEED_FULL_AT, createRanch, settle, feed, pet, brush, giveTreat, giveMedicine, cleanPoop, collect,
-  type RanchState, type Animal,
+  FEED_FULL_AT, HUNGRY_SHOW_AT, createRanch, settle, feed, pet, brush, giveTreat, giveMedicine, cleanPoop, collect,
+  pageStatus, type RanchState, type Animal,
 } from '../../src/core/ranch';
 
 const H = 3_600_000;
@@ -240,5 +240,49 @@ describe('species-driven care', () => {
     h.animals[0].mood = 100;
     settle(h, 2.25 * H);
     expect(h.animals[0].waiting).toBe(1);
+  });
+});
+
+describe('pageStatus', () => {
+  const animal = (id: string, houseId: string, over: Partial<Animal> = {}): Animal => ({
+    id, species: 'chicken', name: id, color: '白', houseId,
+    satiety: 100, mood: 60, sick: false, medicated: false, neglectMs: 0,
+    produceMs: 0, poopMs: 0, waiting: 0, petTimes: [], lastBrushAt: null, ...over,
+  });
+  const calm = { hungry: false, sick: false, poop: false, products: 0 };
+
+  it('has one calm entry per page even with an empty ranch', () => {
+    expect(pageStatus(createRanch(0))).toEqual([calm, calm, calm, calm, calm]);
+  });
+
+  it('reports each house on its own lot (page)', () => {
+    const r = createRanch(0);
+    r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 2 });
+    r.houses.push({ id: 'h2', kind: 'sty', lot: 2, poop: 0 });
+    r.animals.push(animal('a1', 'h1', { waiting: 2 }));
+    r.animals.push(animal('a2', 'h1', { waiting: 1, satiety: HUNGRY_SHOW_AT }));
+    r.animals.push(animal('p1', 'h2', { species: 'pig', color: '粉紅', sick: true, satiety: 50 }));
+    expect(pageStatus(r)).toEqual([
+      { hungry: true, sick: false, poop: true, products: 3 },
+      calm,
+      { hungry: false, sick: true, poop: false, products: 0 },
+      calm,
+      calm,
+    ]);
+  });
+
+  it('hungry only at or below the shown threshold', () => {
+    const r = createRanch(0);
+    r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 0 });
+    r.animals.push(animal('a1', 'h1', { satiety: HUNGRY_SHOW_AT + 0.5 }));
+    expect(pageStatus(r)[0].hungry).toBe(false);
+    r.animals[0].satiety = 0;
+    expect(pageStatus(r)[0].hungry).toBe(true);
+  });
+
+  it('ignores animals whose house is missing', () => {
+    const r = createRanch(0);
+    r.animals.push(animal('a1', 'gone', { waiting: 3, sick: true }));
+    expect(pageStatus(r)).toEqual([calm, calm, calm, calm, calm]);
   });
 });

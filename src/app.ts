@@ -12,13 +12,14 @@ import { createSpeech } from './ui/speech';
 import { createPanel } from './ui/panel';
 import { countTiming } from './ui/timing';
 import { FieldScene, VIEW } from './scenes/FieldScene';
-import { RanchScene } from './scenes/RanchScene';
+import { RanchScene, type RanchView } from './scenes/RanchScene';
 import { ASSET_RES } from './scenes/assets';
 import {
   brush, cleanPoop, collect, feed, giveMedicine, giveTreat, pet, settle, type CareResult,
 } from './core/ranch';
-import { buy, nextName } from './core/shop';
-import { createSfx } from './ui/sfx';
+import { buy, isLocked, lockHint, nextName } from './core/shop';
+import { HOUSE_KINDS, SPECIES, SPECIES_ORDER, type HouseKind } from './core/species';
+import { createSfx, voiceOf } from './ui/sfx';
 import { createRanchUi, type Tool } from './ui/ranchUi';
 import { careFeedback } from './ui/ranchFeedback';
 
@@ -311,7 +312,7 @@ export function startApp(root: HTMLElement): void {
     save();
     syncGlow();
     scene.render(game);
-    ranchScene.render(game.state.ranch);
+    renderRanch();
     ranchUi.update(game.state);
     layout.updateHud(game.state);
     showIdle();
@@ -362,11 +363,27 @@ export function startApp(root: HTMLElement): void {
     if (retry) sceneRetry = setTimeout(applyScenes, SCENE_RETRY_MS);
   }
 
+  /** Which empty lots are locked (and by which crop) for the ranch scene. */
+  function ranchView(): RanchView {
+    const locked = {} as Record<HouseKind, boolean>;
+    const lockCrop: Partial<Record<HouseKind, string>> = {};
+    for (const kind of HOUSE_KINDS) {
+      locked[kind] = isLocked(game.state, kind);
+      const hint = locked[kind] ? lockHint(game.state, kind) : null;
+      if (hint) lockCrop[kind] = CROP_BY_ROW[hint.row].emoji;
+    }
+    return { locked, lockCrop };
+  }
+
+  function renderRanch(): void {
+    ranchScene.render(game.state.ranch, ranchView());
+  }
+
   let ranchTick: ReturnType<typeof setInterval> | undefined;
 
   function tickRanch(): void {
     settle(game.state.ranch, clock.now());
-    ranchScene.render(game.state.ranch);
+    renderRanch();
   }
 
   /** Settles and redraws every second, only while the ranch is actually on screen. */
@@ -384,7 +401,7 @@ export function startApp(root: HTMLElement): void {
 
   /** After any ranch action or purchase: redraw, refresh the toolbar and shop, and save. */
   function ranchChanged(): void {
-    ranchScene.render(game.state.ranch);
+    renderRanch();
     ranchUi.update(game.state);
     save();
   }
@@ -448,18 +465,23 @@ export function startApp(root: HTMLElement): void {
     onAnimal,
     onPoop,
     onEgg,
-    onLot: () => ranchUi.openShop('coop'),
+    onLot: lot => ranchUi.openShop(SPECIES[SPECIES_ORDER[lot]].house),
+    // Task 5: page dots/arrows, the overview button and the 🔒 hint toast build on these.
+    onLockedLot: () => sfx.play('nope'),
+    onPageTap: i => ranchScene.showPage(i),
+    onSwipe: d => ranchScene.showPage(ranchScene.page + d),
     onTag: id => {
       nextName(game.state.ranch, id); // the scene pops the tag when the name changes
       ranchChanged();
       sfx.play('cluck');
     },
-    onIdleCluck: () => {
+    onIdleVoice: id => {
       // The scene only runs on the ranch tab; the guard also covers a hidden page.
-      if (tab === 'ranch' && document.visibilityState === 'visible') sfx.ambient('cluck');
+      const a = game.state.ranch.animals.find(x => x.id === id);
+      if (a && tab === 'ranch' && document.visibilityState === 'visible') sfx.ambient(voiceOf(a.species));
     },
   });
-  ranchScene.render(game.state.ranch);
+  renderRanch();
   ranchUi.update(game.state);
   ranchUi.onTool(selectTool);
   ranchUi.onBuy(item => {
@@ -498,7 +520,7 @@ export function startApp(root: HTMLElement): void {
     requestAnimationFrame(refit);
     if (t === 'ranch') {
       settle(game.state.ranch, clock.now());
-      ranchScene.render(game.state.ranch);
+      renderRanch();
       ranchUi.update(game.state);
     } else {
       ranchUi.closeShop();

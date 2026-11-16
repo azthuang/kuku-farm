@@ -1,10 +1,12 @@
-import { SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
+import { SPECIES, SPECIES_ORDER, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
 
 const MS_HOUR = 3_600_000;
 const STEP_MS = 60_000;
 const MAX_SETTLE_MS = 30 * 24 * MS_HOUR;
 
 export const MAX_POOP = 6;
+/** At or below this satiety an animal shows 🍽️ (scene badge, page dots, overview). */
+export const HUNGRY_SHOW_AT = 20;
 export const SICK_POOP = 3;
 /** Hungry and dirty for this long makes an animal sick (a day away must never do it). */
 export const SICK_AFTER_MS = 48 * MS_HOUR;
@@ -218,4 +220,29 @@ export function collect(r: RanchState, animalId: string): number {
   a.waiting -= n;
   r.products[product] += n;
   return n;
+}
+
+export interface PageStatus { hungry: boolean; sick: boolean; poop: boolean; products: number }
+
+/**
+ * What needs the child on each ranch page (index = lot = SPECIES_ORDER position): any hungry
+ * (satiety ≤ HUNGRY_SHOW_AT) or sick animal, poop in the house, and products waiting.
+ */
+export function pageStatus(r: RanchState): PageStatus[] {
+  const out = SPECIES_ORDER.map((): PageStatus => ({ hungry: false, sick: false, poop: false, products: 0 }));
+  const lotOf = new Map<string, number>();
+  for (const h of r.houses) {
+    if (h.lot < 0 || h.lot >= out.length) continue;
+    lotOf.set(h.id, h.lot);
+    if (h.poop > 0) out[h.lot].poop = true;
+  }
+  for (const a of r.animals) {
+    const lot = lotOf.get(a.houseId);
+    if (lot === undefined) continue;
+    const s = out[lot];
+    if (a.satiety <= HUNGRY_SHOW_AT) s.hungry = true;
+    if (a.sick) s.sick = true;
+    s.products += a.waiting;
+  }
+  return out;
 }

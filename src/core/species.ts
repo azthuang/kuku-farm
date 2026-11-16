@@ -117,6 +117,11 @@ export const PRODUCT_IDS: readonly ProductId[] = SPECIES_ORDER.map((s) => SPECIE
 export const FEED_IDS: readonly FeedId[] = SPECIES_ORDER.map((s) => SPECIES[s].feed);
 export const SUPPLY_IDS: readonly SupplyId[] = [...FEED_IDS, 'treat', 'medicine'];
 
+/** Emoji shown for each product (ranch items, flights, overview badges, HUD). */
+export const PRODUCT_EMOJI: Record<ProductId, string> = {
+  egg: '🥚', milk: '🥛', truffle: '🍄', yarn: '🧶', fluff: '🧸',
+};
+
 export function speciesOfHouse(kind: HouseKind): SpeciesId {
   return SPECIES_ORDER.find((s) => SPECIES[s].house === kind)!;
 }
