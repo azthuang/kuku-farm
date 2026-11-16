@@ -83,6 +83,25 @@ describe('createSfx', () => {
     expect(calls.resume).toBe(1);
   });
 
+  it('unlock is a no-op on a running context and resumes an interrupted one', () => {
+    const { ctx, calls } = fakeCtx();
+    const sfx = createSfx(() => ctx, true);
+    (ctx as unknown as { state: string }).state = 'running';
+    sfx.unlock();
+    sfx.unlock();
+    expect(calls.resume).toBe(0);
+    (ctx as unknown as { state: string }).state = 'interrupted';
+    sfx.unlock();
+    expect(calls.resume).toBe(1);
+  });
+
+  it('unlock creates no context while sound is off', () => {
+    const factory = vi.fn(() => fakeCtx().ctx);
+    const sfx = createSfx(factory, false);
+    sfx.unlock();
+    expect(factory).not.toHaveBeenCalled();
+  });
+
   it('setEnabled(false) stops sounds, setEnabled(true) restores them', () => {
     const { ctx, calls } = fakeCtx();
     const sfx = createSfx(() => ctx, true);

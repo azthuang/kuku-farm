@@ -104,7 +104,9 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
     const c = getCtx();
     if (!c) return;
     try {
-      if (c.state === 'suspended') void c.resume().catch(() => undefined);
+      // Safari reports 'interrupted' after a call or screen lock; both need a resume in a gesture.
+      const st = c.state as string;
+      if (st === 'suspended' || st === 'interrupted') void c.resume().catch(() => undefined);
     } catch {
       /* ignore */
     }

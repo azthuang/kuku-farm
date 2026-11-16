@@ -16,9 +16,10 @@ import { ASSET_RES } from './scenes/assets';
 import {
   brush, cleanPoop, collect, feed, giveMedicine, giveTreat, pet, settle, type CareResult,
 } from './core/ranch';
-import { buy, nextName, type ShopItemId } from './core/shop';
+import { buy, nextName } from './core/shop';
 import { createSfx } from './ui/sfx';
 import { createRanchUi, type Tool } from './ui/ranchUi';
+import { careFeedback } from './ui/ranchFeedback';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
 const CHANT_WAIT_MS = 3000;
@@ -72,6 +73,11 @@ export function startApp(root: HTMLElement): void {
     });
   };
   UNLOCK_EVENTS.forEach(t => document.addEventListener(t, tryUnlock, { capture: true, passive: true }));
+  // The AudioContext can be suspended again later (iOS after backgrounding, screen lock, a call),
+  // long after the listeners above are gone: every gesture resumes it. unlock() does nothing
+  // while the context is running or sound is off.
+  const resumeSfx = (): void => sfx.unlock();
+  (['pointerup', 'touchend'] as const).forEach(t => document.addEventListener(t, resumeSfx, { capture: true, passive: true }));
   // Ask the browser not to evict our save data; ignore the outcome.
   try { void navigator.storage?.persist?.()?.catch(() => {}); } catch { /* ignore */ }
 
@@ -370,8 +376,6 @@ export function startApp(root: HTMLElement): void {
     save();
   }
 
-  const SUPPLY_OF: Partial<Record<Tool, ShopItemId>> = { feed: 'feed', treat: 'treat', medicine: 'medicine' };
-
   /** With ✋ eggs and poop under a chicken win the tap; with a care tool the chicken does. */
   function selectTool(t: Tool): void {
     tool = t;
@@ -392,46 +396,12 @@ export function startApp(root: HTMLElement): void {
       case 'medicine': res = giveMedicine(r, id, now); break;
     }
     ranchChanged();
-    if (!res.ok) {
-      ranchScene.fx(id, 'shake');
-      sfx.play('nope');
-      // Ran out mid-use (the button is grey now): show where to get more.
-      const item = SUPPLY_OF[used];
-      if (res.reason === 'none-left' && item) ranchUi.openShop(item);
-      return;
-    }
-    switch (used) {
-      case 'hand':
-        if (res.healed) {
-          ranchScene.fx(id, 'heal');
-          sfx.play('heal');
-        } else if (r.animals.find(a => a.id === id)?.sick) {
-          ranchScene.fx(id, 'weak'); // not well until it has had medicine
-          layout.toast('🤒 要先吃藥 💊');
-        } else {
-          ranchScene.fx(id, 'jump');
-          sfx.play('cluck');
-        }
-        break;
-      case 'feed':
-        ranchScene.fx(id, 'eat');
-        sfx.play('cluck');
-        break;
-      case 'brush':
-        ranchScene.fx(id, 'brush');
-        sfx.play('sweep');
-        break;
-      case 'treat':
-        ranchScene.fx(id, 'treat');
-        sfx.play('cluck');
-        break;
-      case 'medicine':
-        ranchScene.fx(id, 'weak');
-        layout.toast('✋ 再摸摸牠');
-        // The next step is a pat: hand the child the ✋ so tapping again doesn't just shake.
-        selectTool('hand');
-        break;
-    }
+    const fb = careFeedback(used, res, r.animals.find(a => a.id === id)?.sick ?? false);
+    ranchScene.fx(id, fb.fx);
+    if (fb.sound) sfx.play(fb.sound);
+    if (fb.toast) layout.toast(fb.toast);
+    if (fb.shop) ranchUi.openShop(fb.shop); // ran out mid-use (the button is grey now)
+    if (fb.nextTool) selectTool(fb.nextTool); // after medicine the pat heals: hand over the ✋
   }
 
   function onPoop(houseId: string): void {
@@ -525,6 +495,7 @@ export function startApp(root: HTMLElement): void {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') save();
+    else sfx.unlock(); // may be refused without a gesture; the next tap's resumeSfx retries
     syncRanchTick();
   });
   window.addEventListener('pagehide', save);
