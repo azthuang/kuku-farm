@@ -16,7 +16,7 @@ import { ASSET_RES } from './scenes/assets';
 import {
   brush, cleanPoop, collect, feed, giveMedicine, giveTreat, pet, settle, type CareResult,
 } from './core/ranch';
-import { buy, type ShopItemId } from './core/shop';
+import { buy, nextName, type ShopItemId } from './core/shop';
 import { createSfx } from './ui/sfx';
 import { createRanchUi, type Tool } from './ui/ranchUi';
 
@@ -372,6 +372,13 @@ export function startApp(root: HTMLElement): void {
 
   const SUPPLY_OF: Partial<Record<Tool, ShopItemId>> = { feed: 'feed', treat: 'treat', medicine: 'medicine' };
 
+  /** With ✋ eggs and poop under a chicken win the tap; with a care tool the chicken does. */
+  function selectTool(t: Tool): void {
+    tool = t;
+    ranchUi.setTool(t);
+    ranchScene.setTapPriority(t === 'hand' ? 'items' : 'animals');
+  }
+
   function onAnimal(id: string): void {
     const r = game.state.ranch;
     const now = clock.now();
@@ -422,8 +429,7 @@ export function startApp(root: HTMLElement): void {
         ranchScene.fx(id, 'weak');
         layout.toast('✋ 再摸摸牠');
         // The next step is a pat: hand the child the ✋ so tapping again doesn't just shake.
-        tool = 'hand';
-        ranchUi.setTool('hand');
+        selectTool('hand');
         break;
     }
   }
@@ -460,10 +466,15 @@ export function startApp(root: HTMLElement): void {
     onPoop,
     onEgg,
     onLot: () => ranchUi.openShop('coop'),
+    onTag: id => {
+      nextName(game.state.ranch, id); // the scene pops the tag when the name changes
+      ranchChanged();
+      sfx.play('cluck');
+    },
   });
   ranchScene.render(game.state.ranch);
   ranchUi.update(game.state);
-  ranchUi.onTool(t => { tool = t; });
+  ranchUi.onTool(selectTool);
   ranchUi.onBuy(item => {
     const res = buy(game.state, item, clock.now(), rng);
     ranchChanged();
@@ -480,8 +491,7 @@ export function startApp(root: HTMLElement): void {
       ranchUi.closeShop(); // let the child watch the new chicken arrive
       if (res.animalId) ranchScene.fx(res.animalId, 'jump');
     } else {
-      tool = item; // just bought supplies: ready to use them
-      ranchUi.setTool(item);
+      selectTool(item); // just bought supplies: ready to use them
     }
   });
 

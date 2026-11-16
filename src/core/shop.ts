@@ -19,7 +19,7 @@ const PRICES: Record<Exclude<ShopItemId, 'chicken'>, Price> = {
   coop: { wheat: 150, carrot: 100 },
   feed: { wheat: 15 },
   treat: { carrot: 10 },
-  medicine: { egg: 2, wheat: 10 },
+  medicine: { wheat: 10, carrot: 5 },
 };
 
 export function priceOf(state: ShopState, item: ShopItemId): Price {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createRanch, settle, feed, pet, brush, giveTreat, giveMedicine, cleanPoop, collect,
+  FEED_FULL_AT, createRanch, settle, feed, pet, brush, giveTreat, giveMedicine, cleanPoop, collect,
   type RanchState, type Animal,
 } from '../../src/core/ranch';
 
@@ -140,6 +140,22 @@ describe('actions', () => {
     expect(feed(r2, 'a1', T0).ok).toBe(true);
     expect(r2.animals[0].satiety).toBeCloseTo(70, 3);
     expect(r2.supplies.feed).toBe(0);
+  });
+
+  it('feed: a nearly full chicken counts as full (no feed used)', () => {
+    expect(FEED_FULL_AT).toBe(90);
+    const r = mk({ satiety: 89.9 });
+    r.supplies.feed = 3;
+    expect(feed(r, 'a1', T0).ok).toBe(true);
+    expect(r.animals[0].satiety).toBe(100);
+    expect(r.supplies.feed).toBe(2);
+    const r2 = mk({ satiety: 90 });
+    r2.supplies.feed = 3;
+    expect(feed(r2, 'a1', T0)).toEqual({ ok: false, reason: 'full' });
+    expect(r2.supplies.feed).toBe(3);
+    // fed a second later: satiety is just under 100, still full
+    expect(feed(r, 'a1', T0 + 1000)).toEqual({ ok: false, reason: 'full' });
+    expect(r.supplies.feed).toBe(2);
   });
 
   it('treat, medicine reasons', () => {

@@ -71,6 +71,9 @@ const TAG_DY_LYING = 62;
 /** Body centre above the feet (hit tests and effects). */
 const BODY_DY = 32;
 const HIT = { egg: 40, poop: 38, animal: 56 };
+/** Name pill height and the extra margin around it that still counts as a tag tap. */
+const TAG_H = 30;
+const TAG_HIT_PAD = 6;
 
 type Img = Phaser.GameObjects.Image;
 type FxKind = 'jump' | 'eat' | 'brush' | 'treat' | 'heal' | 'weak' | 'shake';
@@ -80,7 +83,15 @@ export interface RanchHandlers {
   onPoop(houseId: string): void;
   onEgg(animalId: string): void;
   onLot(lot: number): void;
+  /** The name tag was tapped (rename). */
+  onTag(animalId: string): void;
 }
+
+/**
+ * Which target wins when a tap hits an animal and an egg/poop at once. 'items' (the ✋ tool):
+ * eggs, then poop, then the animal. 'animals' (any other tool): the animal the child aimed at.
+ */
+export type TapPriority = 'items' | 'animals';
 
 interface Run { x0: number; y0: number; x1: number; y1: number }
 
@@ -107,6 +118,8 @@ interface AnimalView {
   tag: Phaser.GameObjects.Container;
   pill: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
+  /** Width of the name pill in world units (its hit box). */
+  tagW: number;
   icon: Img;
   heart: Img;
   name: string;
@@ -177,7 +190,10 @@ function px(ctx: Ctx, color: string, x: number, y: number, w = 1, h = 1): void {
  */
 export class RanchScene extends Phaser.Scene {
   private model: RanchState | null = null;
-  private handlers: RanchHandlers = { onAnimal: () => {}, onPoop: () => {}, onEgg: () => {}, onLot: () => {} };
+  private handlers: RanchHandlers = {
+    onAnimal: () => {}, onPoop: () => {}, onEgg: () => {}, onLot: () => {}, onTag: () => {},
+  };
+  private priority: TapPriority = 'items';
   private built = false;
   private houses = new Map<string, HouseView>();
   private animals = new Map<string, AnimalView>();
@@ -195,6 +211,10 @@ export class RanchScene extends Phaser.Scene {
 
   setHandlers(h: RanchHandlers): void {
     this.handlers = h;
+  }
+
+  setTapPriority(p: TapPriority): void {
+    this.priority = p;
   }
 
   preload(): void {
@@ -616,7 +636,7 @@ export class RanchScene extends Phaser.Scene {
     const tag = this.add.container(0, 0, [pill, label, icon, heart]).setDepth(DEPTH.tag);
 
     const v: AnimalView = {
-      id: a.id, houseId: a.houseId, coat, box, body, shadow, tag, pill, label, icon, heart,
+      id: a.id, houseId: a.houseId, coat, box, body, shadow, tag, pill, label, tagW: 40, icon, heart,
       name: '', iconKey: '', sick: false, hungry: false, starving: false, happy: false, eggs: [],
       mode: 'idle', dir, tx: 0, ty: 0, speed: 0, until: 0, busyUntil: 0,
       nextHeart: this.time.now + rand(2000, 8000),
@@ -648,10 +668,17 @@ export class RanchScene extends Phaser.Scene {
       if (!v.busyUntil) this.applyPose(v, this.time.now);
     }
     if (a.name !== v.name) {
+      const renamed = v.name !== '';
       v.name = a.name;
       v.label.setText(a.name);
       const w = Math.max(40, v.label.width + 18);
-      const h = 30;
+      v.tagW = w;
+      if (renamed) {
+        this.tweens.killTweensOf(v.tag);
+        v.tag.setScale(1);
+        this.tweens.add({ targets: v.tag, scaleX: 1.25, scaleY: 1.25, duration: 110, yoyo: true, ease: 'Quad.Out' });
+      }
+      const h = TAG_H;
       v.pill.clear()
         .fillStyle(0x6b4226, 0.35).fillRoundedRect(-w / 2, -h / 2 + 2, w, h, 12)
         .fillStyle(0xfff8e1, 0.96).fillRoundedRect(-w / 2, -h / 2, w, h, 12)
@@ -908,7 +935,38 @@ export class RanchScene extends Phaser.Scene {
     const w = this.cameras.main.getWorldPoint(p.x, p.y);
     const dist = Phaser.Math.Distance.Between;
 
-    // Eggs first: a chicken standing on its egg must not block collecting it.
+    // Name tags first: they float above everything and are small, deliberate targets.
+    let tagged: AnimalView | null = null;
+    let bestT = Infinity;
+    for (const v of this.animalList) {
+      const dx = Math.abs(w.x - v.tag.x);
+      const dy = Math.abs(w.y - v.tag.y);
+      if (dx <= v.tagW / 2 + TAG_HIT_PAD && dy <= TAG_H / 2 + TAG_HIT_PAD && dx + dy < bestT) {
+        bestT = dx + dy;
+        tagged = v;
+      }
+    }
+    if (tagged) {
+      this.handlers.onTag(tagged.id);
+      return;
+    }
+
+    let animal: AnimalView | null = null;
+    let bestA = HIT.animal;
+    for (const v of this.animalList) {
+      const d = dist(w.x, w.y, v.box.x, v.box.y - BODY_DY);
+      if (d < bestA) {
+        bestA = d;
+        animal = v;
+      }
+    }
+    // With a care tool in hand the child is aiming at the animal, not at what lies under it.
+    if (animal && this.priority === 'animals') {
+      this.handlers.onAnimal(animal.id);
+      return;
+    }
+
+    // Eggs next: a chicken standing on its egg must not block collecting it.
     let egg: AnimalView | null = null;
     let best = HIT.egg;
     for (const v of this.animalList) {
@@ -935,18 +993,6 @@ export class RanchScene extends Phaser.Scene {
           best = d;
           poop = { hv, img };
         }
-      }
-    }
-
-    let animal: AnimalView | null = null;
-    let bestA = HIT.animal;
-    for (const v of this.animalList) {
-      const dBody = dist(w.x, w.y, v.box.x, v.box.y - BODY_DY);
-      const dTag = dist(w.x, w.y, v.tag.x, v.tag.y) + 8;
-      const d = Math.min(dBody, dTag);
-      if (d < bestA) {
-        bestA = d;
-        animal = v;
       }
     }
 

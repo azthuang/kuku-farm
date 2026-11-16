@@ -76,12 +76,21 @@ describe('shop', () => {
     expect(s.ranch.supplies.feed).toBe(95);
   });
 
-  it('treat x3, medicine x1 priced with egg', () => {
+  it('treat x3, medicine x1 priced in crops only', () => {
     const s = rich(st());
+    expect(priceOf(s, 'medicine')).toEqual({ wheat: 10, carrot: 5 });
     buy(s, 'treat', 0, () => 0);
     buy(s, 'medicine', 0, () => 0);
     expect(s.ranch.supplies).toEqual({ feed: 0, treat: 3, medicine: 1 });
-    expect(s.ranch.products.egg).toBe(898);
+    expect(s.inventory.wheat).toBe(890);
+    expect(s.inventory.carrot).toBe(885);
+    expect(s.ranch.products.egg).toBe(900);
+  });
+
+  it('medicine is affordable with no eggs at all', () => {
+    const s = st();
+    s.inventory.wheat = 10; s.inventory.carrot = 5;
+    expect(checkBuy(s, 'medicine')).toEqual({ ok: true });
   });
 
   it('two buys succeed only if affordable twice', () => {

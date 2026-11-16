@@ -8,6 +8,8 @@ export const MAX_POOP = 6;
 export const SICK_POOP = 3;
 export const SICK_AFTER_MS = 24 * MS_HOUR;
 export const FEED_AMOUNT = 50;
+/** At or above this satiety a chicken counts as full: feeding it shakes its head and uses no feed. */
+export const FEED_FULL_AT = 90;
 export const MOOD_HAPPY = 70;
 export const MOOD_START = 60;
 export const MOOD_PET = 5;
@@ -137,7 +139,7 @@ function withAnimal(
 
 export function feed(r: RanchState, animalId: string, now: number): CareResult {
   return withAnimal(r, animalId, now, (a) => {
-    if (a.satiety >= 100) return { ok: false, reason: 'full' };
+    if (a.satiety >= FEED_FULL_AT) return { ok: false, reason: 'full' };
     if (r.supplies.feed < 1) return { ok: false, reason: 'none-left' };
     r.supplies.feed -= 1;
     a.satiety = Math.min(100, a.satiety + FEED_AMOUNT);
