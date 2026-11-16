@@ -171,10 +171,12 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   z-index: 1;
 }
 .q-feedback:empty { display: none; }
-.q-feedback.correct { color: var(--grass-deep); font-size: 20px; }
+/* Answers are the thing the child should read: as big as the narrowest phone allows
+   ("🎉 9 × 9 = 81" must stay on one line at 360px wide). */
+.q-feedback.correct { color: var(--grass-deep); font-size: min(46px, 11vw, 8vh); }
 .q-feedback.counting { color: var(--ink); font-size: 26px; }
-.q-feedback.wrong { color: var(--berry-deep); font-size: 30px; }
-.q-feedback .ans { line-height: 1.2; }
+.q-feedback.wrong { color: var(--berry-deep); font-size: min(60px, 13vw, 10vh); }
+.q-feedback .ans { line-height: 1.2; white-space: nowrap; }
 .q-numpad { flex: 1 1 0; min-height: 0; }
 /* while feedback shows, hide the numpad so no key edges or shadows peek around the overlay */
 .q-feedback:not(:empty) ~ .q-numpad { visibility: hidden; }
