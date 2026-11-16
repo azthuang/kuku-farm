@@ -52,6 +52,15 @@ function textStyle(size: number, color: string, stroke: string, strokeThickness:
   return { fontFamily: FONT, fontSize: `${size}px`, fontStyle: 'bold', color, stroke, strokeThickness, resolution: ASSET_RES };
 }
 
+interface Chip {
+  pill: Phaser.GameObjects.Graphics;
+  text: Phaser.GameObjects.Text;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /**
  * The 9×9 field. Two views:
  * - idle: the times-table map (stars on unlocked rows, padlocks on locked rows, row/column labels);
@@ -64,7 +73,9 @@ export class FieldScene extends Phaser.Scene {
   private built = false;
   private cells: Cell[][] = [];
   private rows: RowDeco[] = [];
-  private headers: (Phaser.GameObjects.Text | Phaser.GameObjects.Graphics)[] = [];
+  /** Row (index a) and column (index b) label chips: a pill plus its text. */
+  private rowChips: Chip[] = [];
+  private colChips: Chip[] = [];
   private view: 'idle' | 'question' = 'idle';
   /** The planted question (question view), or one plant() received before create(). */
   private planted: Question | null = null;
@@ -96,6 +107,7 @@ export class FieldScene extends Phaser.Scene {
 
     this.drawBackground();
     this.buildGrid();
+    this.setLabels('idle');
     this.buildEffects();
 
     this.input.on('pointerdown', this.onPointer, this);
@@ -210,12 +222,15 @@ export class FieldScene extends Phaser.Scene {
   async playCount(q: Question, onRow: (row: number, total: number) => Promise<void>): Promise<void> {
     if (this.built) this.finishPlant();
     const gen = this.gen;
+    if (this.built && this.view === 'question') this.setLabels('count', q);
     for (let row = 1; row <= q.a; row++) {
       if (gen !== this.gen) return;
       const total = row * q.b;
       if (this.built && this.view === 'question') this.lightRow(row, q.b, total);
       await onRow(row, total);
     }
+    // Count finished: the answer is revealed, so bring the a / b highlight back.
+    if (gen === this.gen && this.built && this.view === 'question') this.setLabels('question', q);
   }
 
   /** Shows the idle map with the new row still locked, then opens it with confetti. */
@@ -345,7 +360,7 @@ export class FieldScene extends Phaser.Scene {
   private layoutIdle(open: Set<number>): void {
     this.view = 'idle';
     const s = this.model?.state;
-    for (const h of this.headers) h.setVisible(true);
+    this.setLabels('idle');
     for (let a = 1; a <= 9; a++) {
       const unlocked = open.has(a);
       const d = this.rows[a];
@@ -366,7 +381,7 @@ export class FieldScene extends Phaser.Scene {
   /** Bare soil everywhere except the a × b block; crops start hidden (scale 0) unless `grown`. */
   private layoutQuestion(q: Question, grown: boolean): void {
     this.view = 'question';
-    for (const h of this.headers) h.setVisible(false);
+    this.setLabels('question', q);
     const tex = ASSETS.crop[q.crop];
     for (let a = 1; a <= 9; a++) {
       for (let b = 1; b <= 9; b++) {
@@ -379,6 +394,33 @@ export class FieldScene extends Phaser.Scene {
           c.plot.setTexture(ASSETS.soil).setAlpha(1);
         }
       }
+    }
+  }
+
+  /**
+   * Label chips. idle: all normal. question: row a and column b bright, the rest dim.
+   * count: everything dim so the running totals stand out.
+   */
+  private setLabels(mode: 'idle' | 'question' | 'count', q?: Question): void {
+    const s = this.model?.state;
+    const open = new Set(unlockedRows(s?.unlocked ?? 1));
+    const apply = (chip: Chip, hi: boolean, alpha: number, textAlpha: number): void => {
+      chip.pill.clear();
+      if (hi) {
+        chip.pill.fillStyle(0xffd23f, 1).fillRoundedRect(chip.x - chip.w / 2, chip.y - chip.h / 2, chip.w, chip.h, 14)
+          .lineStyle(4, 0xff8a1f, 1).strokeRoundedRect(chip.x - chip.w / 2, chip.y - chip.h / 2, chip.w, chip.h, 14);
+      } else {
+        chip.pill.fillStyle(0xfff8e1, 0.92).fillRoundedRect(chip.x - chip.w / 2, chip.y - chip.h / 2, chip.w, chip.h, 14);
+      }
+      chip.pill.setAlpha(alpha);
+      chip.text.setAlpha(textAlpha * alpha);
+    };
+    for (let i = 1; i <= 9; i++) {
+      const rowHi = mode === 'question' && q?.a === i;
+      const colHi = mode === 'question' && q?.b === i;
+      const base = mode === 'idle' ? 1 : mode === 'count' ? 0.2 : 0.35;
+      apply(this.rowChips[i], rowHi, rowHi ? 1 : base, mode === 'idle' && !open.has(i) ? 0.45 : 1);
+      apply(this.colChips[i], colHi, colHi ? 1 : base, 1);
     }
   }
 
@@ -431,30 +473,22 @@ export class FieldScene extends Phaser.Scene {
     // field bed
     g.fillStyle(0x4f9a35, 1).fillRoundedRect(GRID_X - 4, GRID_Y - 1, 9 * CELL + 6, 9 * CELL + 4, 16);
     g.fillStyle(0x6cbf4a, 1).fillRoundedRect(GRID_X - 4, GRID_Y - 4, 9 * CELL + 6, 9 * CELL + 4, 16);
-    // header and label pills (idle map only)
-    const pills = this.add.graphics().setDepth(0);
-    pills.fillStyle(0xfff8e1, 0.92);
-    for (let i = 1; i <= 9; i++) {
-      const { x } = this.cellCenter(1, i);
-      pills.fillRoundedRect(x - 21, 5, 42, 42, 14);
-      const { y } = this.cellCenter(i, 1);
-      pills.fillRoundedRect(3, y - 22, 46, 44, 14);
-    }
-    this.headers.push(pills);
   }
 
   private buildGrid(): void {
     const head = textStyle(28, '#4a3a2a', '#ffffff', 0);
     for (let b = 1; b <= 9; b++) {
       const { x } = this.cellCenter(1, b);
-      this.headers.push(this.add.text(x, 27, String(b), head).setOrigin(0.5).setDepth(1));
+      const pill = this.add.graphics().setDepth(0.5);
+      const text = this.add.text(x, 27, String(b), head).setOrigin(0.5).setDepth(1);
+      this.colChips[b] = { pill, text, x, y: 26, w: 42, h: 42 };
     }
     for (let a = 1; a <= 9; a++) {
       this.cells[a] = [];
       const { y } = this.cellCenter(a, 1);
       const label = this.add.text(26, y + 1, `${a}×`, textStyle(26, '#4a3a2a', '#ffffff', 0))
         .setOrigin(0.5).setDepth(1);
-      this.headers.push(label);
+      this.rowChips[a] = { pill: this.add.graphics().setDepth(0.5), text: label, x: 26, y, w: 46, h: 44 };
       const lock = this.add.image(GRID_X + 4.5 * CELL, y, ASSETS.lock).setScale(INV).setDepth(4).setVisible(false);
       const glow = this.add.graphics().setDepth(1.5).setVisible(false);
       const count = this.add.text(0, 0, '', textStyle(44, '#ffffff', '#d9480f', 10))
