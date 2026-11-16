@@ -1,5 +1,6 @@
 import { CROP_BY_ROW, type CropId } from '../core/levels';
 import type { PageStatus } from '../core/ranch';
+import { feedIcon } from './feedIcon';
 import { checkBuy, lockHint, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
 import {
   PRODUCT_EMOJI, SPECIES, SPECIES_ORDER,
@@ -34,37 +35,37 @@ export interface RanchUi {
  */
 const GHOST_CLICK_MS = 350;
 
-/** Per species: page emoji, animal name, house name, feed emoji (the toolbar's 🌾 button). */
-export const SPECIES_UI: Record<SpeciesId, { emoji: string; name: string; house: string; feed: string }> = {
-  chicken: { emoji: '🐔', name: '雞', house: '雞舍', feed: '🌾' },
-  cow: { emoji: '🐄', name: '牛', house: '牛棚', feed: '🌽' },
-  pig: { emoji: '🐖', name: '豬', house: '豬圈', feed: '🥔' },
-  sheep: { emoji: '🐑', name: '綿羊', house: '羊圈', feed: '🍅' },
-  llama: { emoji: '🦙', name: '羊駝', house: '羊駝屋', feed: '🎃' },
+/** Per species: page emoji, animal name, house name. */
+export const SPECIES_UI: Record<SpeciesId, { emoji: string; name: string; house: string }> = {
+  chicken: { emoji: '🐔', name: '雞', house: '雞舍' },
+  cow: { emoji: '🐄', name: '牛', house: '牛棚' },
+  pig: { emoji: '🐖', name: '豬', house: '豬圈' },
+  sheep: { emoji: '🐑', name: '綿羊', house: '羊圈' },
+  llama: { emoji: '🦙', name: '羊駝', house: '羊駝屋' },
 };
 
 const OVERVIEW_TITLE = '🗺️ 我的牧場';
 
 const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: 'treat' | 'medicine' }[] = [
   { tool: 'hand', icon: '✋', label: '摸摸' },
-  { tool: 'feed', icon: '🌾', label: '飼料' },
+  { tool: 'feed', icon: '', label: '飼料' },
   { tool: 'brush', icon: '🪮', label: '刷毛' },
   { tool: 'treat', icon: '🍪', label: '零食', supply: 'treat' },
   { tool: 'medicine', icon: '💊', label: '藥', supply: 'medicine' },
 ];
 
-const SHARED: readonly { item: ShopItemId; icon: string; name: string }[] = [
+const SHARED: readonly { item: ShopItemId; icon: string | HTMLElement; name: string }[] = [
   { item: 'medicine', icon: '💊', name: `藥 ×${SUPPLY_AMOUNT.medicine}` },
   { item: 'treat', icon: '🍪', name: `零食 ×${SUPPLY_AMOUNT.treat}` },
 ];
 
-function speciesItems(sp: SpeciesId): { item: ShopItemId; icon: string; name: string }[] {
+function speciesItems(sp: SpeciesId): { item: ShopItemId; icon: string | HTMLElement; name: string }[] {
   const d = SPECIES[sp];
   const ui = SPECIES_UI[sp];
   return [
     { item: d.house, icon: '🏠', name: ui.house },
     { item: sp, icon: ui.emoji, name: ui.name },
-    { item: d.feed, icon: ui.feed, name: `飼料 ×${SUPPLY_AMOUNT[d.feed]}` },
+    { item: d.feed, icon: feedIcon(ui.emoji), name: `飼料 ×${SUPPLY_AMOUNT[d.feed]}` },
   ];
 }
 
@@ -131,7 +132,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   for (const t of TOOLS) {
     const btn = button('tool', '', t.label);
     btn.dataset.tool = t.tool;
-    const icon = el('span', 'tool-icon', t.icon);
+    const icon = el('span', 'tool-icon', typeof t.icon === 'string' ? t.icon : '');
     btn.append(icon);
     const count = t.tool === 'feed' || t.supply ? el('b', 'tool-count', '0') : null;
     if (count) btn.append(count);
@@ -211,13 +212,15 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
 
   /** Rows are built once per item and updated in place (a rebuild would drop the purchase stars). */
   const rows = new Map<ShopItemId, Row>();
-  function rowOf(it: { item: ShopItemId; icon: string; name: string }): Row {
+  function rowOf(it: { item: ShopItemId; icon: string | HTMLElement; name: string }): Row {
     let r = rows.get(it.item);
     if (r) return r;
     const row = el('div', 'shop-row');
     row.dataset.item = it.item;
     const what = el('div', 'shop-what');
-    what.append(el('span', 'shop-icon', it.icon), el('span', 'shop-name', it.name));
+    const ic = el('span', 'shop-icon', typeof it.icon === 'string' ? it.icon : '');
+    if (typeof it.icon !== 'string') ic.append(it.icon);
+    what.append(ic, el('span', 'shop-name', it.name));
     const price = el('div', 'price');
     const btn = button('buy', '買');
     btn.addEventListener('click', () => {
@@ -253,7 +256,10 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
         const d = SPECIES[sp];
         const n = s.ranch.supplies[d.feed];
         const noHouse = !s.ranch.houses.some(h => h.kind === d.house);
-        icon.textContent = SPECIES_UI[sp].feed;
+        if (icon.dataset.sp !== sp) {
+          icon.dataset.sp = sp;
+          icon.replaceChildren(feedIcon(SPECIES_UI[sp].emoji));
+        }
         count.textContent = String(n);
         // Grey but still tappable (it opens the shop), so a class, not the disabled attribute.
         btn.classList.toggle('nohouse', noHouse);

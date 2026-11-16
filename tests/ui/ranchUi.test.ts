@@ -73,7 +73,8 @@ describe('ranch toolbar', () => {
     ui.onTool(t => picked.push(t));
     const feed = toolBtn(root, 'feed');
     expect(feed.classList.contains('empty')).toBe(false);
-    expect(feed.textContent).toContain('🌾');
+    expect(feed.querySelector('.feed-sack-emoji')!.textContent).toBe('🐔');
+    expect(feed.textContent).not.toContain('🌾');
     expect(feed.textContent).toContain('5');
     feed.click();
     expect(picked).toEqual(['feed']);
@@ -82,13 +83,14 @@ describe('ranch toolbar', () => {
     expect(shopOpen(root)).toBe(false);
   });
 
-  it('on the cow page the feed button shows 🌽 and the cow feed count', () => {
+  it('on the cow page the feed button shows a 🐄 sack and the cow feed count', () => {
     const s = rich(st());
     s.ranch.supplies.feed = 3;
     s.ranch.supplies.feedCow = 7;
     const { root, ui } = setup(s, 1);
     const feed = toolBtn(root, 'feed');
-    expect(feed.textContent).toContain('🌽');
+    expect(feed.querySelector('.feed-sack-emoji')!.textContent).toBe('🐄');
+    expect(feed.textContent).not.toContain('🌽');
     expect(feed.textContent).toContain('7');
     expect(feed.classList.contains('nohouse')).toBe(true); // no barn yet
     buy(s, 'barn', T0, rng);
@@ -96,8 +98,18 @@ describe('ranch toolbar', () => {
     expect(feed.classList.contains('nohouse')).toBe(false);
     expect(feed.classList.contains('empty')).toBe(false);
     ui.setPage(2, pageStatus(s.ranch));
-    expect(feed.textContent).toContain('🥔');
+    expect(feed.querySelector('.feed-sack-emoji')!.textContent).toBe('🐖');
+    expect(feed.textContent).not.toContain('🥔');
     expect(feed.classList.contains('nohouse')).toBe(true);
+  });
+
+  it('the shop feed rows show the species sack, not a crop', () => {
+    const { root, ui } = setup(rich(st()));
+    ui.setPage(1, pageStatus(st().ranch));
+    toolBtn(root, 'shop').click();
+    const cow = row(root, 'feedCow')!.querySelector('.shop-icon')!;
+    expect(cow.querySelector('.feed-sack-emoji')!.textContent).toBe('🐄');
+    expect(cow.textContent).not.toContain('🌽');
   });
 
   it('the hand and brush never run out', () => {
