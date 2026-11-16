@@ -551,6 +551,11 @@ export function startApp(root: HTMLElement): void {
   ranchUi.onPage(i => goPage(i));
   ranchUi.onOverview(toggleOverview);
   ranchUi.onGoField(() => layout.setTab('field'));
+  /** The care view of a species' pen, unless it is already showing (the shop can open elsewhere). */
+  function showLotOf(sp: SpeciesId): void {
+    if (ranchOverview || ranchPage !== SPECIES[sp].lot) goPage(SPECIES[sp].lot);
+  }
+
   ranchUi.onBuy(item => {
     const res = buy(game.state, item, clock.now(), rng);
     ranchChanged();
@@ -562,8 +567,11 @@ export function startApp(root: HTMLElement): void {
     ranchUi.celebrate(item);
     layout.updateHud(game.state);
     if ((HOUSE_KINDS as readonly string[]).includes(item)) {
-      ranchUi.openShop(speciesOfHouse(item as HouseKind)); // next step: an animal to live in it
+      const sp = speciesOfHouse(item as HouseKind);
+      showLotOf(sp); // e.g. a coop bought from the garden page: go and see it
+      ranchUi.openShop(sp); // next step: an animal to live in it
     } else if ((SPECIES_ORDER as readonly string[]).includes(item)) {
+      showLotOf(item as SpeciesId);
       ranchUi.closeShop(); // let the child watch the new animal arrive
       if (res.animalId) {
         ranchScene.fx(res.animalId, 'jump');

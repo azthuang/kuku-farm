@@ -3,7 +3,6 @@ import Phaser from 'phaser';
 import { HUNGRY_SHOW_AT, MOOD_HAPPY, pageStatus, type Animal, type House, type PageStatus, type RanchState } from '../core/ranch';
 import { FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfLot, type HouseKind, type SpeciesId } from '../core/species';
 import type { Garden } from '../core/garden';
-import { CROP_BY_ROW } from '../core/levels';
 import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets';
 import { VIEW } from './FieldScene';
 import { HOUSE_ART, dashedRect, drawGardenPlot, drawRun, gardenBeds, hash, seeded } from './ranchArt';
