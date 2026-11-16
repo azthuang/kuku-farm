@@ -72,6 +72,7 @@ export class FieldScene extends Phaser.Scene {
   private sway = false;
   /** Bumped on every view switch; stale animation cleanups are skipped. */
   private gen = 0;
+  private timers = new Set<Phaser.Time.TimerEvent>();
   private pending = new Set<() => void>();
   private plantDone: (() => void) | null = null;
   private plus!: Text;
@@ -101,8 +102,10 @@ export class FieldScene extends Phaser.Scene {
 
     this.built = true;
     if (this.model && this.model.mode !== null && this.planted) {
-      this.reset();
-      this.layoutQuestion(this.planted, true);
+      const q = this.planted;
+      this.reset(); // clears this.planted
+      this.planted = q;
+      this.layoutQuestion(q, true);
       this.sway = true;
     } else if (this.model) {
       this.render(this.model);
@@ -251,7 +254,7 @@ export class FieldScene extends Phaser.Scene {
         onComplete: done,
       });
       cells.forEach((c, i) => {
-        this.time.delayedCall(350 + i * 110, () => {
+        this.delayed(350 + i * 110, () => {
           c.plot.setTexture(ASSETS.tilled).setAlpha(1);
           this.setStars(c, starsOf(this.model?.state.mastery[cellKey(c.a, c.b)] ?? 0), true);
           this.tweens.add({ targets: c.plot, scaleX: INV * 1.12, scaleY: INV * 0.85, duration: 110, yoyo: true });
@@ -292,6 +295,15 @@ export class FieldScene extends Phaser.Scene {
     });
   }
 
+  /** delayedCall that reset() can always cancel. */
+  private delayed(ms: number, fn: () => void): void {
+    const ev = this.time.delayedCall(ms, () => {
+      this.timers.delete(ev);
+      fn();
+    });
+    this.timers.add(ev);
+  }
+
   /** Skips the rest of the planting animation (an answer came in early). */
   private finishPlant(): void {
     this.plantDone?.();
@@ -305,6 +317,9 @@ export class FieldScene extends Phaser.Scene {
     this.plantDone = null;
     this.tweens.killAll();
     this.time.removeAllEvents();
+    // removeAllEvents() misses events still pending insertion (added this same frame).
+    for (const ev of this.timers) ev.remove(false);
+    this.timers.clear();
     this.sway = false;
     this.planted = null;
     for (let a = 1; a <= 9; a++) {

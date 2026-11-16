@@ -17,6 +17,8 @@ npm run build  # 建置到 dist/
 2. 到儲存庫 **Settings → Pages → Source**，選擇 **GitHub Actions**。
 3. 之後每次 push 到 `main`，`.github/workflows/deploy.yml` 會自動測試、建置並發布。
 
+存檔已升到 v2，舊版程式會把 v2 當成損壞檔；不要把 main 回退到這次合併之前，有問題請往前修（fix forward）。
+
 注意：免費帳號的 GitHub Pages 需要儲存庫是公開（public）的。若有 GitHub Pro，也可以保留私有儲存庫、只公開網站。
 
 網址格式：`https://<帳號>.github.io/kuku-farm/`

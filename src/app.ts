@@ -238,6 +238,10 @@ export function startApp(root: HTMLElement): void {
   });
 
   layout.onExport(() => {
+    if (readOnly) {
+      layout.toast('請重新整理頁面'); // in-memory state is blank: don't export it over the real save
+      return;
+    }
     save();
     const blob = new Blob([serialize(game.state)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
