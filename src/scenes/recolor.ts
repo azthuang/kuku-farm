@@ -100,10 +100,3 @@ export const PALETTES: Record<SpeciesId, Record<string, Swaps>> = {
     ],
   },
 };
-
-/** The chicken coats under the scene's English keys (RanchScene still uses these). */
-export const CHICKEN_PALETTES: Record<'white' | 'brown' | 'black', Swaps> = {
-  white: PALETTES.chicken['白'],
-  brown: PALETTES.chicken['棕'],
-  black: PALETTES.chicken['黑'],
-};

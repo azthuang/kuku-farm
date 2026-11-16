@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
-import { CHICKEN_PALETTES, PALETTES, recolor } from '../../src/scenes/recolor';
+import { PALETTES, recolor } from '../../src/scenes/recolor';
 import { SPECIES, type SpeciesId } from '../../src/core/species';
 
 function px(rgb: number, a = 255): number[] {
@@ -88,10 +88,6 @@ describe('PALETTES', () => {
   const lum = (c: number) => ((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11;
   const ids = Object.keys(SPECIES) as SpeciesId[];
 
-  it('chicken compat export matches PALETTES.chicken', () => {
-    expect(CHICKEN_PALETTES.brown).toBe(PALETTES.chicken['棕']);
-  });
-
   it.each(ids)('%s: has exactly the species colors, the first untouched', (id) => {
     expect(Object.keys(PALETTES[id])).toEqual([...SPECIES[id].colors]);
     expect(PALETTES[id][SPECIES[id].colors[0]]).toEqual([]);
@@ -112,29 +108,5 @@ describe('PALETTES', () => {
       const tos = [...body].sort((a, b) => lum(b[0]) - lum(a[0])).map(([, t]) => lum(t));
       for (let i = 1; i < tos.length; i++) expect(tos[i]).toBeLessThan(tos[i - 1]);
     });
-  });
-});
-
-describe('CHICKEN_PALETTES', () => {
-  const colors = pngColors('public/assets/ranch/chicken_walk.png');
-
-  it('white is the untouched original', () => {
-    expect(CHICKEN_PALETTES.white).toEqual([]);
-  });
-
-  it.each(['brown', 'black'] as const)('%s: every from exists in the sprite and none repeats', (name) => {
-    const froms = CHICKEN_PALETTES[name].map(([f]) => f);
-    expect(froms.length).toBeGreaterThan(0);
-    for (const f of froms) expect(colors.has(f)).toBe(true);
-    expect(new Set(froms).size).toBe(froms.length);
-  });
-
-  it('keeps the light to dark ordering of the feathers', () => {
-    const lum = (c: number) => ((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11;
-    for (const name of ['brown', 'black'] as const) {
-      const sorted = [...CHICKEN_PALETTES[name]].sort((a, b) => lum(b[0]) - lum(a[0]));
-      const tos = sorted.map(([, t]) => lum(t));
-      for (let i = 1; i < tos.length; i++) expect(tos[i]).toBeLessThan(tos[i - 1]);
-    }
   });
 });

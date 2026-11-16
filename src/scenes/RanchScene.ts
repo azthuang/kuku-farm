@@ -1389,6 +1389,7 @@ export class RanchScene extends Phaser.Scene {
   private onUpOutside(p: Phaser.Input.Pointer): void {
     if (!this.built || !this.downActive) return;
     this.downActive = false;
+    if (p.wasCanceled) return;
     const dx = p.x - this.downX;
     const dy = p.y - this.downY;
     if (!this.isOverview && Math.abs(dx) >= SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.4) {

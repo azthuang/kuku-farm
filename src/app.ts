@@ -310,6 +310,7 @@ export function startApp(root: HTMLElement): void {
     epoch++;
     busy = false;
     speech.cancel();
+    ranchUi.closeShop(); // the shop may be open on the old ranch's species
     game = new Game(r.state, clock, rng);
     readOnly = false; // importing is an explicit choice to use this progress: saving resumes
     speech.setEnabled(game.state.settings.speech);
@@ -514,7 +515,7 @@ export function startApp(root: HTMLElement): void {
     onLockedLot: kind => {
       const hint = lockText(game.state, kind);
       if (hint) layout.toast(`🔒 ${hint}`);
-      sfx.play('nope');
+      sfx.play('collect'); // a gentle cue: this tap is a hint, not a mistake
     },
     onPageTap: i => goPage(i),
     onSwipe: d => {
@@ -524,7 +525,8 @@ export function startApp(root: HTMLElement): void {
     onTag: id => {
       nextName(game.state.ranch, id); // the scene pops the tag when the name changes
       ranchChanged();
-      sfx.play('cluck');
+      const a = game.state.ranch.animals.find(x => x.id === id);
+      sfx.play(a ? voiceOf(a.species) : 'cluck');
     },
     onIdleVoice: id => {
       // The scene only runs on the ranch tab; the guard also covers a hidden page.
