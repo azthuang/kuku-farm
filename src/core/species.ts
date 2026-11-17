@@ -160,14 +160,17 @@ export interface PetDef {
 export const PETS: Record<PetKind, PetDef> = {
   dog: {
     kind: 'dog', emoji: '🐕', price: { egg: 30, milk: 15, truffle: 10 },
-    snack: 'bone', snackPrice: { egg: 6, truffle: 2 },
+    // Snacks take products (their lasting use) and a pile of crops: the late game's crop sink. The
+    // bone's crops are ones the dog's owner no longer saves for (the next goals need 🍓🍅🍇🎃🍉).
+    snack: 'bone', snackPrice: { egg: 6, truffle: 2, corn: 100, potato: 80 },
     // breeds, in the sprite sheet's column order (a breed reads at a glance; a plain coat did not)
     colors: ['柴犬', '大麥町', '柯基', '邊境牧羊犬'],
     names: ['旺財', '小白', '豆豆', '來福', '阿黃', '黑輪'],
   },
   cat: {
     kind: 'cat', emoji: '🐈', price: { milk: 20, yarn: 10, fluff: 10 },
-    snack: 'fish', snackPrice: { milk: 3, yarn: 2, fluff: 2 },
+    // the cat comes late, when grapes and watermelons pile up with little else to buy
+    snack: 'fish', snackPrice: { milk: 3, yarn: 2, fluff: 2, grape: 100, watermelon: 100 },
     colors: ['橘虎斑', '三花貓', '賓士貓', '暹羅貓'],
     names: ['咪咪', '橘子', '小花', '麻糬', '湯圓', '芝麻'],
   },

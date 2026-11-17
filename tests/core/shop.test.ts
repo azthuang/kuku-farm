@@ -265,15 +265,27 @@ describe('shop', () => {
       expect(once.some((x) => x[p] !== undefined)).toBe(true);
       expect(again.some((x) => x[p] !== undefined), p).toBe(true);
     }
-    // pets and snacks are paid in products only
-    for (const p of [...once, ...again]) {
-      for (const k of Object.keys(p)) expect(['egg', 'milk', 'truffle', 'yarn', 'fluff']).toContain(k);
+    const PRODUCTS = ['egg', 'milk', 'truffle', 'yarn', 'fluff'];
+    // pets are paid in products only
+    for (const p of once) for (const k of Object.keys(p)) expect(PRODUCTS).toContain(k);
+    // snacks take products and a pile of crops (the late game's crop sink): 100+ crops a pack
+    for (const p of again) {
+      const crops = Object.entries(p).filter(([k]) => !PRODUCTS.includes(k));
+      expect(crops.reduce((a, [, v]) => a + (v ?? 0), 0)).toBeGreaterThanOrEqual(180);
     }
+    // the bone never takes a crop the sheep or llama still need (the dog comes before them)
+    const later = new Set<string>();
+    for (const sp of ['sheep', 'llama'] as const) {
+      for (const k of Object.keys(SPECIES[sp].housePrice)) later.add(k);
+      for (const k of Object.keys(SPECIES[sp].animalPrice(0))) later.add(k);
+    }
+    for (const k of Object.keys(PETS.dog.snackPrice)) expect(later.has(k), k).toBe(false);
   });
 
   it('one dog and one cat; snacks only once that pet lives here; a snack is x3', () => {
     const s = rich(st());
     for (const k of Object.keys(s.ranch.products) as (keyof typeof s.ranch.products)[]) s.ranch.products[k] = 100;
+    for (const k of Object.keys(s.inventory) as (keyof typeof s.inventory)[]) s.inventory[k] = 900;
     expect(checkBuy(s, 'bone')).toEqual({ ok: false, reason: 'need-pet' });
     expect(priceOf(s, 'dog')).toEqual({ egg: 30, milk: 15, truffle: 10 });
     const r = buy(s, 'dog', 0, () => 0);
@@ -285,10 +297,12 @@ describe('shop', () => {
     buy(s, 'bone', 0, () => 0);
     expect(s.ranch.supplies.bone).toBe(3);
     expect(s.ranch.products).toMatchObject({ egg: 64, truffle: 88 });
+    expect(s.inventory).toMatchObject({ corn: 800, potato: 820 });
     expect(buy(s, 'cat', 0, () => 0.99).ok).toBe(true);
     expect(s.ranch.pets[1]).toMatchObject({ kind: 'cat', color: PETS.cat.colors[3] });
     expect(buy(s, 'fish', 0, () => 0).ok).toBe(true);
     expect(s.ranch.supplies.fish).toBe(3);
+    expect(s.inventory).toMatchObject({ grape: 800, watermelon: 800 });
     // pets do not count toward the 12-animal limit
     expect(s.ranch.animals).toHaveLength(0);
     // the name tag cycles a pet's name like an animal's
