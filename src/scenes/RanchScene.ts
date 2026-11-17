@@ -56,6 +56,12 @@ interface Look {
   big: boolean;
   hop: number;
   shadow: string;
+  /**
+   * Frame px to move the shadow up (negative) per direction (up, left, down, right), for a species
+   * that borrows another's shadow: the pig and the sheep stand shorter than the llama they borrow
+   * it from, so without this their side-view shadow floats below the feet.
+   */
+  shadowY?: readonly [number, number, number, number];
   item: number;
 }
 
@@ -73,12 +79,12 @@ const LOOK: Record<SpeciesId, Look> = {
   pig: {
     frame: 128, scale: 2, feet: 84, body: 30, hit: 62, tag: 102, tagLying: 68, halfW: 64, below: 16,
     sickX: 1.12, sickY: 0.62, sickTilt: 6, speed: [30, 42], walkFps: 7, eatFps: 6, big: true, hop: 18,
-    shadow: 'llama-shadow', item: 34,
+    shadow: 'llama-shadow', shadowY: [-3, -8, -1, -8], item: 34,
   },
   sheep: {
     frame: 128, scale: 2, feet: 83, body: 38, hit: 64, tag: 108, tagLying: 72, halfW: 60, below: 18,
     sickX: 1.12, sickY: 0.62, sickTilt: 6, speed: [30, 42], walkFps: 7, eatFps: 6, big: true, hop: 18,
-    shadow: 'llama-shadow', item: 34,
+    shadow: 'llama-shadow', shadowY: [-5, -10, -4, -10], item: 34,
   },
   llama: {
     frame: 128, scale: 2, feet: 91, body: 64, hit: 74, tag: 156, tagLying: 100, halfW: 62, below: 10,
@@ -1375,6 +1381,7 @@ export class RanchScene extends Phaser.Scene {
     const dir = Math.floor(Math.random() * 4);
     const origin = look.feet / look.frame;
     const shadow = this.add.sprite(0, 0, look.shadow, dir).setOrigin(0.5, origin).setScale(look.scale);
+    shadow.setY((look.shadowY?.[dir] ?? 0) * look.scale);
     const body = this.add.sprite(0, 0, TEX.sheet(sp, 'walk', coat), dir * 4).setOrigin(0.5, origin).setScale(look.scale);
     const box = this.add.container(0, 0, [shadow, body]);
 
@@ -1560,7 +1567,8 @@ export class RanchScene extends Phaser.Scene {
       .setScale(look.scale * look.sickX, look.scale * look.sickY)
       .setAngle(side === LEFT ? -look.sickTilt : look.sickTilt)
       .setPosition(0, 2);
-    v.shadow.setFrame(side).setScale(look.scale * 1.1, look.scale);
+    this.faceShadow(v, side);
+    v.shadow.setScale(look.scale * 1.1, look.scale);
   }
 
   /** Still rest pose for the current state: lying when sick, else standing on the idle frame. */
@@ -1570,7 +1578,8 @@ export class RanchScene extends Phaser.Scene {
     } else {
       this.stand(v);
       v.body.setPosition(0, 0).setAngle(0);
-      v.shadow.setFrame(v.dir).setScale(v.look.scale);
+      this.faceShadow(v, v.dir);
+      v.shadow.setScale(v.look.scale);
     }
   }
 
@@ -1637,7 +1646,12 @@ export class RanchScene extends Phaser.Scene {
     v.body.setScale(v.look.scale);
     v.body.anims.play(TEX.anim(v.sp, v.coat, 'walk', v.dir), true);
     v.body.anims.timeScale = v.starving ? 0.55 : 1;
-    v.shadow.setFrame(v.dir);
+    this.faceShadow(v, v.dir);
+  }
+
+  /** The shadow frame for a direction, moved to sit under that view's feet. */
+  private faceShadow(v: AnimalView, dir: number): void {
+    v.shadow.setFrame(dir).setY((v.look.shadowY?.[dir] ?? 0) * v.look.scale);
   }
 
   /** Plays the eat animation for the current direction: big species start with the head going down. */
