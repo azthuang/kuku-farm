@@ -123,7 +123,7 @@ const KIND_OF_LOT: Readonly<Record<number, HouseKind>> = Object.fromEntries(
 const HOUSE_KINDS_IN_ORDER: readonly HouseKind[] = SPECIES_ORDER.map(s => SPECIES[s].house);
 
 /** Animals are y-sorted within [animal, animal + 0.18]; items sit above them so none is ever hidden. */
-const DEPTH = { grass: 0, water: 0.4, scenery: 0.5, lot: 1, house: 2, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
+const DEPTH = { grass: 0, water: 0.4, scenery: 0.5, lot: 1, house: 2, ground: 5, animal: 10, tag: 30, badge: 35, fx: 40, fly: 50 };
 
 const TEX = {
   src: (sp: SpeciesId, kind: 'walk' | 'eat') => `${sp}-${kind}-src`,
@@ -1468,7 +1468,7 @@ export class RanchScene extends Phaser.Scene {
     this.tweens.add({ targets: v.icon, scaleX: s, scaleY: s, duration: 240, ease: 'Back.Out' });
   }
 
-  /** Waiting products (🥚 🥛 🍄 🧶 🧸) lie on the ground beside the animal and bob gently. */
+  /** Waiting products (🥚 🥛 🍄 🧶 🧸) lie still on the ground beside the animal, like poop. */
   private syncItems(v: AnimalView, a: Animal, hv: HouseView): void {
     const want = clamp(Math.floor(a.waiting), 0, MAX_ITEMS_SHOWN);
     if (v.items.length < want) {
@@ -1481,14 +1481,11 @@ export class RanchScene extends Phaser.Scene {
         const y = last ? (last.getData('baseY') as number) + (v.items.length % 2 === 0 ? -8 : 8) : v.box.y + 2;
         const cx = clamp(x, hv.run.x0 - 10, hv.run.x1 + 10);
         const cy = clamp(y, hv.run.y0 - 6, hv.run.y1 + 6);
-        const img = this.emoji(cx, cy, emoji, size).setDepth(DEPTH.item).setData('baseY', cy);
+        // Laid on the ground like poop: it stays still, under the animals walking past.
+        const img = this.emoji(cx, cy, emoji, size).setDepth(DEPTH.ground).setData('baseY', cy);
         const s = img.scaleX;
         img.setScale(0);
         this.tweens.add({ targets: img, scaleX: s, scaleY: s, duration: 280, ease: 'Back.Out' });
-        this.tweens.add({
-          targets: img, y: cy - 5, duration: 520, ease: 'Sine.InOut', yoyo: true, repeat: -1,
-          delay: Math.floor(Math.random() * 600), repeatDelay: 900,
-        });
         v.items.push({ img, flying: false });
         last = img;
       }
