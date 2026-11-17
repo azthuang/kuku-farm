@@ -3,26 +3,26 @@ import type { Rng } from './clock';
 import type { GameState } from './state';
 import { settle, MOOD_START, type Animal, type RanchState } from './ranch';
 import {
-  SPECIES, SPECIES_ORDER, speciesOfHouse,
-  type HouseKind, type Price, type ProductId, type SpeciesId, type SupplyId,
+  PETS, PET_KINDS, SPECIES, SPECIES_ORDER, speciesOfHouse,
+  type HouseKind, type PetKind, type PetSnackId, type Price, type ProductId, type SpeciesId, type SupplyId,
 } from './species';
 
 export type { Price };
-export type ShopItemId = HouseKind | SpeciesId | SupplyId;
+export type ShopItemId = HouseKind | SpeciesId | SupplyId | PetKind;
 export type ShopState = GameState;
 export type CheckResult =
   | { ok: true }
-  | { ok: false; reason: 'short' | 'full' | 'need-house' | 'locked' };
+  | { ok: false; reason: 'short' | 'full' | 'need-house' | 'locked' | 'need-pet' };
 
 export const MAX_ANIMALS = 12;
 export const MAX_HOUSES = 5;
 export const SUPPLY_CAP = 99;
 export const SUPPLY_AMOUNT: Record<SupplyId, number> = {
-  feed: 5, feedCow: 5, feedPig: 5, feedSheep: 5, feedLlama: 5, treat: 3, medicine: 1,
+  feed: 5, feedCow: 5, feedPig: 5, feedSheep: 5, feedLlama: 5, treat: 3, medicine: 1, bone: 3, fish: 3,
 };
 
 const SHARED_PRICES: Record<'treat' | 'medicine', Price> = {
-  treat: { carrot: 20 },
+  treat: { carrot: 60, corn: 40 },
   medicine: { wheat: 40, carrot: 20 },
 };
 
@@ -30,7 +30,9 @@ type Kind =
   | { t: 'house'; sp: SpeciesId }
   | { t: 'animal'; sp: SpeciesId }
   | { t: 'feed'; sp: SpeciesId }
-  | { t: 'shared'; id: 'treat' | 'medicine' };
+  | { t: 'shared'; id: 'treat' | 'medicine' }
+  | { t: 'pet'; kind: PetKind }
+  | { t: 'snack'; kind: PetKind; id: PetSnackId };
 
 function classify(item: ShopItemId): Kind {
   for (const sp of SPECIES_ORDER) {
@@ -38,6 +40,10 @@ function classify(item: ShopItemId): Kind {
     if (item === d.house) return { t: 'house', sp };
     if (item === sp) return { t: 'animal', sp };
     if (item === d.feed) return { t: 'feed', sp };
+  }
+  for (const kind of PET_KINDS) {
+    if (item === kind) return { t: 'pet', kind };
+    if (item === PETS[kind].snack) return { t: 'snack', kind, id: PETS[kind].snack };
   }
   return { t: 'shared', id: item as 'treat' | 'medicine' };
 }
@@ -51,6 +57,8 @@ export function priceOf(state: ShopState, item: ShopItemId): Price {
   if (k.t === 'house') return { ...SPECIES[k.sp].housePrice };
   if (k.t === 'animal') return { ...SPECIES[k.sp].animalPrice(countOf(state.ranch, k.sp)) };
   if (k.t === 'feed') return { ...SPECIES[k.sp].feedPrice };
+  if (k.t === 'pet') return { ...PETS[k.kind].price };
+  if (k.t === 'snack') return { ...PETS[k.kind].snackPrice };
   return { ...SHARED_PRICES[k.id] };
 }
 
@@ -97,6 +105,7 @@ export function lockHint(
 
 function supplyOf(k: Kind): SupplyId | null {
   if (k.t === 'feed') return SPECIES[k.sp].feed;
+  if (k.t === 'snack') return k.id;
   return k.t === 'shared' ? k.id : null;
 }
 
@@ -109,8 +118,11 @@ export function checkBuy(state: ShopState, item: ShopItemId): CheckResult {
   } else if (k.t === 'animal') {
     if (!hasHouse(r, k.sp)) return { ok: false, reason: 'need-house' };
     if (r.animals.length >= MAX_ANIMALS || !openHouse(r, k.sp)) return { ok: false, reason: 'full' };
+  } else if (k.t === 'pet') {
+    if (r.pets.some((p) => p.kind === k.kind)) return { ok: false, reason: 'full' };
   } else {
     if (k.t === 'feed' && !hasHouse(r, k.sp)) return { ok: false, reason: 'need-house' };
+    if (k.t === 'snack' && !r.pets.some((p) => p.kind === k.kind)) return { ok: false, reason: 'need-pet' };
     const id = supplyOf(k)!;
     if (r.supplies[id] + SUPPLY_AMOUNT[id] > SUPPLY_CAP) return { ok: false, reason: 'full' };
   }
@@ -142,7 +154,7 @@ function pickFrom<T>(list: readonly T[], rng: Rng): T {
 
 export function buy(
   state: ShopState, item: ShopItemId, now: number, rng: Rng,
-): CheckResult & { animalId?: string } {
+): CheckResult & { animalId?: string; petId?: string } {
   const r = state.ranch;
   settle(r, now);
   const check = checkBuy(state, item);
@@ -169,12 +181,24 @@ export function buy(
     r.animals.push(animal);
     return { ok: true, animalId: animal.id };
   }
+  if (k.t === 'pet') {
+    const d = PETS[k.kind];
+    const p = { id: `p${r.nextId++}`, kind: k.kind, name: pickFrom(d.names, rng), color: pickFrom(d.colors, rng) };
+    r.pets.push(p);
+    return { ok: true, petId: p.id };
+  }
   const id = supplyOf(k)!;
   r.supplies[id] += SUPPLY_AMOUNT[id];
   return { ok: true };
 }
 
 export function nextName(r: RanchState, animalId: string): void {
+  const pet = r.pets.find((x) => x.id === animalId);
+  if (pet) {
+    const names = PETS[pet.kind].names;
+    pet.name = names[(names.indexOf(pet.name) + 1) % names.length];
+    return;
+  }
   const a = r.animals.find((x) => x.id === animalId);
   if (!a) return;
   const names = SPECIES[a.species].names;

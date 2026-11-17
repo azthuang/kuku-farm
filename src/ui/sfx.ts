@@ -1,6 +1,6 @@
 import type { SpeciesId } from '../core/species';
 
-export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope' | 'moo' | 'oink' | 'baa' | 'hum';
+export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope' | 'moo' | 'oink' | 'baa' | 'hum' | 'woof' | 'meow';
 
 const VOICES: Record<SpeciesId, SfxName> = { chicken: 'cluck', cow: 'moo', pig: 'oink', sheep: 'baa', llama: 'hum' };
 
@@ -143,6 +143,16 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
           break;
         case 'hum':
           blip(c, t, 250, 270, 0.6, 0.1, 'sine');
+          break;
+        case 'woof':
+          // two short, bright barks
+          blip(c, t, 420, 260, 0.09, 0.15, 'square');
+          blip(c, t + 0.16, 440, 270, 0.1, 0.15, 'square');
+          break;
+        case 'meow':
+          // a rising then falling mew
+          blip(c, t, 560, 820, 0.16, 0.11, 'triangle');
+          blip(c, t + 0.15, 820, 520, 0.24, 0.11, 'triangle');
           break;
         case 'collect':
           arp(c, t, [660, 880, 1175], 0.07, 0.16, 0.12);

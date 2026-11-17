@@ -101,10 +101,12 @@ describe('app-produced saves round trip', () => {
     const s = rich(now);
     const r = s.ranch;
     for (const sp of SPECIES_ORDER) {
+      for (const k of Object.keys(s.inventory) as (keyof GameState['inventory'])[]) s.inventory[k] = 999;
       expect(buy(s, SPECIES[sp].house, now, rnd).ok, sp).toBe(true);
       for (const p of PRODUCT_IDS) r.products[p] = 50;
       for (let i = 0; i < 2; i++) {
         now += 60_000;
+        for (const k of Object.keys(s.inventory) as (keyof GameState['inventory'])[]) s.inventory[k] = 999;
         expect(buy(s, sp, now, rnd).ok, sp).toBe(true);
       }
       expect(buy(s, SPECIES[sp].feed, now, rnd).ok).toBe(true);

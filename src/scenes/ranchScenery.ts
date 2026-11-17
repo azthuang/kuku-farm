@@ -53,6 +53,8 @@ export interface SceneryLayout {
   wheelFlow: { dx: number; dy: number };
   /** Straight stretches of open water (no bridge or wheel) where glints drift downstream. */
   flows: Segment[];
+  /** Where the dog and the cat lie down: the farmhouse door, the big tree, the mill by the stream. */
+  petRest: { spot: { x: number; y: number }; via: { x: number; y: number } }[];
 }
 
 const TILE = 32;
@@ -500,7 +502,15 @@ export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
 
   // At the wheel the stream runs east along the bend.
   const wheelFlow = { dx: 1, dy: 0 };
-  return { paths, pathHalf: PATH_HALF, props, clusters, river, riverHalf: RIVER_HALF, bridges, wheel, wheelFlow, flows };
+  // Resting spots: on the door path, on the open lawn just off the spine beside the big tree (the
+  // lawn by a path is kept clear of plants), and at the path's end by the mill.
+  const treeY = hero.y + 40;
+  const petRest = [
+    { spot: { x: house.x, y: doorY + 44 }, via: { x: house.x, y: doorY + 44 } },
+    { spot: { x: leftX - 46, y: treeY }, via: { x: leftX, y: treeY } },
+    { spot: { x: millEnd, y: rowY[0] }, via: { x: millEnd, y: rowY[0] } },
+  ];
+  return { paths, pathHalf: PATH_HALF, props, clusters, river, riverHalf: RIVER_HALF, bridges, wheel, wheelFlow, flows, petRest };
 }
 
 // ---------------------------------------------------------------- bake

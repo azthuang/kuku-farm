@@ -8,9 +8,11 @@ import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets
 import { VIEW } from './FieldScene';
 import { HOUSE_ART, dashedRect, drawGardenPlot, drawRun, gardenBeds, hash, seeded } from './ranchArt';
 import {
-  BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout, wheelFrameOrder,
+  BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout, wheelFrameOrder, type SceneryLayout,
 } from './ranchScenery';
 import { SCENERY_FRAMES } from './sceneryAtlas';
+import { RanchPets } from './ranchPets';
+import { buildRoamGraph } from './petRoam';
 import { PALETTES, recolor } from './recolor';
 
 /** World units per scenery pixel: 5 canvas pixels at camera zoom ASSET_RES, so every pixel stays square. */
@@ -171,6 +173,8 @@ export interface RanchHandlers {
   onSwipe(dir: -1 | 1): void;
   /** A healthy animal on screen makes its sound now and then (at most one every VOICE_MS). */
   onIdleVoice?(animalId: string): void;
+  /** The dog or the cat was tapped (its name tag goes to onTag). */
+  onPet?(petId: string): void;
 }
 
 /** What the app knows that the ranch state does not: which empty lots are locked, and by which crop. */
@@ -351,6 +355,7 @@ export class RanchScene extends Phaser.Scene {
   private animalList: AnimalView[] = [];
   private lots: LotView[] = [];
   private garden: GardenView | null = null;
+  private pets: RanchPets | null = null;
   /** The poop the child tapped last, removed first when that house's count drops. */
   private tappedPoop: Img | null = null;
   private pending = new Set<() => void>();
@@ -421,6 +426,7 @@ export class RanchScene extends Phaser.Scene {
     const scenery = `${import.meta.env.BASE_URL}assets/scenery/`;
     if (!this.textures.exists(TEX.atlas)) this.load.image(TEX.atlas, `${scenery}scenery.png`);
     if (!this.textures.exists(TEX.farmhouse)) this.load.image(TEX.farmhouse, `${scenery}farmhouse.png`);
+    RanchPets.preload(this, base);
   }
 
   create(): void {
@@ -439,7 +445,15 @@ export class RanchScene extends Phaser.Scene {
     }
     this.makeSceneryTextures();
 
-    this.buildScenery();
+    const layout = this.buildScenery();
+    // The dog and the cat walk the paths (clear of the world's edge) and rest by the house, tree and mill.
+    const W = SCENERY_WORLD;
+    this.pets = new RanchPets(this, buildRoamGraph(layout.paths, { x: W.x + 40, y: W.y + 40, w: W.w - 80, h: W.h - 80 }, layout.petRest), {
+      emoji: (x, y, e, size) => this.emoji(x, y, e, size),
+      font: FONT,
+      depth: { animal: DEPTH.animal, tag: DEPTH.tag, fx: DEPTH.fx },
+      resolution: ASSET_RES,
+    });
     for (const sp of SPECIES_ORDER) this.lots.push(this.buildLot(SPECIES[sp].lot, LOTS[SPECIES[sp].lot]));
     this.buildGarden(LOTS[FARM_LOT]);
     this.sparkles = this.add.particles(0, 0, ASSETS.sparkle, {
@@ -470,6 +484,7 @@ export class RanchScene extends Phaser.Scene {
     const dt = Math.min(delta, 100) / 1000;
     const list = this.animalList;
     for (let i = 0; i < list.length; i++) this.step(list[i], time, dt);
+    this.pets?.update(time, dt);
     this.voiceIn -= dt * 1000;
     if (this.voiceIn <= 0) {
       this.voiceIn = rand(VOICE_MS.min, VOICE_MS.max);
@@ -532,6 +547,8 @@ export class RanchScene extends Phaser.Scene {
       this.syncAnimal(v, a, hv);
     }
     for (const v of [...this.animalList]) if (!liveAnimals.has(v.id)) this.removeAnimal(v);
+    // a new pet turns up on the path nearest the middle of what the child is looking at
+    this.pets?.sync(r.pets, { x: this.camTarget.x, y: this.camTarget.y + 150 });
 
     const status = pageStatus(r);
     for (const lv of this.lots) {
@@ -550,6 +567,13 @@ export class RanchScene extends Phaser.Scene {
       this.syncBadges(lv, status[lv.lot]);
     }
     if (view.garden) this.syncGarden(view.garden);
+  }
+
+  /** The dog or the cat: 'jump' for a tap, 'trick' after a snack. */
+  petFx(petId: string, kind: 'jump' | 'trick'): void {
+    if (!this.built || !this.pets) return;
+    if (kind === 'jump') this.pets.jump(petId);
+    else this.pets.trick(petId);
   }
 
   fx(animalId: string, kind: FxKind): void {
@@ -738,6 +762,7 @@ export class RanchScene extends Phaser.Scene {
       if (showTags !== this.tagsShown) {
         this.tagsShown = showTags;
         for (const v of this.animalList) v.tag.setVisible(showTags);
+        this.pets?.setTagsVisible(showTags);
       }
     }
     for (const lv of this.lots) {
@@ -936,7 +961,7 @@ export class RanchScene extends Phaser.Scene {
    * and a few glints on the stream move.
    * Pure background: nothing here takes input.
    */
-  private buildScenery(): void {
+  private buildScenery(): SceneryLayout {
     const layout = sceneryLayout(LOTS);
     const hasAtlas = this.textures.exists(TEX.atlas);
     if (!this.textures.exists(TEX.scenery)) {
@@ -964,7 +989,7 @@ export class RanchScene extends Phaser.Scene {
     }
     this.add.image(SCENERY_WORLD.x, SCENERY_WORLD.y, TEX.scenery)
       .setOrigin(0).setScale(SCENERY_SCALE).setDepth(DEPTH.grass);
-    if (!hasAtlas) return;
+    if (!hasAtlas) return layout;
 
     const atlasTex = this.textures.get(TEX.atlas);
     atlasTex.setFilter(Phaser.Textures.FilterMode.NEAREST);
@@ -1000,6 +1025,7 @@ export class RanchScene extends Phaser.Scene {
         this.tweens.add({ targets: g, alpha: { from: 0, to: 0.85 }, duration: ms / 2, delay, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
       }
     }
+    return layout;
   }
 
   /**
@@ -1628,6 +1654,18 @@ export class RanchScene extends Phaser.Scene {
       return;
     }
 
+    // The dog and the cat roam between the pens: their tags, then themselves.
+    const petTag = this.pets?.hitTag(w.x, w.y);
+    if (petTag) {
+      this.handlers.onTag(petTag);
+      return;
+    }
+    const pet = this.pets?.hit(w.x, w.y);
+    if (pet) {
+      this.handlers.onPet?.(pet);
+      return;
+    }
+
     const page = this.pageIndex;
     const dist = Phaser.Math.Distance.Between;
 
@@ -1750,6 +1788,8 @@ export class RanchScene extends Phaser.Scene {
     this.animalList = [];
     this.lots = [];
     this.garden = null;
+    this.pets?.clear();
+    this.pets = null;
     this.tappedPoop = null;
     this.camTween = null;
     this.tagsShown = true;

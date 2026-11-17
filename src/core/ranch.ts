@@ -1,4 +1,4 @@
-import { FARM_LOT, LOT_COUNT, SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type ProductId, type SpeciesId, type SupplyId } from './species';
+import { FARM_LOT, LOT_COUNT, PETS, SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type PetKind, type ProductId, type SpeciesId, type SupplyId } from './species';
 
 const MS_HOUR = 3_600_000;
 const STEP_MS = 60_000;
@@ -47,9 +47,19 @@ export interface Animal {
   lastBrushAt: number | null;
 }
 
+/** The dog or the cat: no needs at all, so nothing here changes over time. */
+export interface Pet {
+  id: string;
+  kind: PetKind;
+  name: string;
+  color: string;
+}
+
 export interface RanchState {
   houses: House[];
   animals: Animal[];
+  /** At most one of each kind. */
+  pets: Pet[];
   supplies: Record<SupplyId, number>;
   products: Record<ProductId, number>;
   settledAt: number;
@@ -64,6 +74,7 @@ export function createRanch(now: number): RanchState {
   return {
     houses: [],
     animals: [],
+    pets: [],
     supplies: Object.fromEntries(SUPPLY_IDS.map((k) => [k, 0])) as Record<SupplyId, number>,
     products: Object.fromEntries(PRODUCT_IDS.map((k) => [k, 0])) as Record<ProductId, number>,
     settledAt: now,
@@ -150,6 +161,16 @@ export function feed(r: RanchState, animalId: string, now: number): CareResult {
     a.neglectMs = 0;
     return { ok: true };
   });
+}
+
+/** Gives the dog a bone or the cat a fish: it only uses the snack (the scene plays the trick). */
+export function giveSnack(r: RanchState, petId: string): CareResult {
+  const p = r.pets.find((x) => x.id === petId);
+  if (!p) return { ok: false, reason: 'nothing' };
+  const snack = PETS[p.kind].snack;
+  if (r.supplies[snack] < 1) return { ok: false, reason: 'none-left' };
+  r.supplies[snack] -= 1;
+  return { ok: true };
 }
 
 export function pet(r: RanchState, animalId: string, now: number): CareResult {

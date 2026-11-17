@@ -6,7 +6,7 @@ export const CROP_CAP = 999;
 export interface DailyStat { answered: number; correct: number }
 
 export interface GameState {
-  version: 4;
+  version: 5;
   unlocked: number;
   cleared: Record<number, number[]>;
   mastery: Record<string, number>;
@@ -19,7 +19,7 @@ export interface GameState {
 
 export function createNewState(now: number): GameState {
   return {
-    version: 4,
+    version: 5,
     unlocked: 1,
     cleared: {},
     mastery: {},

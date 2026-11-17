@@ -15,15 +15,17 @@ import { FieldScene, VIEW } from './scenes/FieldScene';
 import { RanchScene, type RanchView } from './scenes/RanchScene';
 import { ASSET_RES } from './scenes/assets';
 import {
-  brush, cleanPoop, collect, feed, giveMedicine, giveTreat, pageStatus, pet, settle, type CareResult,
+  brush, cleanPoop, collect, feed, giveMedicine, giveSnack, giveTreat, pageStatus, pet, settle, type CareResult,
 } from './core/ranch';
 import { buy, isLocked, lockHint, nextName, type ShopItemId } from './core/shop';
 import {
-  FEED_IDS, HOUSE_KINDS, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfHouse, speciesOfLot,
-  type HouseKind, type SpeciesId,
+  FEED_IDS, HOUSE_KINDS, LOT_COUNT, PETS, PET_KINDS, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfHouse,
+  speciesOfLot, type HouseKind, type PetKind, type SpeciesId,
 } from './core/species';
 import { gardenOf } from './core/garden';
-import { createSfx, voiceOf } from './ui/sfx';
+import { createSfx, voiceOf, type SfxName } from './ui/sfx';
+
+const petVoice = (kind: PetKind): SfxName => (kind === 'dog' ? 'woof' : 'meow');
 import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
 import { careFeedback } from './ui/ranchFeedback';
 
@@ -535,7 +537,27 @@ export function startApp(root: HTMLElement): void {
       nextName(game.state.ranch, id); // the scene pops the tag when the name changes
       ranchChanged();
       const a = game.state.ranch.animals.find(x => x.id === id);
-      sfx.play(a ? voiceOf(a.species) : 'cluck');
+      const p = game.state.ranch.pets.find(x => x.id === id);
+      sfx.play(p ? petVoice(p.kind) : a ? voiceOf(a.species) : 'cluck');
+    },
+    onPet: id => {
+      const p = game.state.ranch.pets.find(x => x.id === id);
+      if (!p) return;
+      if (tool !== 'treat') {
+        ranchScene.petFx(id, 'jump');
+        sfx.play(petVoice(p.kind));
+        return;
+      }
+      // 🍪 on the dog or the cat hands it its own snack (a bone, a fish)
+      const res = giveSnack(game.state.ranch, id);
+      if (!res.ok) {
+        sfx.play('collect'); // a gentle cue, then the shop at that snack
+        ranchUi.openShop(PETS[p.kind].snack);
+        return;
+      }
+      ranchChanged();
+      ranchScene.petFx(id, 'trick');
+      sfx.play(petVoice(p.kind));
     },
     onIdleVoice: id => {
       // The scene only runs on the ranch tab; the guard also covers a hidden page.
@@ -544,6 +566,8 @@ export function startApp(root: HTMLElement): void {
     },
   });
   ranchScene.showPage(ranchPage, false); // before create: the scene starts on this page
+  // Dev server only (dropped from the production build): lets the screenshot harness find things.
+  if (import.meta.env.DEV) (window as unknown as { __dbg: unknown }).__dbg = { get game() { return game; }, ranchScene };
   renderRanch();
   ranchUi.update(game.state);
   syncNav();
@@ -570,6 +594,9 @@ export function startApp(root: HTMLElement): void {
       const sp = speciesOfHouse(item as HouseKind);
       showLotOf(sp); // e.g. a coop bought from the garden page: go and see it
       ranchUi.openShop(sp); // next step: an animal to live in it
+    } else if ((PET_KINDS as readonly string[]).includes(item)) {
+      ranchUi.closeShop(); // the new dog or cat turns up on the nearest path
+      sfx.play(petVoice(item as PetKind));
     } else if ((SPECIES_ORDER as readonly string[]).includes(item)) {
       showLotOf(item as SpeciesId);
       ranchUi.closeShop(); // let the child watch the new animal arrive

@@ -41,7 +41,7 @@ function fakeCtx() {
   return { ctx: ctx as unknown as AudioContext, calls };
 }
 
-const NAMES = ['cluck', 'collect', 'sweep', 'buy', 'heal', 'nope', 'moo', 'oink', 'baa', 'hum'] as const;
+const NAMES = ['cluck', 'collect', 'sweep', 'buy', 'heal', 'nope', 'moo', 'oink', 'baa', 'hum', 'woof', 'meow'] as const;
 
 describe('voiceOf', () => {
   it('gives each species its own voice', () => {

@@ -35,13 +35,34 @@ export function weightedPick<T>(items: T[], weights: number[], rng: Rng): number
 export const CROP_FALLOFF = 0.65;
 export const CROP_FALLOFF_PER_STAR = 0.1;
 
+/** In pools of this many crops or more, wheat and carrot (pool[0], pool[1]) keep this share. */
+export const BASE_CROP_FLOOR = 0.05;
+export const BASE_CROP_FLOOR_FROM = 4;
+
 /**
- * Weights for a pool ordered by unlock with the question's own crop last: the own crop weighs 1,
- * each step down weighs r times less, r = 0.65 − 0.1 × stars.
+ * Shares for a pool ordered by unlock (wheat, carrot, … , the question's own crop last): the own
+ * crop weighs 1, each step down weighs r times less, r = 0.65 − 0.1 × stars. In pools of 4+ crops
+ * wheat and carrot never fall below BASE_CROP_FLOOR (chicken feed and medicine are paid in them);
+ * the other crops give up that share in proportion. Sums to 1.
  */
 export function cropWeights(poolSize: number, stars: number): number[] {
   const r = CROP_FALLOFF - CROP_FALLOFF_PER_STAR * stars;
-  return Array.from({ length: poolSize }, (_, i) => Math.pow(r, poolSize - 1 - i));
+  const w = Array.from({ length: poolSize }, (_, i) => Math.pow(r, poolSize - 1 - i));
+  const sum = w.reduce((a, b) => a + b, 0);
+  const p = w.map(x => x / sum);
+  if (poolSize < BASE_CROP_FLOOR_FROM) return p;
+  // Pin wheat/carrot that sit below the floor; scaling the rest down may push the other one under
+  // too, so repeat until nothing new is pinned (at most twice).
+  const pinned = new Set<number>();
+  let out = p;
+  for (;;) {
+    for (const i of [0, 1]) if (out[i] < BASE_CROP_FLOOR - 1e-12) pinned.add(i);
+    const free = p.reduce((a, x, i) => (pinned.has(i) ? a : a + x), 0);
+    const k = (1 - pinned.size * BASE_CROP_FLOOR) / free;
+    const next = p.map((x, i) => (pinned.has(i) ? BASE_CROP_FLOOR : x * k));
+    if ([0, 1].every(i => pinned.has(i) || next[i] >= BASE_CROP_FLOOR - 1e-12)) return next;
+    out = next;
+  }
 }
 
 export function pickCrop(pool: Crop[], stars: number, rng: Rng): CropId {

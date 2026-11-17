@@ -214,7 +214,8 @@ describe('species-driven care', () => {
   }
   it('createRanch has every supply and product key at 0', () => {
     const r = createRanch(0);
-    expect(r.supplies).toEqual({ feed: 0, feedCow: 0, feedPig: 0, feedSheep: 0, feedLlama: 0, treat: 0, medicine: 0 });
+    expect(r.supplies).toEqual({ feed: 0, feedCow: 0, feedPig: 0, feedSheep: 0, feedLlama: 0, treat: 0, medicine: 0, bone: 0, fish: 0 });
+    expect(r.pets).toEqual([]);
     expect(r.products).toEqual({ egg: 0, milk: 0, truffle: 0, yarn: 0, fluff: 0 });
   });
   it('feeding a cow spends feedCow, not chicken feed', () => {

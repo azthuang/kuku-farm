@@ -4,7 +4,8 @@ import { feedIcon } from './feedIcon';
 import { checkBuy, lockHint, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
 import { gardenOf } from '../core/garden';
 import {
-  FARM_LOT, LOT_COUNT, PRODUCT_EMOJI, SPECIES, SPECIES_EMOJI, SPECIES_ORDER, speciesOfLot,
+  FARM_LOT, LOT_COUNT, PETS, PET_KINDS, PET_SNACK_EMOJI, PRODUCT_EMOJI, SPECIES, SPECIES_EMOJI, SPECIES_ORDER,
+  speciesOfLot,
   type HouseKind, type ProductId, type SpeciesId, type SupplyId,
 } from '../core/species';
 import type { GameState } from '../core/state';
@@ -59,9 +60,18 @@ const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: 'treat
   { tool: 'medicine', icon: '💊', label: '藥', supply: 'medicine' },
 ];
 
+/** Pet names in the shop and on its buttons. */
+const PET_NAME = { dog: '狗', cat: '貓' } as const;
+const SNACK_NAME = { bone: '狗骨頭', fish: '小魚乾' } as const;
+
+/** On every page: medicine and treats, then the dog, the cat and their snacks (paid in products). */
 const SHARED: readonly { item: ShopItemId; icon: string | HTMLElement; name: string }[] = [
   { item: 'medicine', icon: '💊', name: `藥 ×${SUPPLY_AMOUNT.medicine}` },
   { item: 'treat', icon: '🍪', name: `零食 ×${SUPPLY_AMOUNT.treat}` },
+  ...PET_KINDS.flatMap(k => [
+    { item: k as ShopItemId, icon: PETS[k].emoji, name: PET_NAME[k] },
+    { item: PETS[k].snack as ShopItemId, icon: PET_SNACK_EMOJI[PETS[k].snack], name: `${SNACK_NAME[PETS[k].snack]} ×${SUPPLY_AMOUNT[PETS[k].snack]}` },
+  ]),
 ];
 
 function speciesItems(sp: SpeciesId): { item: ShopItemId; icon: string | HTMLElement; name: string }[] {
@@ -158,8 +168,12 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
           return;
         }
       } else if (s && t.supply && s.ranch.supplies[t.supply] < 1) {
-        openShop(t.supply);
-        return;
+        // 🍪 also hands out the dog's bones and the cat's fish: usable while any of them is left
+        const snacks = t.tool === 'treat' && PET_KINDS.some(k => s.ranch.supplies[PETS[k].snack] > 0);
+        if (!snacks) {
+          openShop(t.supply);
+          return;
+        }
       }
       setTool(t.tool);
       toolCb(t.tool);
@@ -319,8 +333,13 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
       btn.textContent = '買';
       btn.disabled = false;
     } else if (check.reason === 'full') {
-      btn.textContent = '住滿了';
+      btn.textContent = (PET_KINDS as readonly string[]).includes(item) ? '已經有了' : '住滿了';
       btn.classList.add('full');
+      btn.disabled = true;
+    } else if (check.reason === 'need-pet') {
+      const k = PET_KINDS.find(p => PETS[p].snack === item) ?? 'dog';
+      btn.textContent = `先買${PET_NAME[k]}`;
+      btn.classList.add('need');
       btn.disabled = true;
     } else if (check.reason === 'need-house') {
       const sp = speciesOfItem(item) ?? 'chicken';

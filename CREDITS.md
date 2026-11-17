@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | public/assets/ranch/{chicken,cow,pig,sheep,llama}_{walk,eat}.png、chicken/cow/llama_shadow.png（羊駝檔由 llama_walk_0 / llama_eat_0 改名） | https://opengameart.org/content/lpc-style-farm-animals | Daniel Eddeland | CC-BY 3.0（原作雙授權 CC-BY 3.0 / GPL 2.0，本專案採用 CC-BY 3.0） |
 | public/assets/scenery/scenery.png、farmhouse.png（由下方「牧場景觀」各素材包裁切、拼合） | 見下方「牧場景觀」 | 見下方「牧場景觀」 | CC-BY-SA 3.0 |
+| public/assets/ranch/dog.png、cat.png（"[LPC] Cats and Dogs"，未修改） | https://opengameart.org/content/lpc-cats-and-dogs | bluecarrot16 | CC-BY 3.0（原作多重授權 CC-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0 / GPL 2.0 / OGA-BY 3.0，本專案採用 CC-BY 3.0） |
 
 ## 牧場景觀（LPC）
 

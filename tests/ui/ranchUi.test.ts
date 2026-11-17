@@ -233,14 +233,14 @@ describe('ranch shop', () => {
   it('lists the page\'s house, animal and feed first, then medicine and treats', () => {
     const { root, ui } = setup(rich(st()), 2);
     ui.openShop();
-    expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat']);
+    expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
     expect(row(root, 'coop')).toBeNull();
   });
 
   it('a lot or feed focus from another page shows that species', () => {
     const { root, ui } = setup(rich(st()), 1);
     ui.openShop('sty');
-    expect(rowOrder(root)).toEqual(['sty', 'pig', 'feedPig', 'medicine', 'treat']);
+    expect(rowOrder(root)).toEqual(['sty', 'pig', 'feedPig', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
     expect(focused(root)).toBe('sty');
   });
 
@@ -315,21 +315,53 @@ describe('ranch shop', () => {
     buy(s, 'coop', T0, rng);
     buy(s, 'chicken', T0, rng);
     buy(s, 'chicken', T0, rng);
+    s.inventory.wheat = 10;
+    s.inventory.carrot = 10;
     const { root, ui } = setup(s);
     ui.openShop('chicken');
     const nums = Array.from(row(root, 'chicken')!.querySelectorAll<HTMLElement>('.price b'));
-    expect(nums.map(n => n.textContent)).toEqual(['20', '5']);
+    expect(nums.map(n => n.textContent)).toEqual(['120', '80']);
     expect(nums.every(n => n.classList.contains('short'))).toBe(true);
   });
 
-  it('products in prices show their own emoji', () => {
+  it('products in prices show their own emoji (the dog and the cat cost products)', () => {
     const s = rich(st());
     s.ranch.products.milk = 0;
-    buy(s, 'sty', T0, rng);
     const { root, ui } = setup(s, 3);
     ui.openShop();
-    const pig = row(root, 'pig')!;
-    expect(pig.textContent).toContain('🥛');
-    expect(pig.querySelector('.price b.short')!.textContent).toBe('5');
+    const dog = row(root, 'dog')!;
+    expect(dog.textContent).toContain('🥛');
+    expect(dog.querySelector('.price b.short')!.textContent).toBe('15');
+    expect(row(root, 'pig')!.textContent).not.toContain('🥛');
+  });
+
+  it('pets and snacks are in every page\'s shop; a snack waits for its pet; one of each pet', () => {
+    const s = rich(st());
+    const { root, ui } = setup(s, 2);
+    ui.openShop();
+    expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    expect(buyBtn(root, 'bone').textContent).toBe('先買狗');
+    expect(buyBtn(root, 'fish').textContent).toBe('先買貓');
+    buy(s, 'dog', T0, rng);
+    ui.update(s);
+    expect(buyBtn(root, 'dog').textContent).toBe('已經有了');
+    expect(buyBtn(root, 'bone').disabled).toBe(false);
+  });
+
+  it('🍪 still picks up with no treats while a bone or fish is left (for the pets)', () => {
+    const s = rich(st());
+    const { root, ui } = setup(s);
+    const picked: Tool[] = [];
+    ui.onTool(t => picked.push(t));
+    s.ranch.supplies.bone = 2;
+    ui.update(s);
+    toolBtn(root, 'treat').click();
+    expect(picked).toEqual(['treat']);
+    expect(shopOpen(root)).toBe(false);
+    s.ranch.supplies.bone = 0;
+    ui.update(s);
+    toolBtn(root, 'treat').click();
+    expect(shopOpen(root)).toBe(true);
+    expect(focused(root)).toBe('treat');
   });
 });

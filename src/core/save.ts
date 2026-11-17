@@ -1,11 +1,11 @@
 import { CROP_BY_ROW, type CropId } from './levels';
 import {
-  SPECIES, HOUSE_KINDS, speciesOfHouse, PRODUCT_IDS, SUPPLY_IDS,
-  type HouseKind, type ProductId, type SpeciesId, type SupplyId,
+  SPECIES, HOUSE_KINDS, PET_KINDS, PET_SNACK_IDS, speciesOfHouse, PRODUCT_IDS, SUPPLY_IDS,
+  type HouseKind, type PetKind, type ProductId, type SpeciesId, type SupplyId,
 } from './species';
 import {
   MAX_POOP, PRODUCT_CAP, PET_MAX_IN_WINDOW, createRanch,
-  type Animal, type House, type RanchState,
+  type Animal, type House, type Pet, type RanchState,
 } from './ranch';
 import { SUPPLY_CAP } from './shop';
 import { CROP_CAP, type DailyStat, type GameState } from './state';
@@ -120,6 +120,7 @@ function validateRanch(data: unknown, version: number): RanchState {
   const supplies = {} as Record<SupplyId, number>;
   for (const k of SUPPLY_IDS) {
     if (!has(sIn, k) && version < 4 && !V3_SUPPLY_IDS.includes(k)) { supplies[k] = 0; continue; }
+    if (!has(sIn, k) && version < 5 && PET_SNACK_IDS.includes(k as never)) { supplies[k] = 0; continue; }
     if (!has(sIn, k)) fail();
     supplies[k] = clamp(int(sIn[k]), 0, SUPPLY_CAP);
   }
@@ -131,9 +132,24 @@ function validateRanch(data: unknown, version: number): RanchState {
     products[k] = clamp(int(pIn[k]), 0, PRODUCT_CAP);
   }
 
+  // v5 added the dog and the cat; older saves have none.
+  const pets: Pet[] = [];
+  if (version >= 5 || o.pets !== undefined) {
+    if (!Array.isArray(o.pets)) fail();
+    for (const pv of o.pets) {
+      const p = rec(pv);
+      if (typeof p.id !== 'string' || p.id === '') fail();
+      if (!PET_KINDS.includes(p.kind as PetKind)) fail();
+      if (typeof p.name !== 'string' || typeof p.color !== 'string') fail();
+      if (pets.some((x) => x.id === p.id) || animals.some((a) => a.id === p.id)) fail();
+      if (pets.some((x) => x.kind === p.kind)) continue; // one of each: a duplicate is dropped, not fatal
+      pets.push({ id: p.id, kind: p.kind as PetKind, name: p.name, color: p.color });
+    }
+  }
+
   const settledAt = finite(o.settledAt);
   if (!isIntIn(o.nextId, 1, Number.MAX_SAFE_INTEGER)) fail();
-  return { houses, animals, supplies, products, settledAt, nextId: o.nextId };
+  return { houses, animals, pets, supplies, products, settledAt, nextId: o.nextId };
 }
 
 /** The ranch part of a v3/v4 save, or null when it is too broken to read. */
@@ -149,8 +165,8 @@ function tryRanch(data: unknown, version: number): RanchState | null {
 function validate(data: unknown): { state: GameState; ranchReset: boolean } {
   const o = rec(data);
   if (typeof o.version !== 'number' || Number.isNaN(o.version)) fail();
-  if (o.version > 4) throw new Newer();
-  if (o.version !== 1 && o.version !== 2 && o.version !== 3 && o.version !== 4) fail();
+  if (o.version > 5) throw new Newer();
+  if (o.version !== 1 && o.version !== 2 && o.version !== 3 && o.version !== 4 && o.version !== 5) fail();
   // v1 carried a `growing` map; it is ignored (even if malformed) and dropped.
 
   if (!isIntIn(o.unlocked, 1, 9)) fail();
@@ -198,7 +214,7 @@ function validate(data: unknown): { state: GameState; ranchReset: boolean } {
   const ranchReset = ranch === null;
 
   const state: GameState = {
-    version: 4,
+    version: 5,
     unlocked: o.unlocked,
     cleared,
     mastery,
