@@ -70,16 +70,29 @@ describe('Game', () => {
   it('挑戰模式答對 a×b×2', () => {
     const g = completeRow1();
     const q = g.startChallenge()!;
-    expect(g.progress()).toEqual({ done: 0, total: 10 });
+    expect(g.progress()).toEqual({ done: 0, total: 9 });
     expect(g.answer(q.a * q.b)).toMatchObject({ amount: q.a * q.b * 2 });
   });
-  it('只解鎖教學級時挑戰出 9 題，解鎖 2 級後出 10 題', () => {
+  it('只解鎖教學級時挑戰出 1× 的 9 題；解鎖 2 級後只出 2× 的 9 題', () => {
     const g = newGame();
     expect(g.startChallenge()).not.toBeNull();
     expect(g.progress().total).toBe(9);
     const g2 = completeRow1();
     g2.startChallenge();
-    expect(g2.progress().total).toBe(10);
+    expect(g2.progress().total).toBe(9);
+    expect(((g2 as any).queue as { a: number }[]).every(q => q.a === 2)).toBe(true);
+  });
+  it('挑戰模式不出 1× 的題目（還有其他列時）', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      let x = seed;
+      const g = new Game(createNewState(0), { now: () => 0 }, () => ((x = (x * 16807) % 2147483647) / 2147483647));
+      g.state.unlocked = 9;
+      for (let b = 1; b <= 9; b++) g.state.mastery[`1,${b}`] = 0; // weakest cells: would be picked most
+      g.startChallenge();
+      const qs = (g as any).queue as { a: number }[];
+      expect(qs).toHaveLength(10);
+      expect(qs.some(q => q.a === 1)).toBe(false);
+    }
   });
   it('挑戰模式不增加解鎖進度', () => {
     const g = completeRow1();

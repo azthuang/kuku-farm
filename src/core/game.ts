@@ -54,7 +54,9 @@ export class Game {
 
   startChallenge(): Question | null {
     const pool: { a: number; b: number }[] = [];
-    for (const a of unlockedRows(this.state.unlocked)) {
+    // 1× is no challenge: left out once any other row is open (alone, it is the only row to play)
+    const rows = unlockedRows(this.state.unlocked);
+    for (const a of rows.length > 1 ? rows.filter(r => r !== 1) : rows) {
       for (let b = 1; b <= 9; b++) pool.push({ a, b });
     }
     const picked: Question[] = [];
