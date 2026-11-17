@@ -1,11 +1,11 @@
 import { CROP_BY_ROW, type CropId } from '../core/levels';
 import type { PageStatus } from '../core/ranch';
 import { feedIcon } from './feedIcon';
-import { checkBuy, lockHint, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
+import { checkBuy, headcount, lockHint, nextHouse, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
 import { gardenOf } from '../core/garden';
 import {
   FARM_LOT, LOT_COUNT, PETS, PET_KINDS, PET_SNACK_EMOJI, PRODUCT_EMOJI, SPECIES, SPECIES_EMOJI, SPECIES_ORDER,
-  speciesOfLot,
+  speciesOfHouse, speciesOfLot,
   type HouseKind, type ProductId, type SpeciesId, type SupplyId,
 } from '../core/species';
 import type { GameState } from '../core/state';
@@ -78,11 +78,13 @@ const SHARED: readonly { item: ShopItemId; icon: string | HTMLElement; name: str
   ]),
 ];
 
+const houseItem = (sp: SpeciesId) => ({ item: SPECIES[sp].house as ShopItemId, icon: '🏠', name: SPECIES_UI[sp].house });
+
 function speciesItems(sp: SpeciesId): { item: ShopItemId; icon: string | HTMLElement; name: string }[] {
   const d = SPECIES[sp];
   const ui = SPECIES_UI[sp];
   return [
-    { item: d.house, icon: '🏠', name: ui.house },
+    houseItem(sp),
     { item: sp, icon: ui.emoji, name: ui.name },
     { item: d.feed, icon: feedIcon(ui.emoji), name: `飼料 ×${SUPPLY_AMOUNT[d.feed]}` },
   ];
@@ -131,7 +133,7 @@ function closeButton(cls: string, label: string): HTMLButtonElement {
   return b;
 }
 
-interface Row { row: HTMLElement; price: HTMLElement; btn: HTMLButtonElement }
+interface Row { row: HTMLElement; name: HTMLElement; price: HTMLElement; btn: HTMLButtonElement }
 
 /**
  * Ranch toolbar (pick a tool, then tap an animal), page navigation over the stage (title, 🗺️,
@@ -150,10 +152,11 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   let ignoreUntil = 0;
   let page = 0;
   let overview = false;
-  let shopSpecies: SpeciesId = 'chicken';
+  /** The species whose rows lead the shop, or null on the garden page (the next house instead). */
+  let shopSpecies: SpeciesId | null = 'chicken';
   let focusItem: ShopItemId | null = null;
 
-  /** The species of the page shown (the garden page shops and feeds for the chickens). */
+  /** The species of the page shown (the garden page feeds the chickens; its shop offers the next house). */
   const pageSpecies = (): SpeciesId => speciesOfLot(page) ?? SPECIES_ORDER[0];
 
   // ---------------------------------------------------------------- toolbar
@@ -273,7 +276,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     const what = el('div', 'shop-what');
     const ic = el('span', 'shop-icon', typeof it.icon === 'string' ? it.icon : '');
     if (typeof it.icon !== 'string') ic.append(it.icon);
-    what.append(ic, el('span', 'shop-name', it.name));
+    const name = el('span', 'shop-name', it.name);
+    what.append(ic, name);
     const price = el('div', 'price');
     const btn = button('buy', '買');
     btn.addEventListener('click', () => {
@@ -281,7 +285,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
       buyCb(it.item);
     });
     row.append(what, price, btn);
-    r = { row, price, btn };
+    r = { row, name, price, btn };
     rows.set(it.item, r);
     return r;
   }
@@ -328,10 +332,27 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   }
 
   function renderRow(s: GameState, item: ShopItemId, r: Row): void {
-    const { price, btn } = r;
+    const { name, price, btn } = r;
     const check = checkBuy(s, item);
     price.replaceChildren();
-    btn.classList.remove('full', 'need', 'locked');
+    btn.classList.remove('full', 'need', 'locked', 'owned');
+    // an animal row counts the hens (or cows …) against the room in their house: 雞 3/4
+    const sp = (SPECIES_ORDER as readonly string[]).includes(item) ? item as SpeciesId : null;
+    if (sp) {
+      const h = headcount(s, sp);
+      const text = h.cap > 0 ? `${SPECIES_UI[sp].name} ${h.n}/${h.cap}` : SPECIES_UI[sp].name;
+      if (name.textContent !== text) name.textContent = text;
+    }
+    // bought once and for good (a house, the dog, the cat), or no room for another: no price to show
+    if (!check.ok && (check.reason === 'owned' || check.reason === 'full')) {
+      price.classList.remove('is-locked');
+      const owned = check.reason === 'owned';
+      const pet = (PET_KINDS as readonly string[]).includes(item);
+      btn.textContent = owned ? (pet ? '✅ 有了' : '✅ 蓋好了') : '住滿了';
+      btn.classList.add(owned ? 'owned' : 'full');
+      btn.disabled = true;
+      return;
+    }
     if (!check.ok && check.reason === 'locked') {
       const kind = item as HouseKind;
       const h = lockHint(s, kind);
@@ -355,8 +376,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     if (check.ok) {
       btn.textContent = '買';
       btn.disabled = false;
-    } else if (check.reason === 'full') {
-      btn.textContent = (PET_KINDS as readonly string[]).includes(item) ? '已經有了' : '住滿了';
+    } else if (check.reason === 'stocked') {
+      btn.textContent = '裝滿了';
       btn.classList.add('full');
       btn.disabled = true;
     } else if (check.reason === 'need-pet') {
@@ -377,7 +398,9 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
 
   /** Puts the shown species' rows, then the shared ones, into the list and refreshes them. */
   function renderShop(s: GameState): void {
-    const items = [...speciesItems(shopSpecies), ...SHARED];
+    const next = nextHouse(s);
+    const lead = shopSpecies ? speciesItems(shopSpecies) : next ? [houseItem(speciesOfHouse(next))] : [];
+    const items = [...lead, ...SHARED];
     const wanted = items.map(it => rowOf(it).row);
     const shown = Array.from(list.children);
     if (shown.length !== wanted.length || shown.some((c, i) => c !== wanted[i])) list.replaceChildren(...wanted);
@@ -395,7 +418,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   }
 
   function openShop(focus?: ShopItemId): void {
-    shopSpecies = (focus && speciesOfItem(focus)) || pageSpecies();
+    shopSpecies = (focus && speciesOfItem(focus)) || speciesOfLot(page);
     focusItem = focus ?? null;
     if (state) renderShop(state);
     ignoreUntil = Date.now() + GHOST_CLICK_MS;

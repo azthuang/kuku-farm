@@ -12,7 +12,7 @@ export type ShopItemId = HouseKind | SpeciesId | SupplyId | PetKind;
 export type ShopState = GameState;
 export type CheckResult =
   | { ok: true }
-  | { ok: false; reason: 'short' | 'full' | 'need-house' | 'locked' | 'need-pet' };
+  | { ok: false; reason: 'short' | 'owned' | 'full' | 'stocked' | 'need-house' | 'locked' | 'need-pet' };
 
 export const MAX_ANIMALS = 12;
 export const MAX_HOUSES = 5;
@@ -113,21 +113,33 @@ export function checkBuy(state: ShopState, item: ShopItemId): CheckResult {
   const r = state.ranch;
   const k = classify(item);
   if (k.t === 'house') {
-    if (r.houses.some((h) => h.kind === SPECIES[k.sp].house)) return { ok: false, reason: 'full' };
+    if (r.houses.some((h) => h.kind === SPECIES[k.sp].house)) return { ok: false, reason: 'owned' };
     if (isLocked(state, SPECIES[k.sp].house)) return { ok: false, reason: 'locked' };
   } else if (k.t === 'animal') {
     if (!hasHouse(r, k.sp)) return { ok: false, reason: 'need-house' };
     if (r.animals.length >= MAX_ANIMALS || !openHouse(r, k.sp)) return { ok: false, reason: 'full' };
   } else if (k.t === 'pet') {
-    if (r.pets.some((p) => p.kind === k.kind)) return { ok: false, reason: 'full' };
+    if (r.pets.some((p) => p.kind === k.kind)) return { ok: false, reason: 'owned' };
   } else {
     if (k.t === 'feed' && !hasHouse(r, k.sp)) return { ok: false, reason: 'need-house' };
     if (k.t === 'snack' && !r.pets.some((p) => p.kind === k.kind)) return { ok: false, reason: 'need-pet' };
     const id = supplyOf(k)!;
-    if (r.supplies[id] + SUPPLY_AMOUNT[id] > SUPPLY_CAP) return { ok: false, reason: 'full' };
+    if (r.supplies[id] + SUPPLY_AMOUNT[id] > SUPPLY_CAP) return { ok: false, reason: 'stocked' };
   }
   const price = Object.entries(priceOf(state, item)) as PriceEntries;
   return price.every(([key, n]) => have(state, key) >= n) ? { ok: true } : { ok: false, reason: 'short' };
+}
+
+/** The first house not built yet, in species order (the garden page's shop offers it), or null. */
+export function nextHouse(state: ShopState): HouseKind | null {
+  const sp = SPECIES_ORDER.find((s) => !hasHouse(state.ranch, s));
+  return sp ? SPECIES[sp].house : null;
+}
+
+/** Animals living in the species' houses and the room there, e.g. 3 of 4 hens. */
+export function headcount(state: ShopState, sp: SpeciesId): { n: number; cap: number } {
+  const houses = state.ranch.houses.filter((h) => h.kind === SPECIES[sp].house).length;
+  return { n: countOf(state.ranch, sp), cap: houses * SPECIES[sp].houseCapacity };
 }
 
 function pay(state: ShopState, price: Price): void {

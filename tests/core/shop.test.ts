@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createNewState } from '../../src/core/state';
 import { createRanch } from '../../src/core/ranch';
-import { buy, checkBuy, priceOf, nextName, isLocked, lockHint, MAX_ANIMALS, type ShopState, type ShopItemId } from '../../src/core/shop';
+import { buy, checkBuy, priceOf, nextName, isLocked, lockHint, nextHouse, headcount, MAX_ANIMALS, type ShopState, type ShopItemId } from '../../src/core/shop';
 import { FARM_LOT, LOT_COUNT, PETS, PET_KINDS, SPECIES, SPECIES_ORDER, speciesOfLot } from '../../src/core/species';
 
 function st(): ShopState {
@@ -30,7 +30,7 @@ describe('shop', () => {
     const s = rich(st());
     expect(checkBuy(s, 'chicken')).toEqual({ ok: false, reason: 'need-house' });
     buy(s, 'coop', 0, () => 0);
-    expect(checkBuy(s, 'coop')).toEqual({ ok: false, reason: 'full' });
+    expect(checkBuy(s, 'coop')).toEqual({ ok: false, reason: 'owned' });
     buy(s, 'chicken', 0, () => 0.5);
     buy(s, 'chicken', 0, () => 0.5);
     // the 3rd hen costs 1.5x the first two, the 4th 1.5x again (crops only, rounded to tens)
@@ -95,7 +95,7 @@ describe('shop', () => {
     expect(s.inventory.wheat).toBe(870);
     expect(s.inventory.carrot).toBe(890);
     s.ranch.supplies.feed = 95;
-    expect(buy(s, 'feed', 0, () => 0)).toEqual({ ok: false, reason: 'full' });
+    expect(buy(s, 'feed', 0, () => 0)).toEqual({ ok: false, reason: 'stocked' });
     expect(s.inventory.wheat).toBe(870);
     expect(s.ranch.supplies.feed).toBe(95);
   });
@@ -212,7 +212,7 @@ describe('shop', () => {
     s.inventory.potato = 1000;
     buy(s, 'barn', 0, () => 0);
     expect(s.ranch.houses[0]).toMatchObject({ kind: 'barn', lot: 2 });
-    expect(checkBuy(s, 'barn')).toEqual({ ok: false, reason: 'full' });
+    expect(checkBuy(s, 'barn')).toEqual({ ok: false, reason: 'owned' });
     const r = buy(s, 'cow', 0, () => 0);
     expect(r.ok).toBe(true);
     expect(s.ranch.animals[0]).toMatchObject({ species: 'cow', houseId: s.ranch.houses[0].id });
@@ -244,6 +244,28 @@ describe('shop', () => {
     }
     expect(s.ranch.animals.length).toBe(12);
     for (const sp of SPECIES_ORDER) expect(checkBuy(s, sp as ShopItemId)).toEqual({ ok: false, reason: 'full' });
+  });
+
+  it('nextHouse: the first house not built yet, in species order; null once all stand', () => {
+    const s = rich(st());
+    expect(nextHouse(s)).toBe('coop');
+    buy(s, 'coop', 0, () => 0);
+    expect(nextHouse(s)).toBe('barn');
+    // order, not purchase order: a later house built first does not skip the barn
+    s.ranch.houses.push({ id: 'hx', kind: 'sty', lot: 3, poop: 0 });
+    expect(nextHouse(s)).toBe('barn');
+    for (const sp of SPECIES_ORDER) {
+      if (!s.ranch.houses.some((h) => h.kind === SPECIES[sp].house)) s.ranch.houses.push({ id: `h-${sp}`, kind: SPECIES[sp].house, lot: SPECIES[sp].lot, poop: 0 });
+    }
+    expect(nextHouse(s)).toBeNull();
+  });
+
+  it('headcount: animals of the species and the room in its houses', () => {
+    const s = rich(st());
+    expect(headcount(s, 'chicken')).toEqual({ n: 0, cap: 0 });
+    buy(s, 'coop', 0, () => 0);
+    buy(s, 'chicken', 0, () => 0);
+    expect(headcount(s, 'chicken')).toEqual({ n: 1, cap: 4 });
   });
 
   it('names unique per species and from its list', () => {
@@ -292,7 +314,7 @@ describe('shop', () => {
     expect(r).toMatchObject({ ok: true });
     expect(s.ranch.pets).toEqual([{ id: r.petId, kind: 'dog', name: PETS.dog.names[0], color: PETS.dog.colors[0] }]);
     expect(s.ranch.products).toMatchObject({ egg: 70, milk: 85, truffle: 90 });
-    expect(checkBuy(s, 'dog')).toEqual({ ok: false, reason: 'full' });
+    expect(checkBuy(s, 'dog')).toEqual({ ok: false, reason: 'owned' });
     expect(checkBuy(s, 'fish')).toEqual({ ok: false, reason: 'need-pet' });
     buy(s, 'bone', 0, () => 0);
     expect(s.ranch.supplies.bone).toBe(3);

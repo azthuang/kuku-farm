@@ -182,7 +182,8 @@ describe('ranch pages', () => {
     root.querySelector<HTMLElement>('.go-field')!.click();
     expect(go).toBe(1);
     toolBtn(root, 'shop').click();
-    expect(rowOrder(root)[0]).toBe('coop'); // the garden page shops for the chickens
+    // the garden page offers the next house to build, then what every page sells
+    expect(rowOrder(root)).toEqual(['coop', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
     ui.setPage(1, status({}));
     expect(bar.classList.contains('garden')).toBe(false);
     ui.setOverview(true);
@@ -318,15 +319,63 @@ describe('ranch shop', () => {
     expect(buyBtn(root, 'chicken').disabled).toBe(true);
   });
 
-  it('shows 住滿了 when the coop is full', () => {
+  it('a full coop: 住滿了 and 4/4 on the hens, 蓋好了 on the coop, neither priced', () => {
     const s = rich(st());
     expect(buy(s, 'coop', T0, rng).ok).toBe(true);
-    for (let i = 0; i < 4; i++) expect(buy(s, 'chicken', T0, rng).ok).toBe(true);
+    for (let i = 0; i < 3; i++) expect(buy(s, 'chicken', T0, rng).ok).toBe(true);
     const { root, ui } = setup(s);
     ui.openShop('chicken');
-    expect(buyBtn(root, 'chicken').textContent).toContain('住滿了');
+    expect(row(root, 'chicken')!.querySelector('.shop-name')!.textContent).toBe('雞 3/4');
+    expect(buyBtn(root, 'chicken').textContent).toBe('買');
+    buy(s, 'chicken', T0, rng);
+    ui.update(s);
+    expect(row(root, 'chicken')!.querySelector('.shop-name')!.textContent).toBe('雞 4/4');
+    expect(buyBtn(root, 'chicken').textContent).toBe('住滿了');
     expect(buyBtn(root, 'chicken').disabled).toBe(true);
-    expect(buyBtn(root, 'coop').textContent).toContain('住滿了');
+    expect(row(root, 'chicken')!.querySelector('.price')!.children).toHaveLength(0);
+    expect(buyBtn(root, 'coop').textContent).toBe('✅ 蓋好了');
+    expect(buyBtn(root, 'coop').disabled).toBe(true);
+    expect(row(root, 'coop')!.querySelector('.price')!.children).toHaveLength(0);
+  });
+
+  it('without a coop the hen row has no count', () => {
+    const { root, ui } = setup(rich(st()));
+    ui.openShop('chicken');
+    expect(row(root, 'chicken')!.querySelector('.shop-name')!.textContent).toBe('雞');
+  });
+
+  it('a stocked-up supply says 裝滿了 and keeps its price', () => {
+    const s = rich(st());
+    buy(s, 'coop', T0, rng);
+    s.ranch.supplies.feed = 97;
+    s.ranch.supplies.medicine = 99;
+    const { root, ui } = setup(s);
+    ui.openShop();
+    for (const item of ['feed', 'medicine']) {
+      expect(buyBtn(root, item).textContent).toBe('裝滿了');
+      expect(buyBtn(root, item).disabled).toBe(true);
+      expect(row(root, item)!.querySelectorAll('.price .cost').length).toBeGreaterThan(0);
+    }
+  });
+
+  it('the garden page offers the first house not built yet, then only the shared rows', () => {
+    const s = rich(st());
+    buy(s, 'coop', T0, rng);
+    const { root, ui } = setup(s, 0);
+    ui.openShop();
+    expect(rowOrder(root)).toEqual(['barn', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    for (const h of ['barn', 'sty', 'fold', 'hut'] as const) buy(s, h, T0, rng);
+    ui.update(s);
+    expect(rowOrder(root)).toEqual(['medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+  });
+
+  it('the garden page shows a locked next house with its hint', () => {
+    const s = rich(st(1));
+    s.ranch.houses.push({ id: 'h0', kind: 'coop', lot: 1, poop: 0 });
+    const { root, ui } = setup(s, 0);
+    ui.openShop();
+    expect(rowOrder(root)[0]).toBe('barn');
+    expect(buyBtn(root, 'barn').classList.contains('locked')).toBe(true);
   });
 
   it('shows the price of the next chicken', () => {
@@ -365,7 +414,8 @@ describe('ranch shop', () => {
     expect(buyBtn(root, 'fish').textContent).toBe('先買貓');
     buy(s, 'dog', T0, rng);
     ui.update(s);
-    expect(buyBtn(root, 'dog').textContent).toBe('已經有了');
+    expect(buyBtn(root, 'dog').textContent).toBe('✅ 有了');
+    expect(row(root, 'dog')!.querySelector('.price')!.children).toHaveLength(0);
     expect(buyBtn(root, 'bone').disabled).toBe(false);
   });
 

@@ -290,7 +290,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   padding: 0 4px;
 }
 .buy:disabled { background: #eee3c8; color: rgba(74, 58, 42, 0.55); box-shadow: none; cursor: default; }
-.buy.full, .buy.need { font-size: 14px; }
+.buy.full, .buy.need, .buy.owned { font-size: 14px; }
+/* already built or already ours: a quiet green tick, not a greyed-out button */
+.buy.owned:disabled { background: #e2f0cf; color: #4c7a2c; }
 .buy.need { font-size: 13px; padding: 0 2px; }
 .buy.locked { font-size: 20px; }
 .price.is-locked { flex-direction: column; flex-wrap: nowrap; gap: 0; }
