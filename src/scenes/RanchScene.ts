@@ -1468,7 +1468,7 @@ export class RanchScene extends Phaser.Scene {
     this.tweens.add({ targets: v.icon, scaleX: s, scaleY: s, duration: 240, ease: 'Back.Out' });
   }
 
-  /** Waiting products (🥚 🥛 🍄 🧶 🧸) lie on the ground beside the animal and bob gently. */
+  /** Waiting products (🥚 🥛 🍄 🧶 🧣) lie on the ground beside the animal and bob gently. */
   private syncItems(v: AnimalView, a: Animal, hv: HouseView): void {
     const want = clamp(Math.floor(a.waiting), 0, MAX_ITEMS_SHOWN);
     if (v.items.length < want) {

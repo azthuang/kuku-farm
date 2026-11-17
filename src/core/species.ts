@@ -181,7 +181,7 @@ export const SPECIES_EMOJI: Record<SpeciesId, string> = {
 
 /** Emoji shown for each product (ranch items, flights, overview badges, HUD). */
 export const PRODUCT_EMOJI: Record<ProductId, string> = {
-  egg: '🥚', milk: '🥛', truffle: '🍄', yarn: '🧶', fluff: '🧸',
+  egg: '🥚', milk: '🥛', truffle: '🍄', yarn: '🧶', fluff: '🧣',
 };
 
 export function speciesOfHouse(kind: HouseKind): SpeciesId {
