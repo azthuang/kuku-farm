@@ -11,6 +11,8 @@ export type AnswerResult =
   | { kind: 'wrong'; q: Question; correctAnswer: number; next: Question };
 
 export const CHALLENGE_MAX = 10;
+/** A challenge harvest is this many times a × b. */
+export const CHALLENGE_MULTIPLIER = 2;
 
 function localDateKey(ms: number): string {
   const d = new Date(ms);
@@ -57,19 +59,26 @@ export class Game {
     }
     const picked: Question[] = [];
     const n = Math.min(CHALLENGE_MAX, pool.length);
+    // Crops lean toward what the barn is short of, counting what this round's earlier questions
+    // will already bring in.
+    const stock = { ...this.state.inventory };
     for (let i = 0; i < n; i++) {
       const weights = pool.map(q => challengeWeight(this.state.mastery[cellKey(q.a, q.b)] ?? 0));
       const idx = weightedPick(pool, weights, this.rng);
-      picked.push(this.makeQuestion(pool[idx].a, pool[idx].b));
+      const fullness: Partial<Record<CropId, number>> = {};
+      for (const c of Object.keys(stock) as CropId[]) fullness[c] = stock[c] / CROP_CAP;
+      const q = this.makeQuestion(pool[idx].a, pool[idx].b, fullness);
+      stock[q.crop] += q.a * q.b * CHALLENGE_MULTIPLIER;
+      picked.push(q);
       pool.splice(idx, 1);
     }
     this.begin('challenge', picked);
     return this.current;
   }
 
-  private makeQuestion(a: number, b: number): Question {
+  private makeQuestion(a: number, b: number, fullness?: Partial<Record<CropId, number>>): Question {
     const stars = starsOf(this.state.mastery[cellKey(a, b)] ?? 0);
-    const crop = pickCrop(cropPoolForRow(a), stars, this.rng);
+    const crop = pickCrop(cropPoolForRow(a), stars, this.rng, fullness);
     return { a, b, crop };
   }
 
@@ -98,7 +107,7 @@ export class Game {
 
     const points = applyAnswer(prev, mode, true, firstAttempt);
     s.mastery[key] = points;
-    const want = q.a * q.b * (mode === 'challenge' ? 2 : 1);
+    const want = q.a * q.b * (mode === 'challenge' ? CHALLENGE_MULTIPLIER : 1);
     const crop = q.crop;
     const amount = Math.max(0, Math.min(want, CROP_CAP - s.inventory[crop]));
     s.inventory[crop] += amount;

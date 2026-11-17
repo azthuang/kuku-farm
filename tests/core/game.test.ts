@@ -99,6 +99,38 @@ describe('Game', () => {
     expect(r).toMatchObject({ amount: 49, capped: true });
     expect(g.state.inventory[q.crop]).toBe(999);
   });
+  it('挑戰模式：快滿的作物很少出現，基礎模式不受倉庫影響', () => {
+    const count = (mode: 'basic' | 'challenge') => {
+      let tomato = 0, all = 0;
+      for (let seed = 0; seed < 40; seed++) {
+        let x = seed + 1;
+        const g = new Game(createNewState(0), { now: () => 0 }, () => ((x = (x * 16807) % 2147483647) / 2147483647));
+        g.state.unlocked = 9;
+        g.state.inventory.tomato = 990;
+        if (mode === 'challenge') g.startChallenge(); else g.startBasic(8);
+        for (const q of (g as any).queue as { crop: string }[]) { all++; if (q.crop === 'tomato') tomato++; }
+      }
+      return tomato / all;
+    };
+    // row 8's own crop is tomato: in basic it comes most; in challenge, with the barn nearly full, almost never
+    expect(count('basic')).toBeGreaterThan(0.25);
+    expect(count('challenge')).toBeLessThan(0.02);
+  });
+  it('挑戰模式選作物時算進同一輪前面題目會收的量', () => {
+    let x = 7;
+    const g = new Game(createNewState(0), { now: () => 0 }, () => ((x = (x * 16807) % 2147483647) / 2147483647));
+    g.state.unlocked = 9;
+    // only wheat has room for a round; everything else is full
+    for (const c of Object.keys(g.state.inventory)) (g.state.inventory as any)[c] = 999;
+    g.state.inventory.wheat = 0;
+    g.startChallenge();
+    const queue = (g as any).queue as { a: number; b: number; crop: string }[];
+    let planned = 0;
+    for (const q of queue) if (q.crop === 'wheat') planned += q.a * q.b * 2;
+    // wheat is picked while it has room, but not far past the cap
+    expect(planned).toBeGreaterThan(0);
+    expect(planned).toBeLessThan(999 + 9 * 9 * 2);
+  });
   it('沒有題目時 answer 回傳 null（連點 ✔ 不重複計分）', () => {
     const g = newGame(); expect(g.answer(1)).toBeNull();
   });
