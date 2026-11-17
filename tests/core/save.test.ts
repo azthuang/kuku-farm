@@ -201,7 +201,7 @@ describe('save', () => {
   it('round trips the dog and the cat; a second dog is dropped, a broken pet resets only the ranch', () => {
     const s = createNewState(5);
     s.ranch = populated();
-    s.ranch.pets = [{ id: 'p7', kind: 'dog', name: '旺財', color: '柯基' }, { id: 'p8', kind: 'cat', name: '咪咪', color: '黑' }];
+    s.ranch.pets = [{ id: 'p7', kind: 'dog', name: '旺財', color: '柯基' }, { id: 'p8', kind: 'cat', name: '咪咪', color: '賓士貓' }];
     s.ranch.supplies.bone = 4;
     expect(parseSave(serialize(s))).toEqual({ ok: true, state: s });
     const two = withRanch((x) => {
@@ -209,12 +209,17 @@ describe('save', () => {
     });
     if (!two.ok) throw new Error('expected ok');
     expect(two.state.ranch.pets).toEqual([{ id: 'p7', kind: 'dog', name: '旺財', color: '柯基' }]);
-    // a dog saved with a plain coat becomes the breed in that coat's column; unknown -> the first
+    // a pet saved with a plain coat becomes the breed that looks like it; unknown -> the first
     const old = withRanch((x) => {
-      x.pets = [{ id: 'p7', kind: 'dog', name: '旺財', color: '黃' }, { id: 'p8', kind: 'cat', name: '咪咪', color: '?' }];
+      x.pets = [{ id: 'p7', kind: 'dog', name: '旺財', color: '白' }, { id: 'p8', kind: 'cat', name: '咪咪', color: '黑' }];
     });
     if (!old.ok) throw new Error('expected ok');
-    expect(old.state.ranch.pets.map(p => p.color)).toEqual(['柯基', '白']);
+    expect(old.state.ranch.pets.map(p => p.color)).toEqual(['大麥町', '賓士貓']);
+    const odd = withRanch((x) => {
+      x.pets = [{ id: 'p7', kind: 'dog', name: '旺財', color: '黃' }, { id: 'p8', kind: 'cat', name: '咪咪', color: '?' }];
+    });
+    if (!odd.ok) throw new Error('expected ok');
+    expect(odd.state.ranch.pets.map(p => p.color)).toEqual(['柴犬', '橘虎斑']);
     const bad = withRanch((x) => { (x.pets as unknown[]) = [{ id: 'p7', kind: 'horse', name: 'x', color: 'y' }]; });
     if (!bad.ok) throw new Error('expected ok');
     expect(bad.ranchReset).toBe(true);

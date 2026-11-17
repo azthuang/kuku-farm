@@ -168,15 +168,18 @@ export const PETS: Record<PetKind, PetDef> = {
   cat: {
     kind: 'cat', emoji: '🐈', price: { milk: 20, yarn: 10, fluff: 10 },
     snack: 'fish', snackPrice: { milk: 3, yarn: 2, fluff: 2 },
-    colors: ['白', '橘', '咖啡', '黑'],
+    colors: ['橘虎斑', '三花貓', '賓士貓', '暹羅貓'],
     names: ['咪咪', '橘子', '小花', '麻糬', '湯圓', '芝麻'],
   },
 };
 export const PET_KINDS: readonly PetKind[] = ['dog', 'cat'];
-/** Coat names a pet may carry from before it became a breed; same index = same sheet column. */
+/**
+ * Coat names a pet may carry from before it became a breed: each maps to the breed at the same
+ * index in `colors`, the one that looks most like it (a white dog -> the dalmatian, ...).
+ */
 export const LEGACY_PET_COLORS: Record<PetKind, readonly string[]> = {
-  dog: ['白', '棕', '黃', '黑'],
-  cat: [],
+  dog: ['黃', '白', '棕', '黑'],
+  cat: ['橘', '白', '黑', '咖啡'],
 };
 export const PET_SNACK_EMOJI: Record<PetSnackId, string> = { bone: '🦴', fish: '🐟' };
 

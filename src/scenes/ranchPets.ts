@@ -21,10 +21,9 @@ const SLEEP_COL = 3;
 /** Per sheet: frame size, drawn scale, ground row in the frame, tag height, eat frame order. */
 interface SheetLook { frame: number; scale: number; feet: number; tagY: number; eat: number[] }
 const LOOK: Record<PetKind, SheetLook> = {
-  // four breeds drawn for this game (40 px frames, shown at 2x)
+  // four breeds each, drawn for this game: 40 px frames, shown at 2x
   dog: { frame: 40, scale: 2, feet: 38, tagY: 90, eat: [0, 1, 2, 1, 2, 3] },
-  // "[LPC] Cats and Dogs" by bluecarrot16 (CC-BY 3.0), 32 px frames
-  cat: { frame: 32, scale: 2.5, feet: 28, tagY: 74, eat: [0, 1, 2, 3, 2, 3] },
+  cat: { frame: 40, scale: 2, feet: 38, tagY: 90, eat: [0, 1, 2, 1, 2, 3] },
 };
 const HIT_R = 42;
 const SPEED: Record<PetKind, number> = { dog: 62, cat: 46 };

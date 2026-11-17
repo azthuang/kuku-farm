@@ -152,7 +152,7 @@ function validateRanch(data: unknown, version: number): RanchState {
   return { houses, animals, pets, supplies, products, settledAt, nextId: o.nextId };
 }
 
-/** A pet's coat as the sheet names it now: an old coat name maps to the breed in its column. */
+/** A pet's breed as the sheet names it now: an old coat name maps to the breed that looks like it. */
 function petColor(kind: PetKind, color: string): string {
   const now = PETS[kind].colors;
   if (now.includes(color)) return color;
