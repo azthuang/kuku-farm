@@ -495,7 +495,26 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 
 @media (min-width: 600px) {
   .app { max-width: 600px; margin: 0 auto; }
+  /* Tablets: the round icon buttons and their icons a size up (the HUD stays 48 px tall). */
+  .hud-gear { width: 44px; height: 44px; font-size: 27px; }
+  .rn-map, .rn-close { width: 54px; height: 54px; font-size: 31px; }
+  .shop-close { width: 48px; height: 48px; font-size: 24px; }
+  .rn-prev, .rn-next { font-size: 26px; }
 }
+
+/*
+ * Round icon buttons hold one emoji or a drawn ✕: no default button padding (Safari's would push a
+ * wide Apple emoji out of the circle) and the icon centred on its own box, not on the text line.
+ */
+.hud-gear, .rn-map, .rn-close, .shop-close, .rn-prev, .rn-next {
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+.x-icon { width: 0.9em; height: 0.9em; display: block; }
 
 /* Feed sack: burlap bag with the species' head on the front; size via --sack */
 .feed-sack { --sack: 34px; position: relative; display: inline-block; width: var(--sack); height: var(--sack); flex: none; vertical-align: middle; }

@@ -123,6 +123,14 @@ function button(cls: string, text: string, label?: string): HTMLButtonElement {
   return b;
 }
 
+/** A close button whose ✕ is drawn, so it is the same size and centred on every device's fonts. */
+function closeButton(cls: string, label: string): HTMLButtonElement {
+  const b = button(cls, '', label);
+  b.innerHTML = '<svg class="x-icon" viewBox="0 0 24 24" aria-hidden="true">'
+    + '<path d="M5 5L19 19M19 5L5 19" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" fill="none"/></svg>';
+  return b;
+}
+
 interface Row { row: HTMLElement; price: HTMLElement; btn: HTMLButtonElement }
 
 /**
@@ -207,7 +215,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   const mapBtn = button('rn-map', '🗺️', '全景');
   const prev = button('rn-prev', '◀', '上一頁');
   const next = button('rn-next', '▶', '下一頁');
-  const closeFollow = button('rn-close', '✕', '不跟了');
+  const closeFollow = closeButton('rn-close', '不跟了');
   closeFollow.hidden = true;
   closeFollow.addEventListener('click', () => followCloseCb());
   const dotsEl = el('div', 'rn-dots');
@@ -249,7 +257,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   const sheet = el('div', 'shop-sheet');
   const head = el('div', 'shop-head');
   head.append(el('span', 'shop-title', '🛒 商店'));
-  const close = button('shop-close', '✕', '關閉');
+  const close = closeButton('shop-close', '關閉');
   head.append(close);
   const list = el('div', 'shop-list');
   sheet.append(head, list);
