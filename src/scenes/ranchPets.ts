@@ -292,10 +292,14 @@ export class RanchPets {
     return null;
   }
 
-  /** A hop and a heart (a tap). Wakes a sleeping pet. */
+  busy(id: string): boolean {
+    return this.views.get(id)?.mode === 'trick';
+  }
+
+  /** A hop and a heart (a tap). Wakes a sleeping pet; ignored mid-trick. */
   jump(id: string): void {
     const v = this.views.get(id);
-    if (!v) return;
+    if (!v || v.mode === 'trick') return;
     if (v.mode === 'sleep') this.wake(v);
     this.scene.tweens.killTweensOf(v.body);
     v.body.y = 0;
@@ -308,7 +312,7 @@ export class RanchPets {
   /** Eats a snack, then the dog spins round and the cat stretches; hearts all round. */
   trick(id: string): void {
     const v = this.views.get(id);
-    if (!v) return;
+    if (!v || v.mode === 'trick') return;
     if (v.mode === 'sleep') this.wake(v);
     v.mode = 'trick';
     v.body.y = 0;

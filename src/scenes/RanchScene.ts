@@ -569,6 +569,11 @@ export class RanchScene extends Phaser.Scene {
     if (view.garden) this.syncGarden(view.garden);
   }
 
+  /** Whether that pet is busy with a snack trick (taps then do nothing, so no snack is wasted). */
+  petBusy(petId: string): boolean {
+    return this.pets?.busy(petId) ?? false;
+  }
+
   /** The dog or the cat: 'jump' for a tap, 'trick' after a snack. */
   petFx(petId: string, kind: 'jump' | 'trick'): void {
     if (!this.built || !this.pets) return;
@@ -1654,18 +1659,6 @@ export class RanchScene extends Phaser.Scene {
       return;
     }
 
-    // The dog and the cat roam between the pens: their tags, then themselves.
-    const petTag = this.pets?.hitTag(w.x, w.y);
-    if (petTag) {
-      this.handlers.onTag(petTag);
-      return;
-    }
-    const pet = this.pets?.hit(w.x, w.y);
-    if (pet) {
-      this.handlers.onPet?.(pet);
-      return;
-    }
-
     const page = this.pageIndex;
     const dist = Phaser.Math.Distance.Between;
 
@@ -1699,6 +1692,13 @@ export class RanchScene extends Phaser.Scene {
     }
     if (tagged) {
       this.handlers.onTag(tagged.id);
+      return;
+    }
+
+    // The dog and the cat roam between the pens; their name tags count like the animals'.
+    const petTag = this.pets?.hitTag(w.x, w.y);
+    if (petTag) {
+      this.handlers.onTag(petTag);
       return;
     }
 
@@ -1742,6 +1742,12 @@ export class RanchScene extends Phaser.Scene {
     }
     if (animal) {
       this.handlers.onAnimal(animal.id);
+      return;
+    }
+    // A pet only gets the taps nothing in a pen wanted (it may stand right at a gate).
+    const petHit = this.pets?.hit(w.x, w.y);
+    if (petHit) {
+      this.handlers.onPet?.(petHit);
       return;
     }
     const lv = this.lots.find(l => l.lot === page);

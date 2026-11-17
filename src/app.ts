@@ -512,6 +512,7 @@ export function startApp(root: HTMLElement): void {
   /** The tool a purchase hands the child: any species' feed is the feed tool; treats and medicine are themselves. */
   function toolFor(item: ShopItemId): Tool | null {
     if ((FEED_IDS as readonly string[]).includes(item)) return 'feed';
+    if (item === 'bone' || item === 'fish') return 'treat'; // 🍪 hands the pets their snacks
     return item === 'treat' || item === 'medicine' ? item : null;
   }
 
@@ -542,7 +543,7 @@ export function startApp(root: HTMLElement): void {
     },
     onPet: id => {
       const p = game.state.ranch.pets.find(x => x.id === id);
-      if (!p) return;
+      if (!p || ranchScene.petBusy(id)) return; // mid-trick: a fast second tap must not eat a snack
       if (tool !== 'treat') {
         ranchScene.petFx(id, 'jump');
         sfx.play(petVoice(p.kind));

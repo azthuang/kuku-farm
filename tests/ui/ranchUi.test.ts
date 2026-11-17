@@ -355,6 +355,7 @@ describe('ranch shop', () => {
     ui.onTool(t => picked.push(t));
     s.ranch.supplies.bone = 2;
     ui.update(s);
+    expect(toolBtn(root, 'treat').classList.contains('empty')).toBe(false);
     toolBtn(root, 'treat').click();
     expect(picked).toEqual(['treat']);
     expect(shopOpen(root)).toBe(false);

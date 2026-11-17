@@ -299,7 +299,9 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
       } else if (t.supply) {
         const n = s.ranch.supplies[t.supply as SupplyId];
         count.textContent = String(n);
-        btn.classList.toggle('empty', n < 1);
+        // 🍪 is not empty while a bone or a fish is left for the pets
+        const snacks = t.tool === 'treat' && PET_KINDS.some(k => s.ranch.supplies[PETS[k].snack] > 0);
+        btn.classList.toggle('empty', n < 1 && !snacks);
       }
     }
   }

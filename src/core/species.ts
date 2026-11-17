@@ -56,7 +56,8 @@ function rising(base: Price, free: number): (n: number) => Price {
 }
 
 // Crops only (products buy the dog, the cat and their snacks). Each price leans on the crops the
-// field yields most of at that stage and stays at or under 450 of any one crop.
+// field yields most of at that stage; a house or a first animal needs at most 450 of any one crop
+// (extra animals cost 1.5x more each, e.g. a second llama 680 watermelons, still under the 999 cap).
 const CHICKEN_HOUSE: Price = { wheat: 150, carrot: 100 };
 const COW_HOUSE: Price = { potato: 450, corn: 300 };
 const PIG_HOUSE: Price = { tomato: 450, potato: 230 };
