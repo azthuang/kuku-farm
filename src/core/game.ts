@@ -1,6 +1,6 @@
 import type { Clock, Rng } from './clock';
 import { LEVEL_ORDER, cropPoolForRow, unlockedRows, type CropId } from './levels';
-import { applyAnswer, challengeWeight, pickCrop, starsOf, weightedPick, type Mode } from './mastery';
+import { MAX_POINTS, applyAnswer, challengeWeight, pickCrop, starsOf, weightedPick, type Mode } from './mastery';
 import { CROP_CAP, cellKey, type GameState } from './state';
 
 export interface Question { a: number; b: number; crop: CropId }
@@ -35,6 +35,16 @@ export class Game {
     this.state = state;
     this.clock = clock;
     this.rng = rng;
+    this.graduateTutorial(); // a save from before this rule gets its 1× stars on load
+  }
+
+  /**
+   * Once the tutorial row (1×) is cleared and the next level opens, every 1× cell is 3 stars and
+   * stays so: 1× is not practised for mastery (challenge rounds leave it out too).
+   */
+  private graduateTutorial(): void {
+    if (this.state.unlocked < 2) return;
+    for (let b = 1; b <= 9; b++) this.state.mastery[cellKey(LEVEL_ORDER[0], b)] = MAX_POINTS;
   }
 
   get mode(): Mode | null { return this._mode; }
@@ -102,6 +112,7 @@ export class Game {
 
     if (!correct) {
       s.mastery[key] = applyAnswer(prev, mode, false, firstAttempt);
+      this.graduateTutorial();
       this.queue.shift();
       this.queue.push(q);
       return { kind: 'wrong', q, correctAnswer: q.a * q.b, next: this.queue[0] };
@@ -125,6 +136,7 @@ export class Game {
         unlockedRow = LEVEL_ORDER[s.unlocked - 1];
       }
     }
+    this.graduateTutorial();
     day.correct++;
 
     this.queue.shift();

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game } from '../../src/core/game';
+import { starsOf } from '../../src/core/mastery';
 import { createNewState } from '../../src/core/state';
 
 let rngValue = 0.99;
@@ -143,6 +144,30 @@ describe('Game', () => {
     // wheat is picked while it has room, but not far past the cap
     expect(planned).toBeGreaterThan(0);
     expect(planned).toBeLessThan(999 + 9 * 9 * 2);
+  });
+  it('完成教學（1× 九題）時 1× 全部 3 星，之後答錯也維持', () => {
+    const g = newGame();
+    g.startBasic(1);
+    for (let b = 1; b <= 8; b++) g.answer(b);
+    expect(g.state.mastery['1,1']).toBe(1); // still in the tutorial: points as usual
+    g.answer(9);
+    for (let b = 1; b <= 9; b++) expect(starsOf(g.state.mastery[`1,${b}`])).toBe(3);
+    // practising 1× again: a wrong answer does not take a star
+    g.startBasic(1);
+    g.answer(0);
+    expect(starsOf(g.state.mastery['1,1'])).toBe(3);
+  });
+  it('已過教學的舊存檔，載入時 1× 補成 3 星；教學中的不動', () => {
+    const s = createNewState(0);
+    s.unlocked = 3;
+    s.mastery['1,4'] = 2;
+    const g = new Game(s, { now: () => 0 }, () => 0.5);
+    for (let b = 1; b <= 9; b++) expect(starsOf(g.state.mastery[`1,${b}`])).toBe(3);
+    const fresh = createNewState(0);
+    fresh.mastery['1,4'] = 2;
+    new Game(fresh, { now: () => 0 }, () => 0.5);
+    expect(fresh.mastery['1,4']).toBe(2);
+    expect(fresh.mastery['1,5']).toBeUndefined();
   });
   it('沒有題目時 answer 回傳 null（連點 ✔ 不重複計分）', () => {
     const g = newGame(); expect(g.answer(1)).toBeNull();
