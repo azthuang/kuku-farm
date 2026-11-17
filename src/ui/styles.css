@@ -78,12 +78,14 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 }
 .hud-crops::-webkit-scrollbar { display: none; }
 .hud-crop { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 1px; white-space: nowrap; scroll-snap-align: start; }
-.hud-crop span { font-size: 20px; }
-.hud-crop b { display: inline-block; min-width: 1ch; font-size: 16px; }
+/* Icon and text sizes grow with the screen's short side (phone size up to about 1.35x on an iPad);
+   the bars keep their heights, so the square farm keeps its size. */
+.hud-crop span { font-size: clamp(20px, 3.5vmin, 27px); }
+.hud-crop b { display: inline-block; min-width: 1ch; font-size: clamp(16px, 2.8vmin, 21px); }
 .hud-crop b.bump { animation: bump 0.4s ease-out; }
 .hud-level {
   font-weight: 800;
-  font-size: 14px;
+  font-size: clamp(14px, 2.4vmin, 18px);
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--sun);
@@ -130,8 +132,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   line-height: 1;
   transition: transform 0.06s;
 }
-.tool-icon { font-size: 26px; }
-.tool-count { font-size: 14px; font-weight: 800; margin-top: 3px; }
+.tool-icon { font-size: clamp(26px, 4.2vmin, 32px); }
+.tool-count { font-size: clamp(14px, 2.1vmin, 16px); font-weight: 800; margin-top: 3px; }
 .tool.selected { background: var(--sun); box-shadow: 0 4px 0 var(--sun-deep), 0 0 0 3px var(--sun-deep) inset; }
 .tool.empty .tool-icon { filter: grayscale(1); opacity: 0.4; }
 .tool.empty .tool-count { color: var(--berry-deep); }
@@ -145,7 +147,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   grid-column: span 5;
   background: var(--sun); box-shadow: 0 4px 0 var(--sun-deep);
 }
-.go-field-text { font-size: 20px; font-weight: 800; }
+.go-field-text { font-size: clamp(20px, 3.5vmin, 26px); font-weight: 800; }
 .ranch-tools.off { opacity: 0.4; }
 .ranch-tools.off .tool { box-shadow: none; }
 
@@ -428,7 +430,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   flex: 1;
   border: 0; border-radius: 16px;
   background: var(--cream);
-  font-size: 20px; font-weight: 800;
+  font-size: clamp(20px, 3.5vmin, 27px); font-weight: 800;
   box-shadow: 0 3px 0 rgba(74, 58, 42, 0.2);
   transition: transform 0.06s;
 }
@@ -518,7 +520,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 
 /* Feed sack: burlap bag with the species' head on the front; size via --sack */
 .feed-sack { --sack: 34px; position: relative; display: inline-block; width: var(--sack); height: var(--sack); flex: none; vertical-align: middle; }
-.tool-icon .feed-sack { --sack: 36px; }
+.tool-icon .feed-sack { --sack: clamp(36px, 5.5vmin, 42px); }
 .shop-icon .feed-sack { --sack: 38px; }
 .feed-sack svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .feed-sack .sack-body { fill: #d9a95f; stroke: #8a5a24; stroke-width: 2; stroke-linejoin: round; }
