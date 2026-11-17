@@ -1,6 +1,6 @@
 import { CROP_BY_ROW, type CropId } from './levels';
 import {
-  SPECIES, HOUSE_KINDS, PET_KINDS, PET_SNACK_IDS, speciesOfHouse, PRODUCT_IDS, SUPPLY_IDS,
+  SPECIES, HOUSE_KINDS, LEGACY_PET_COLORS, PETS, PET_KINDS, PET_SNACK_IDS, speciesOfHouse, PRODUCT_IDS, SUPPLY_IDS,
   type HouseKind, type PetKind, type ProductId, type SpeciesId, type SupplyId,
 } from './species';
 import {
@@ -143,13 +143,21 @@ function validateRanch(data: unknown, version: number): RanchState {
       if (typeof p.name !== 'string' || typeof p.color !== 'string') fail();
       if (pets.some((x) => x.id === p.id) || animals.some((a) => a.id === p.id)) fail();
       if (pets.some((x) => x.kind === p.kind)) continue; // one of each: a duplicate is dropped, not fatal
-      pets.push({ id: p.id, kind: p.kind as PetKind, name: p.name, color: p.color });
+      pets.push({ id: p.id, kind: p.kind as PetKind, name: p.name, color: petColor(p.kind as PetKind, p.color) });
     }
   }
 
   const settledAt = finite(o.settledAt);
   if (!isIntIn(o.nextId, 1, Number.MAX_SAFE_INTEGER)) fail();
   return { houses, animals, pets, supplies, products, settledAt, nextId: o.nextId };
+}
+
+/** A pet's coat as the sheet names it now: an old coat name maps to the breed in its column. */
+function petColor(kind: PetKind, color: string): string {
+  const now = PETS[kind].colors;
+  if (now.includes(color)) return color;
+  const i = LEGACY_PET_COLORS[kind].indexOf(color);
+  return now[i >= 0 ? i : 0];
 }
 
 /** The ranch part of a v3/v4 save, or null when it is too broken to read. */

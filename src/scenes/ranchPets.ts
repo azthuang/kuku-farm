@@ -6,22 +6,26 @@ import { nearestNode, route, type RoamGraph } from './petRoam';
 /**
  * The dog and the cat: they walk the farm's paths, stop to sniff, and lie down to sleep at a
  * resting spot (💤). A tap makes one jump and call; a snack makes it eat and do a trick. They have
- * no needs at all. Sprites: "[LPC] Cats and Dogs" by bluecarrot16 (CC-BY 3.0), 32 px frames, four
- * coats side by side (4 columns each); rows: walk right, up, down, left, then eat (facing down).
+ * no needs at all. Each sheet holds four breeds (or coats) side by side, 4 columns each; rows:
+ * walk right (+ asleep), walk up, walk down, walk left (+ asleep), then eat (facing the viewer).
  */
 
 type Img = Phaser.GameObjects.Image;
 type Dir = 'R' | 'U' | 'D' | 'L';
 
-const FRAME = 32;
 const SHEET_COLS = 16;
 const ROW: Record<Dir, number> = { R: 0, U: 1, D: 2, L: 3 };
 const EAT_ROW = 4;
 /** Lying-down frames: the fourth column of the right and left walk rows. */
 const SLEEP_COL = 3;
-const SCALE = 2.5;
-const FEET = 28;
-const TAG_Y = 74;
+/** Per sheet: frame size, drawn scale, ground row in the frame, tag height, eat frame order. */
+interface SheetLook { frame: number; scale: number; feet: number; tagY: number; eat: number[] }
+const LOOK: Record<PetKind, SheetLook> = {
+  // four breeds drawn for this game (40 px frames, shown at 2x)
+  dog: { frame: 40, scale: 2, feet: 38, tagY: 90, eat: [0, 1, 2, 1, 2, 3] },
+  // "[LPC] Cats and Dogs" by bluecarrot16 (CC-BY 3.0), 32 px frames
+  cat: { frame: 32, scale: 2.5, feet: 28, tagY: 74, eat: [0, 1, 2, 3, 2, 3] },
+};
 const HIT_R = 42;
 const SPEED: Record<PetKind, number> = { dog: 62, cat: 46 };
 const TAG_H = 30;
@@ -82,7 +86,7 @@ export class RanchPets {
   static preload(scene: Phaser.Scene, base: string): void {
     for (const kind of ['dog', 'cat'] as const) {
       if (!scene.textures.exists(PET_TEX[kind])) {
-        scene.load.spritesheet(PET_TEX[kind], `${base}${kind}.png`, { frameWidth: FRAME, frameHeight: FRAME });
+        scene.load.spritesheet(PET_TEX[kind], `${base}${kind}.png`, { frameWidth: LOOK[kind].frame, frameHeight: LOOK[kind].frame });
       }
     }
   }
@@ -92,6 +96,8 @@ export class RanchPets {
   }
 
   private ensureAnims(kind: PetKind, coat: number): void {
+    // crisp pixels at the integer scale
+    this.scene.textures.get(PET_TEX[kind]).setFilter(Phaser.Textures.FilterMode.NEAREST);
     const a = this.scene.anims;
     const tex = PET_TEX[kind];
     const f = (row: number, col: number) => ({ key: tex, frame: row * SHEET_COLS + coat * 4 + col });
@@ -100,7 +106,7 @@ export class RanchPets {
       if (!a.exists(key)) a.create({ key, frames: [f(ROW[d], 0), f(ROW[d], 1), f(ROW[d], 2), f(ROW[d], 1)], frameRate: 8, repeat: -1 });
     }
     const eat = `${tex}-${coat}-eat`;
-    if (!a.exists(eat)) a.create({ key: eat, frames: [0, 1, 2, 3, 2, 3].map(c => f(EAT_ROW, c)), frameRate: 6, repeat: 0 });
+    if (!a.exists(eat)) a.create({ key: eat, frames: LOOK[kind].eat.map(c => f(EAT_ROW, c)), frameRate: 6, repeat: 0 });
   }
 
   /** Adds, removes and renames pet views to match the ranch. New pets (after the first sync) appear near `near`. */
@@ -128,7 +134,7 @@ export class RanchPets {
     const at = g.nodes[start];
     const shadow = this.scene.add.ellipse(0, 0, 44, 12, 0x1d3a12, 0.28);
     const body = this.scene.add.sprite(0, 0, PET_TEX[p.kind], this.frame({ coat }, ROW.D, 1))
-      .setOrigin(0.5, FEET / FRAME).setScale(SCALE);
+      .setOrigin(0.5, LOOK[p.kind].feet / LOOK[p.kind].frame).setScale(LOOK[p.kind].scale);
     const box = this.scene.add.container(at.x, at.y, [shadow, body]);
     const pill = this.scene.add.graphics();
     const label = this.scene.add.text(0, 0, '', {
@@ -175,7 +181,7 @@ export class RanchPets {
   private place(v: PetView): void {
     const { x, y } = v.box;
     v.box.setDepth(this.deps.depth.animal + y / 10000);
-    v.tag.setPosition(x, y - TAG_Y);
+    v.tag.setPosition(x, y - LOOK[v.kind].tagY);
     v.zz.setPosition(x + 26, y - 52);
   }
 
@@ -394,7 +400,7 @@ export class RanchPets {
       } else {
         v.body.setFrame(this.frame(v, ROW.R, 1));
         this.scene.tweens.add({
-          targets: v.body, scaleX: SCALE * 1.18, scaleY: SCALE * 0.9, duration: 420, yoyo: true, ease: 'Sine.InOut',
+          targets: v.body, scaleX: LOOK[v.kind].scale * 1.18, scaleY: LOOK[v.kind].scale * 0.9, duration: 420, yoyo: true, ease: 'Sine.InOut',
           onComplete: () => this.views.has(v.id) && done(),
         });
       }
@@ -402,7 +408,7 @@ export class RanchPets {
   }
 
   private pop(v: PetView, emoji: string, dx = 0): void {
-    const img = this.deps.emoji(v.box.x + dx, v.box.y - TAG_Y + 30, emoji, EMOJI_SIZE).setDepth(this.deps.depth.fx);
+    const img = this.deps.emoji(v.box.x + dx, v.box.y - LOOK[v.kind].tagY + 30, emoji, EMOJI_SIZE).setDepth(this.deps.depth.fx);
     const s = img.scaleX;
     img.setScale(0);
     this.scene.tweens.chain({
