@@ -11,8 +11,8 @@ import {
   BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout, wheelFrameOrder, type SceneryLayout,
 } from './ranchScenery';
 import { SCENERY_FRAMES } from './sceneryAtlas';
-import { RanchPets } from './ranchPets';
-import { buildRoamGraph } from './petRoam';
+import { PATROL_LOOK_MS, RanchPets, type PatrolStop } from './ranchPets';
+import { buildRoamGraph, nearestNode, type RoamGraph } from './petRoam';
 import { PALETTES, recolor } from './recolor';
 
 /** World units per scenery pixel: 5 canvas pixels at camera zoom ASSET_RES, so every pixel stays square. */
@@ -104,6 +104,8 @@ const PAGES = LOT_COUNT;
 const GRID_W = COLS * VIEW;
 const GRID_H = ROWS * VIEW;
 const OVERVIEW_ZOOM = ASSET_RES * Math.min(VIEW / GRID_W, VIEW / GRID_H);
+/** Following the dog or the cat: closer than a care page, so the walk feels like its own. */
+const FOLLOW_ZOOM = ASSET_RES * 1.6;
 /** The lot inside its cell (multiples of PX so the baked pixel art lines up). */
 const LOT_IN_CELL: Rect = { x: 30, y: 80, w: 540, h: 440 };
 
@@ -173,8 +175,10 @@ export interface RanchHandlers {
   onSwipe(dir: -1 | 1): void;
   /** A healthy animal on screen makes its sound now and then (at most one every VOICE_MS). */
   onIdleVoice?(animalId: string): void;
-  /** The dog or the cat was tapped (its name tag goes to onTag). */
+  /** The dog or the cat was tapped (its name tag goes to onTag), also in the overview. */
   onPet?(petId: string): void;
+  /** The followed pet is gone (e.g. another save was imported): the follow view has ended. */
+  onFollowLost?(): void;
 }
 
 /** What the app knows that the ranch state does not: which empty lots are locked, and by which crop. */
@@ -356,6 +360,9 @@ export class RanchScene extends Phaser.Scene {
   private lots: LotView[] = [];
   private garden: GardenView | null = null;
   private pets: RanchPets | null = null;
+  private roam: RoamGraph | null = null;
+  /** The pet the camera follows on its rounds, or null. */
+  private followId: string | null = null;
   /** The poop the child tapped last, removed first when that house's count drops. */
   private tappedPoop: Img | null = null;
   private pending = new Set<() => void>();
@@ -396,6 +403,7 @@ export class RanchScene extends Phaser.Scene {
 
   /** Care view of one page (0 = the garden, 1 … 5 the pens). Pans with a short tween unless animate is false. */
   showPage(index: number, animate = true): void {
+    this.stopFollow();
     this.pageIndex = clamp(Math.round(index), 0, PAGES - 1);
     const wasOverview = this.isOverview;
     this.isOverview = false;
@@ -406,6 +414,7 @@ export class RanchScene extends Phaser.Scene {
 
   /** Zoomed-out view of every page: look only, a tap goes back to that page via onPageTap. */
   showOverview(animate = true): void {
+    this.stopFollow();
     this.isOverview = true;
     this.moveCamera(GRID_W / 2, GRID_H / 2, OVERVIEW_ZOOM, animate, ZOOM_MS);
     this.applyModeVisuals(animate);
@@ -448,11 +457,13 @@ export class RanchScene extends Phaser.Scene {
     const layout = this.buildScenery();
     // The dog and the cat walk the paths (clear of the world's edge) and rest by the house, tree and mill.
     const W = SCENERY_WORLD;
-    this.pets = new RanchPets(this, buildRoamGraph(layout.paths, { x: W.x + 40, y: W.y + 40, w: W.w - 80, h: W.h - 80 }, layout.petRest), {
+    this.roam = buildRoamGraph(layout.paths, { x: W.x + 40, y: W.y + 40, w: W.w - 80, h: W.h - 80 }, layout.petRest);
+    this.pets = new RanchPets(this, this.roam, {
       emoji: (x, y, e, size) => this.emoji(x, y, e, size),
       font: FONT,
       depth: { animal: DEPTH.animal, tag: DEPTH.tag, fx: DEPTH.fx },
       resolution: ASSET_RES,
+      onPatrolStop: (id, stop) => this.showThought(id, stop.lot),
     });
     for (const sp of SPECIES_ORDER) this.lots.push(this.buildLot(SPECIES[sp].lot, LOTS[SPECIES[sp].lot]));
     this.buildGarden(LOTS[FARM_LOT]);
@@ -485,6 +496,7 @@ export class RanchScene extends Phaser.Scene {
     const list = this.animalList;
     for (let i = 0; i < list.length; i++) this.step(list[i], time, dt);
     this.pets?.update(time, dt);
+    if (this.followId) this.trackFollowed(dt);
     this.voiceIn -= dt * 1000;
     if (this.voiceIn <= 0) {
       this.voiceIn = rand(VOICE_MS.min, VOICE_MS.max);
@@ -567,6 +579,115 @@ export class RanchScene extends Phaser.Scene {
       this.syncBadges(lv, status[lv.lot]);
     }
     if (view.garden) this.syncGarden(view.garden);
+  }
+
+  get following(): string | null {
+    return this.followId;
+  }
+
+  /**
+   * Zooms in on the dog or the cat and follows it on its rounds: it walks to the field and each
+   * pen's gate in turn and shows what it sees there. Ends with showPage / showOverview / unfollow.
+   */
+  follow(petId: string): void {
+    if (!this.built || !this.pets?.posOf(petId)) return;
+    this.followId = petId;
+    this.isOverview = false;
+    if (this.camTween) {
+      this.camTween.remove();
+      this.camTween = null;
+    }
+    this.pets.setPatrol(petId, this.patrolStops());
+    this.applyModeVisuals(false, true);
+  }
+
+  /** Ends the follow view; returns the page where the pet is now (for the care view). */
+  unfollow(): number {
+    const pos = this.followId ? this.pets?.posOf(this.followId) : null;
+    this.stopFollow();
+    if (!pos) return this.pageIndex;
+    const col = clamp(Math.floor(pos.x / VIEW), 0, COLS - 1);
+    const row = clamp(Math.floor((pos.y - 1) / VIEW), 0, ROWS - 1);
+    return clamp(row * COLS + col, 0, PAGES - 1);
+  }
+
+  private stopFollow(): void {
+    if (!this.followId) return;
+    this.followId = null;
+    this.pets?.setPatrol(null);
+  }
+
+  /** The field and every built pen, by lot: the gate node in front of each. */
+  private patrolStops(): PatrolStop[] {
+    const g = this.roam;
+    if (!g) return [];
+    const built = new Set((this.model?.houses ?? []).map(h => h.lot));
+    const out: PatrolStop[] = [];
+    LOTS.forEach((r, lot) => {
+      if (lot !== FARM_LOT && !built.has(lot)) return;
+      out.push({ node: nearestNode(g, r.x + r.w / 2, r.y + r.h), lot });
+    });
+    return out;
+  }
+
+  /** Keeps the followed pet in the middle of a zoomed-in view, inside the world. */
+  private trackFollowed(dt: number): void {
+    const pos = this.followId ? this.pets?.posOf(this.followId) : null;
+    if (!pos) {
+      this.stopFollow();
+      this.handlers.onFollowLost?.();
+      return;
+    }
+    const k = 1 - Math.exp(-dt * 4);
+    const c = this.cam;
+    c.zoom += (FOLLOW_ZOOM - c.zoom) * k;
+    const half = (VIEW / 2) * (ASSET_RES / c.zoom);
+    const W = SCENERY_WORLD;
+    const tx = clamp(pos.x, W.x + half, W.x + W.w - half);
+    const ty = clamp(pos.y - 30, W.y + half, W.y + W.h - half);
+    c.x += (tx - c.x) * k;
+    c.y += (ty - c.y) * k;
+    this.camTarget.x = c.x;
+    this.camTarget.y = c.y;
+    this.camTarget.zoom = c.zoom;
+    this.applyCamera();
+  }
+
+  /** A thought bubble over the patrolling pet: what it notices at that pen (or 💗 if all is well). */
+  private showThought(petId: string, lot: number): void {
+    const pos = this.pets?.posOf(petId);
+    if (!pos || !this.model) return;
+    const icons: string[] = [];
+    if (lot === FARM_LOT) {
+      icons.push('🌾');
+    } else {
+      const s = pageStatus(this.model)[lot];
+      const sp = speciesOfLot(lot);
+      if (s?.hungry && sp) icons.push(this.sackTex(sp));
+      if (s?.sick) icons.push(this.emojiTex('🤒', true));
+      if (s?.poop) icons.push(this.emojiTex('💩', true));
+      if (s && s.products > 0 && sp) icons.push(this.emojiTex(PRODUCT_EMOJI[SPECIES[sp].product], true));
+    }
+    const keys = icons.length > 0 ? icons.map(i => (i.startsWith('sack:') || i.startsWith('emoji:') ? i : this.emojiTex(i, true)))
+      : [this.emojiTex('💗', true)];
+    const size = 40;
+    const gap = 6;
+    const w = keys.length * size + (keys.length - 1) * gap + 20;
+    const h = size + 16;
+    const g = this.add.graphics();
+    g.fillStyle(0x6b4226, 0.25).fillRoundedRect(-w / 2, -h / 2 + 3, w, h, 18);
+    g.fillStyle(0xfffdf5, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 18);
+    g.fillCircle(-8, h / 2 + 8, 6).fillCircle(-16, h / 2 + 18, 3.5);
+    const imgs = keys.map((key, i) => this.add.image(-w / 2 + 10 + size / 2 + i * (size + gap), 0, key).setScale(size / EMOJI_PX));
+    const bubble = this.add.container(pos.x + 20, pos.y - 130, [g, ...imgs]).setDepth(DEPTH.fly).setScale(0.3).setAlpha(0);
+    this.tweens.chain({
+      targets: bubble,
+      tweens: [
+        { scaleX: 1, scaleY: 1, alpha: 1, duration: 220, ease: 'Back.Out' },
+        { alpha: 0, duration: 260, delay: PATROL_LOOK_MS - 700 },
+      ],
+      onComplete: () => bubble.destroy(),
+    });
   }
 
   /** Whether that pet is busy with a snack trick (taps then do nothing, so no snack is wasted). */
@@ -1650,8 +1771,13 @@ export class RanchScene extends Phaser.Scene {
   private tapAt(sx: number, sy: number): void {
     const w = this.cameras.main.getWorldPoint(sx, sy);
 
-    // Overview is look-only: any tap just picks the page under it.
+    // Overview is look-only: a tap on the dog or the cat follows it, any other picks the page under it.
     if (this.isOverview) {
+      const pet = this.pets?.hit(w.x, w.y, 90);
+      if (pet) {
+        this.handlers.onPet?.(pet);
+        return;
+      }
       const col = Math.floor(w.x / VIEW);
       const row = Math.floor(w.y / VIEW);
       const i = row * COLS + col;
@@ -1665,7 +1791,7 @@ export class RanchScene extends Phaser.Scene {
     let animal: AnimalView | null = null;
     let bestA = Infinity;
     for (const v of this.animalList) {
-      if (v.lot !== page) continue;
+      if (!this.followId && v.lot !== page) continue;
       const d = dist(w.x, w.y, v.box.x, v.box.y - v.look.body);
       if (d < v.look.hit && d < bestA) {
         bestA = d;
@@ -1682,7 +1808,7 @@ export class RanchScene extends Phaser.Scene {
     let tagged: AnimalView | null = null;
     let bestT = Infinity;
     for (const v of this.animalList) {
-      if (v.lot !== page) continue;
+      if (!this.followId && v.lot !== page) continue;
       const dx = Math.abs(w.x - v.tag.x);
       const dy = Math.abs(w.y - v.tag.y);
       if (dx <= v.tagW / 2 + TAG_HIT_PAD && dy <= TAG_H / 2 + TAG_HIT_PAD && dx + dy < bestT) {
@@ -1706,7 +1832,7 @@ export class RanchScene extends Phaser.Scene {
     let owner: AnimalView | null = null;
     let best = HIT.item;
     for (const v of this.animalList) {
-      if (v.lot !== page) continue;
+      if (!this.followId && v.lot !== page) continue;
       for (const e of v.items) {
         if (e.flying) continue;
         const d = dist(w.x, w.y, e.img.x, e.img.y);
@@ -1724,7 +1850,7 @@ export class RanchScene extends Phaser.Scene {
     let poop: { hv: HouseView; img: Img } | null = null;
     best = HIT.poop;
     for (const hv of this.houses.values()) {
-      if (hv.lot !== page) continue;
+      if (!this.followId && hv.lot !== page) continue;
       for (const img of hv.poops) {
         const d = dist(w.x, w.y, img.x, img.y);
         if (d < best) {
@@ -1750,7 +1876,10 @@ export class RanchScene extends Phaser.Scene {
       this.handlers.onPet?.(petHit);
       return;
     }
-    const lv = this.lots.find(l => l.lot === page);
+    // following a pet, any plot in view counts; otherwise the page's own
+    const lv = this.followId
+      ? this.lots.find(l => w.x >= l.rect.x && w.x <= l.rect.x + l.rect.w && w.y >= l.rect.y && w.y <= l.rect.y + l.rect.h)
+      : this.lots.find(l => l.lot === page);
     const r = lv?.rect;
     if (r && w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.h) {
       if (lv.state === 'plus') {
@@ -1796,6 +1925,8 @@ export class RanchScene extends Phaser.Scene {
     this.garden = null;
     this.pets?.clear();
     this.pets = null;
+    this.roam = null;
+    this.followId = null;
     this.tappedPoop = null;
     this.camTween = null;
     this.tagsShown = true;

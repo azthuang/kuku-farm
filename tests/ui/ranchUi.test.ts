@@ -214,6 +214,27 @@ describe('ranch pages', () => {
     expect(maps).toBe(1);
   });
 
+  it('following a pet: its name as the title, a ✕ instead of arrows and dots', () => {
+    const { nav, ui, root } = setup(st(), 0);
+    let closed = 0;
+    ui.onFollowClose(() => { closed++; });
+    const close = nav.querySelector<HTMLElement>('.rn-close')!;
+    expect(close.hidden).toBe(true);
+    ui.setFollow('🐕 旺財');
+    expect(nav.querySelector('.rn-title')!.textContent).toBe('🐕 旺財');
+    expect(close.hidden).toBe(false);
+    expect(nav.querySelector<HTMLElement>('.rn-next')!.hidden).toBe(true);
+    expect(nav.querySelector<HTMLElement>('.rn-dots')!.hidden).toBe(true);
+    // the care tools work wherever the pet walks, even from the field page
+    expect(root.querySelector('.ranch-tools')!.classList.contains('garden')).toBe(false);
+    close.click();
+    expect(closed).toBe(1);
+    ui.setFollow(null);
+    expect(nav.querySelector('.rn-title')!.textContent).toBe('🌾 我的農田 0/81');
+    expect(close.hidden).toBe(true);
+    expect(nav.querySelector<HTMLElement>('.rn-dots')!.hidden).toBe(false);
+  });
+
   it('the overview has its own title and no arrows or dots', () => {
     const { nav, ui } = setup(st(), 3);
     ui.setOverview(true);

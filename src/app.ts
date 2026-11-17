@@ -405,11 +405,39 @@ export function startApp(root: HTMLElement): void {
 
   /** Title, arrows and dots (with their attention colour) from the current ranch state. */
   function syncNav(): void {
+    if (following) ranchUi.setFollow(followLabel()); // a renamed pet's new name
     ranchUi.setPage(ranchPage, pageStatus(game.state.ranch));
+  }
+
+  /** The pet the camera follows (zoomed in, on its rounds), or null. */
+  let following: string | null = null;
+
+  function followLabel(): string | null {
+    const p = following ? game.state.ranch.pets.find(x => x.id === following) : undefined;
+    return p ? `${PETS[p.kind].emoji} ${p.name}` : null;
+  }
+
+  function startFollow(id: string): void {
+    following = id;
+    ranchOverview = false;
+    ranchScene.follow(id);
+    ranchUi.setOverview(false);
+    ranchUi.setFollow(followLabel());
+  }
+
+  /** Leaves the follow view for the care page where the pet is now. */
+  function endFollow(): void {
+    if (!following) return;
+    const page = ranchScene.unfollow();
+    following = null;
+    ranchUi.setFollow(null);
+    goPage(page);
   }
 
   /** Care view of page `i` (from a swipe, the arrows, a dot or an overview tap). */
   function goPage(i: number, animate = tab === 'ranch'): void {
+    following = null; // showPage ends any follow view
+    ranchUi.setFollow(null);
     ranchPage = Math.max(0, Math.min(LOT_COUNT - 1, i));
     ranchOverview = false;
     ranchScene.showPage(ranchPage, animate);
@@ -424,6 +452,8 @@ export function startApp(root: HTMLElement): void {
       return;
     }
     ranchOverview = true;
+    following = null; // showOverview ends any follow view
+    ranchUi.setFollow(null);
     ranchScene.showOverview(tab === 'ranch');
     ranchUi.setOverview(true);
     syncNav();
@@ -531,6 +561,10 @@ export function startApp(root: HTMLElement): void {
     },
     onPageTap: i => goPage(i),
     onSwipe: d => {
+      if (following) {
+        endFollow();
+        return;
+      }
       const i = ranchPage + d;
       if (!ranchOverview && i >= 0 && i < LOT_COUNT) goPage(i);
     },
@@ -544,9 +578,11 @@ export function startApp(root: HTMLElement): void {
     onPet: id => {
       const p = game.state.ranch.pets.find(x => x.id === id);
       if (!p || ranchScene.petBusy(id)) return; // mid-trick: a fast second tap must not eat a snack
-      if (tool !== 'treat') {
+      if (tool !== 'treat' || ranchOverview) {
         ranchScene.petFx(id, 'jump');
         sfx.play(petVoice(p.kind));
+        // see the farm through its eyes: zoom in and follow it on its rounds
+        if (following !== id) startFollow(id);
         return;
       }
       // 🍪 on the dog or the cat hands it its own snack (a bone, a fish)
@@ -559,6 +595,11 @@ export function startApp(root: HTMLElement): void {
       ranchChanged();
       ranchScene.petFx(id, 'trick');
       sfx.play(petVoice(p.kind));
+    },
+    onFollowLost: () => {
+      following = null;
+      ranchUi.setFollow(null);
+      goPage(ranchPage, false);
     },
     onIdleVoice: id => {
       // The scene only runs on the ranch tab; the guard also covers a hidden page.
@@ -576,6 +617,7 @@ export function startApp(root: HTMLElement): void {
   ranchUi.onPage(i => goPage(i));
   ranchUi.onOverview(toggleOverview);
   ranchUi.onGoField(() => layout.setTab('field'));
+  ranchUi.onFollowClose(endFollow);
   /** The care view of a species' pen, unless it is already showing (the shop can open elsewhere). */
   function showLotOf(sp: SpeciesId): void {
     if (ranchOverview || ranchPage !== SPECIES[sp].lot) goPage(SPECIES[sp].lot);

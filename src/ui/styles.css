@@ -171,6 +171,16 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   font-size: 24px;
   box-shadow: var(--shadow);
 }
+/* Following a pet: a ✕ at the top left ends it (the 🗺️ still goes to the overview). */
+.rn-close {
+  position: absolute; top: 4px; left: 8px;
+  width: 44px; height: 44px;
+  border: 0; border-radius: 50%;
+  background: var(--white);
+  font-size: 22px; font-weight: 800; color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.rn-close[hidden] { display: none; }
 .rn-map.active { background: var(--sun); box-shadow: 0 4px 0 var(--sun-deep), 0 0 0 3px var(--sun-deep) inset; }
 .rn-prev, .rn-next {
   position: absolute; top: 50%;

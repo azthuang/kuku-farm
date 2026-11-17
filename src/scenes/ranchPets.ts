@@ -35,7 +35,15 @@ export interface PetDeps {
   font: string;
   depth: { animal: number; tag: number; fx: number };
   resolution: number;
+  /** A patrolling pet has stopped at a patrol stop (it looks around there for PATROL_LOOK_MS). */
+  onPatrolStop?(petId: string, stop: PatrolStop): void;
 }
+
+/** A place a followed pet visits on its rounds: a node of the network and the plot it looks at. */
+export interface PatrolStop { node: number; lot: number }
+
+/** How long a patrolling pet stands at each stop, looking. */
+export const PATROL_LOOK_MS = 2600;
 
 interface PetView {
   id: string;
@@ -66,6 +74,8 @@ export class RanchPets {
   private views = new Map<string, PetView>();
   private seeded = false;
   private tagsShown = true;
+  /** The pet the child follows walks its rounds (stops in order) instead of wandering and napping. */
+  private patrol: { id: string; stops: PatrolStop[]; next: number } | null = null;
 
   constructor(private scene: Phaser.Scene, private graph: RoamGraph, private deps: PetDeps) {}
 
@@ -181,7 +191,7 @@ export class RanchPets {
   private step(v: PetView, time: number, dt: number): void {
     if (v.mode === 'trick') return;
     if (v.mode === 'pause' || v.mode === 'sleep') {
-      if (time < v.until) return;
+      if (time < v.until && !(v.mode === 'sleep' && this.patrol?.id === v.id)) return;
       if (v.mode === 'sleep') this.wake(v);
       this.walkOn(v, time);
       return;
@@ -202,7 +212,19 @@ export class RanchPets {
       v.node = v.path.shift()!;
       this.place(v);
       if (v.path.length > 0) return;
-      if (g.rest.includes(v.node) && time >= v.restAt) {
+      const pt = this.patrol?.id === v.id ? this.patrol : null;
+      if (pt) {
+        const stop = pt.stops[pt.next % pt.stops.length];
+        if (stop && stop.node === v.node) {
+          pt.next = (pt.next + 1) % pt.stops.length;
+          this.face(v, 'U', false); // looking at the pen through its gate
+          v.mode = 'pause';
+          v.until = time + PATROL_LOOK_MS;
+          this.deps.onPatrolStop?.(v.id, stop);
+          return;
+        }
+        this.walkOn(v, time);
+      } else if (g.rest.includes(v.node) && time >= v.restAt) {
         v.restAt = time + rand(60_000, 120_000);
         this.sleep(v);
       } else if (Math.random() < 0.3) {
@@ -220,6 +242,14 @@ export class RanchPets {
   /** Picks where to go next: now and then a resting spot, otherwise the next stretch of path. */
   private walkOn(v: PetView, time: number): void {
     const g = this.graph;
+    const pt = this.patrol?.id === v.id ? this.patrol : null;
+    if (pt && pt.stops.length > 0) {
+      const stop = pt.stops[pt.next % pt.stops.length];
+      v.path = route(g, v.node, stop.node).slice(1);
+      if (v.path.length === 0) v.path = [stop.node];
+      v.mode = 'walk';
+      return;
+    }
     if (time >= v.restAt && g.rest.length > 0) {
       const spot = g.rest[Math.floor(Math.random() * g.rest.length)];
       v.path = route(g, v.node, spot).slice(1);
@@ -273,9 +303,9 @@ export class RanchPets {
   }
 
   /** The pet under (x, y) in world units, nearest first, or null. */
-  hit(x: number, y: number): string | null {
+  hit(x: number, y: number, radius = HIT_R): string | null {
     let best: string | null = null;
-    let bd = HIT_R;
+    let bd = radius;
     for (const v of this.views.values()) {
       const d = Math.hypot(v.box.x - x, v.box.y - 30 - y);
       if (d < bd) { bd = d; best = v.id; }
@@ -290,6 +320,35 @@ export class RanchPets {
       if (Math.abs(x - v.tag.x) <= v.tagW / 2 + 2 && Math.abs(y - v.tag.y) <= TAG_H / 2 + 2) return v.id;
     }
     return null;
+  }
+
+  /** Where a pet stands (world units), or null if there is no such pet. */
+  posOf(id: string): { x: number; y: number } | null {
+    const v = this.views.get(id);
+    return v ? { x: v.box.x, y: v.box.y } : null;
+  }
+
+  /**
+   * Starts (or with null, ends) the rounds of a followed pet: it wakes, then walks to each stop in
+   * turn, starting with the one nearest it, and looks there for a moment.
+   */
+  setPatrol(id: string | null, stops: readonly PatrolStop[] = []): void {
+    this.patrol = null;
+    const v = id ? this.views.get(id) : undefined;
+    if (!v || stops.length === 0) return;
+    let first = 0;
+    let bd = Infinity;
+    stops.forEach((s, i) => {
+      const n = this.graph.nodes[s.node];
+      const d = Math.hypot(n.x - v.box.x, n.y - v.box.y);
+      if (d < bd) { bd = d; first = i; }
+    });
+    this.patrol = { id: v.id, stops: [...stops], next: first };
+    if (v.mode === 'sleep') this.wake(v);
+    if (v.mode !== 'trick') {
+      v.path = [];
+      this.walkOn(v, this.scene.time.now);
+    }
   }
 
   busy(id: string): boolean {

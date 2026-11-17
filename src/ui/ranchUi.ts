@@ -31,6 +31,10 @@ export interface RanchUi {
   setOverview(on: boolean): void;
   /** The garden page's「去農田種菜」button. */
   onGoField(cb: () => void): void;
+  /** Following a pet: its label (e.g. 「🐕 旺財」) as the title, a ✕ instead of arrows and dots; null ends it. */
+  setFollow(label: string | null): void;
+  /** The ✕ of the follow view. */
+  onFollowClose(cb: () => void): void;
 }
 
 /**
@@ -131,6 +135,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   let pageCb: (index: number) => void = () => {};
   let overviewCb: () => void = () => {};
   let goFieldCb: () => void = () => {};
+  let followCloseCb: () => void = () => {};
+  let followLabel: string | null = null;
   let tool: Tool = 'hand';
   let state: GameState | null = null;
   let ignoreUntil = 0;
@@ -201,6 +207,9 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   const mapBtn = button('rn-map', '🗺️', '全景');
   const prev = button('rn-prev', '◀', '上一頁');
   const next = button('rn-next', '▶', '下一頁');
+  const closeFollow = button('rn-close', '✕', '不跟了');
+  closeFollow.hidden = true;
+  closeFollow.addEventListener('click', () => followCloseCb());
   const dotsEl = el('div', 'rn-dots');
   const dots = Array.from({ length: LOT_COUNT }, (_, i) => {
     const sp = speciesOfLot(i);
@@ -213,19 +222,23 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   prev.addEventListener('click', () => { if (page > 0) pageCb(page - 1); });
   next.addEventListener('click', () => { if (page < LOT_COUNT - 1) pageCb(page + 1); });
   mapBtn.addEventListener('click', () => overviewCb());
-  nav?.replaceChildren(title, mapBtn, prev, next, dotsEl);
+  nav?.replaceChildren(title, mapBtn, closeFollow, prev, next, dotsEl);
 
   function renderNav(): void {
     const sp = pageSpecies();
     const garden = page === FARM_LOT;
     let text = `${SPECIES_UI[sp].emoji} ${SPECIES_UI[sp].house}`;
     if (garden) text = state ? `${GARDEN_TITLE} ${gardenOf(state).grown}/81` : GARDEN_TITLE;
-    if (title.textContent !== (overview ? OVERVIEW_TITLE : text)) title.textContent = overview ? OVERVIEW_TITLE : text;
+    const following = followLabel !== null && !overview;
+    const shown = overview ? OVERVIEW_TITLE : following ? followLabel! : text;
+    if (title.textContent !== shown) title.textContent = shown;
     mapBtn.classList.toggle('active', overview);
-    bar.classList.toggle('garden', garden);
-    prev.hidden = overview || page === 0;
-    next.hidden = overview || page === LOT_COUNT - 1;
-    dotsEl.hidden = overview;
+    // following a pet, the care tools work wherever it goes (not the field page's single button)
+    bar.classList.toggle('garden', garden && !following);
+    closeFollow.hidden = !following;
+    prev.hidden = overview || following || page === 0;
+    next.hidden = overview || following || page === LOT_COUNT - 1;
+    dotsEl.hidden = overview || following;
     dots.forEach((d, i) => d.classList.toggle('current', i === page));
   }
 
@@ -432,5 +445,11 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     onPage: cb => { pageCb = cb; },
     onOverview: cb => { overviewCb = cb; },
     onGoField: cb => { goFieldCb = cb; },
+    setFollow: label => {
+      if (label === followLabel) return;
+      followLabel = label;
+      renderNav();
+    },
+    onFollowClose: cb => { followCloseCb = cb; },
   };
 }
