@@ -138,7 +138,7 @@ describe('ranch toolbar', () => {
 
 describe('ranch pages', () => {
   const status = (over: Partial<Record<number, Partial<PageStatus>>>): PageStatus[] =>
-    [0, 1, 2, 3, 4, 5].map(i => ({ hungry: false, sick: false, poop: false, products: 0, ...over[i] }));
+    [0, 1, 2, 3, 4, 5].map(i => ({ hungry: false, sick: false, poop: false, products: 0, cure: null, ...over[i] }));
 
   it('shows the page name, arrows only where there is a page, and the current dot', () => {
     const { nav, ui } = setup(st(), 0);

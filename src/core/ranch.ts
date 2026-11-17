@@ -243,14 +243,18 @@ export function collect(r: RanchState, animalId: string): number {
   return n;
 }
 
-export interface PageStatus { hungry: boolean; sick: boolean; poop: boolean; products: number }
+/**
+ * `cure` is the next step for a sick animal on the page, shown as that tool's icon: 'medicine'
+ * while one has not had its medicine yet, else 'pet' (a pat heals it); null when none is sick.
+ */
+export interface PageStatus { hungry: boolean; sick: boolean; poop: boolean; products: number; cure: 'medicine' | 'pet' | null }
 
 /**
  * What needs the child on each ranch page (index = lot; the garden at FARM_LOT never does): any hungry
  * (satiety ≤ HUNGRY_SHOW_AT) or sick animal, poop in the house, and products waiting.
  */
 export function pageStatus(r: RanchState): PageStatus[] {
-  const out = Array.from({ length: LOT_COUNT }, (): PageStatus => ({ hungry: false, sick: false, poop: false, products: 0 }));
+  const out = Array.from({ length: LOT_COUNT }, (): PageStatus => ({ hungry: false, sick: false, poop: false, products: 0, cure: null }));
   const lotOf = new Map<string, number>();
   for (const h of r.houses) {
     if (h.lot === FARM_LOT || h.lot < 0 || h.lot >= out.length) continue;
@@ -262,7 +266,11 @@ export function pageStatus(r: RanchState): PageStatus[] {
     if (lot === undefined) continue;
     const s = out[lot];
     if (a.satiety <= HUNGRY_SHOW_AT) s.hungry = true;
-    if (a.sick) s.sick = true;
+    if (a.sick) {
+      s.sick = true;
+      if (!a.medicated) s.cure = 'medicine';
+      else if (s.cure === null) s.cure = 'pet';
+    }
     s.products += a.waiting;
   }
   return out;

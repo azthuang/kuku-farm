@@ -237,6 +237,8 @@ interface AnimalView {
   name: string;
   iconKey: string;
   sick: boolean;
+  /** Has had its medicine: a pat heals it (the sign turns from 💊 to ✋). */
+  medicated: boolean;
   /** Shows the feed-sack sign (satiety ≤ HUNGRY_SHOW_AT). */
   hungry: boolean;
   /** Satiety 0: walks slowly and sits a lot. */
@@ -664,7 +666,7 @@ export class RanchScene extends Phaser.Scene {
       const s = pageStatus(this.model)[lot];
       const sp = speciesOfLot(lot);
       if (s?.hungry && sp) icons.push(this.sackTex(sp));
-      if (s?.sick) icons.push(this.emojiTex('🤒', true));
+      if (s?.cure) icons.push(this.emojiTex(s.cure === 'pet' ? '✋' : '💊', true));
       if (s?.poop) icons.push(this.emojiTex('💩', true));
       if (s && s.products > 0 && sp) icons.push(this.emojiTex(PRODUCT_EMOJI[SPECIES[sp].product], true));
     }
@@ -1236,13 +1238,13 @@ export class RanchScene extends Phaser.Scene {
     g.labels.forEach((l, i) => l.setColor(i + 1 === garden.glowRow ? '#ffe680' : '#ffffff'));
   }
 
-  /** Overview corner badges (feed sack when hungry, 🤒 💩 product×n), sized to read at the overview zoom. */
+  /** Overview corner badges (feed sack when hungry, 💊 or ✋ when sick, 💩, product×n), sized for the overview zoom. */
   private buildBadges(rect: Rect, sp: SpeciesId): Badges {
     const bg = this.add.graphics();
     const make = (e: string) => this.emoji(0, 0, e, SIZE.badge, true).setVisible(false);
     // hungry: that species' feed sack, like the feed button that answers it
     const hungry = this.add.image(0, 0, this.sackTex(sp)).setScale(SIZE.badge / EMOJI_PX).setVisible(false);
-    const sick = make('🤒');
+    const sick = make('💊');
     const poop = make('💩');
     const product = make('🥚');
     const count = this.add.text(0, 0, '', {
@@ -1257,7 +1259,9 @@ export class RanchScene extends Phaser.Scene {
   private syncBadges(lv: LotView, s: PageStatus): void {
     const b = lv.badges;
     const productEmoji = PRODUCT_EMOJI[SPECIES[speciesOfLot(lv.lot) ?? 'chicken'].product];
-    const key = `${+s.hungry}${+s.sick}${+s.poop}${s.products}`;
+    const key = `${+s.hungry}${s.cure ?? 0}${+s.poop}${s.products}`;
+    // a sick animal's sign is the tool that helps next: 💊, then ✋ once it has had its medicine
+    if (s.cure) b.sick.setTexture(this.emojiTex(s.cure === 'pet' ? '✋' : '💊', true));
     if (key === b.last) return;
     b.last = key;
     const step = SIZE.badge + 10;
@@ -1378,14 +1382,14 @@ export class RanchScene extends Phaser.Scene {
     const label = this.add.text(0, 0, '', {
       fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#4a3a2a', resolution: ASSET_RES,
     }).setOrigin(0.5, 0.5);
-    const icon = this.emoji(0, 0, '🤒', SIZE.icon, true).setVisible(false); // setIcon picks the sign
+    const icon = this.emoji(0, 0, '💊', SIZE.icon, true).setVisible(false); // setIcon picks the sign
     const heart = this.emoji(0, 0, '💗', SIZE.icon, true).setVisible(false);
     const tag = this.add.container(0, 0, [pill, label, icon, heart]).setDepth(DEPTH.tag).setVisible(this.tagsShown);
 
     const v: AnimalView = {
       id: a.id, houseId: a.houseId, lot: hv.lot, sp, look, coat, run: runFor(hv.yard, look),
       box, body, shadow, tag, pill, label, tagW: 40, icon, heart,
-      name: '', iconKey: '', sick: false, hungry: false, starving: false, happy: false, items: [],
+      name: '', iconKey: '', sick: false, medicated: false, hungry: false, starving: false, happy: false, items: [],
       mode: 'idle', dir, tx: 0, ty: 0, speed: 0, until: 0, busyUntil: 0,
       nextHeart: this.time.now + rand(2000, 8000), eatPhase: 0, eatStopAt: 0,
     };
@@ -1442,12 +1446,15 @@ export class RanchScene extends Phaser.Scene {
       v.sick = a.sick;
       if (!v.busyUntil) this.applyPose(v, this.time.now);
     }
+    v.medicated = a.medicated;
     this.setIcon(v);
     this.syncItems(v, a, hv);
   }
 
   private setIcon(v: AnimalView): void {
-    const key = v.sick ? '🤒' : v.hungry ? 'sack' : '';
+    // The sign is the tool that helps: 💊 for a sick animal, ✋ once it has had its medicine (a pat
+    // heals it), the species' feed sack when hungry.
+    const key = v.sick ? (v.medicated ? '✋' : '💊') : v.hungry ? 'sack' : '';
     if (key === v.iconKey) return;
     v.iconKey = key;
     if (!key) {

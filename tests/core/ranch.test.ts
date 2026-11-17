@@ -250,7 +250,7 @@ describe('pageStatus', () => {
     satiety: 100, mood: 60, sick: false, medicated: false, neglectMs: 0,
     produceMs: 0, poopMs: 0, waiting: 0, petTimes: [], lastBrushAt: null, ...over,
   });
-  const calm = { hungry: false, sick: false, poop: false, products: 0 };
+  const calm = { hungry: false, sick: false, poop: false, products: 0, cure: null };
 
   it('has one calm entry per page even with an empty ranch', () => {
     expect(pageStatus(createRanch(0))).toEqual([calm, calm, calm, calm, calm, calm]);
@@ -265,9 +265,9 @@ describe('pageStatus', () => {
     r.animals.push(animal('p1', 'h2', { species: 'pig', color: '粉紅', sick: true, satiety: 50 }));
     expect(pageStatus(r)).toEqual([
       calm, // the garden
-      { hungry: true, sick: false, poop: true, products: 3 },
+      { hungry: true, sick: false, poop: true, products: 3, cure: null },
       calm,
-      { hungry: false, sick: true, poop: false, products: 0 },
+      { hungry: false, sick: true, poop: false, products: 0, cure: 'medicine' },
       calm,
       calm,
     ]);
@@ -280,6 +280,19 @@ describe('pageStatus', () => {
     expect(pageStatus(r)[1].hungry).toBe(false);
     r.animals[0].satiety = 0;
     expect(pageStatus(r)[1].hungry).toBe(true);
+  });
+
+  it('a sick page asks for 💊 first, then ✋ once every sick animal has had its medicine', () => {
+    const r = createRanch(0);
+    r.houses.push({ id: 'h1', kind: 'coop', lot: 1, poop: 0 });
+    r.animals.push(animal('a1', 'h1', { sick: true }), animal('a2', 'h1', { sick: true }));
+    expect(pageStatus(r)[1].cure).toBe('medicine');
+    r.animals[0].medicated = true;
+    expect(pageStatus(r)[1].cure).toBe('medicine'); // a2 still needs hers
+    r.animals[1].medicated = true;
+    expect(pageStatus(r)[1]).toMatchObject({ sick: true, cure: 'pet' });
+    r.animals.forEach((a) => { a.sick = false; a.medicated = false; });
+    expect(pageStatus(r)[1]).toMatchObject({ sick: false, cure: null });
   });
 
   it('ignores animals whose house is missing', () => {

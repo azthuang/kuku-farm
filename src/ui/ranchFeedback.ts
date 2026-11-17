@@ -16,7 +16,7 @@ export interface CareFeedback {
   nextTool?: Tool;
 }
 
-export const TOAST_NEEDS_MEDICINE = '🤒 要先吃藥 💊';
+export const TOAST_NEEDS_MEDICINE = '💊 要先吃藥';
 export const TOAST_PAT_AGAIN = '✋ 再摸摸牠';
 
 /** The supply a tool uses on an animal of this species (feed is per species). */
