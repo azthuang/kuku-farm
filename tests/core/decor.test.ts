@@ -2,14 +2,21 @@ import { describe, it, expect } from 'vitest';
 import { createNewState, type GameState } from '../../src/core/state';
 import { createRanch } from '../../src/core/ranch';
 import {
-  DECOR, SPOT_IDS, checkDecor, decorPrice, lockedCrop, placeDecor, spotLot, spotOpen, storeDecor,
+  DECOR, SPECIALS, SPOT_IDS, buySpecial, checkDecor, checkSpecial, decorPrice, lockedCrop, placeDecor,
+  showSpecial, specialSlot, spotLot, spotOpen, storeDecor,
 } from '../../src/core/decor';
+import { SPECIES, SPECIES_ORDER } from '../../src/core/species';
 
 function st(unlocked: number): GameState {
   return { ...createNewState(0), unlocked, ranch: createRanch(0) };
 }
 function rich(s: GameState): GameState {
   for (const k of Object.keys(s.inventory) as (keyof GameState['inventory'])[]) s.inventory[k] = 900;
+  return s;
+}
+
+function allHouses(s: GameState): GameState {
+  for (const sp of SPECIES_ORDER) s.ranch.houses.push({ id: `h-${sp}`, kind: SPECIES[sp].house, lot: SPECIES[sp].lot, poop: 0 });
   return s;
 }
 
@@ -97,5 +104,51 @@ describe('decorations', () => {
     const before = JSON.stringify(s);
     expect(placeDecor(s, '0-0', 'flowers')).toEqual({ ok: true, free: true });
     expect(JSON.stringify(s)).toBe(before);
+  });
+});
+
+describe('specials', () => {
+  it('specials open once all five houses stand', () => {
+    const s = rich(st(9));
+    expect(checkSpecial(s, 'rocket')).toEqual({ ok: false, reason: 'locked' });
+    allHouses(s);
+    expect(checkSpecial(s, 'rocket')).toEqual({ ok: true });
+  });
+
+  it('prices from the spec table', () => {
+    expect(SPECIALS.xmasTree.price).toEqual({ wheat: 400, carrot: 300, strawberry: 200 });
+    expect(SPECIALS.dino.price).toEqual({ tomato: 400, strawberry: 300, pumpkin: 200 });
+    expect(SPECIALS.balloon.price).toEqual({ wheat: 500, tomato: 400, pumpkin: 300 });
+    expect(SPECIALS.rocket.price).toEqual({ carrot: 500, strawberry: 400, pumpkin: 400 });
+    expect(SPECIALS.ufo.price).toEqual({ wheat: 600, carrot: 500, tomato: 400, strawberry: 300 });
+  });
+
+  it('buying does not show it; a full pair needs a slot', () => {
+    const s = allHouses(rich(st(9)));
+    for (const id of ['xmasTree', 'rocket', 'ufo'] as const) {
+      rich(s); // three specials together cost more 🥕 than one stack holds
+      expect(buySpecial(s, id)).toEqual({ ok: true });
+    }
+    expect(s.ranch.decor.big).toEqual([null, null]);
+    expect(showSpecial(s, 'xmasTree')).toEqual({ ok: true, slot: 0, replaced: null });
+    expect(showSpecial(s, 'rocket')).toEqual({ ok: true, slot: 1, replaced: null });
+    expect(showSpecial(s, 'ufo')).toEqual({ ok: false, reason: 'full' });
+    expect(showSpecial(s, 'ufo', 0)).toEqual({ ok: true, slot: 0, replaced: 'xmasTree' });
+    expect(s.ranch.decor.big).toEqual(['ufo', 'rocket']);
+    expect(specialSlot(s.ranch.decor, 'rocket')).toBe(1);
+    expect(specialSlot(s.ranch.decor, 'xmasTree')).toBeNull();
+    expect(s.ranch.decor.specials).toContain('xmasTree'); // still ours, just stored
+    expect(showSpecial(s, 'rocket')).toEqual({ ok: false, reason: 'shown' });
+    expect(showSpecial(s, 'dino')).toEqual({ ok: false, reason: 'not-owned' });
+    expect(checkSpecial(s, 'ufo')).toEqual({ ok: false, reason: 'owned' });
+  });
+
+  it('buying pays; short does not charge', () => {
+    const s = allHouses(st(9));
+    expect(buySpecial(s, 'rocket')).toEqual({ ok: false, reason: 'short' });
+    expect(s.ranch.decor.specials).toEqual([]);
+    rich(s);
+    buySpecial(s, 'rocket');
+    expect(s.inventory).toMatchObject({ carrot: 400, strawberry: 500, pumpkin: 500 });
   });
 });

@@ -1,5 +1,5 @@
 import { CROP_BY_ROW, LEVEL_ORDER, type CropId } from './levels';
-import { FARM_LOT, LOT_COUNT, SPECIES, speciesOfLot, type Price } from './species';
+import { FARM_LOT, LOT_COUNT, SPECIES, SPECIES_ORDER, speciesOfLot, type Price } from './species';
 import type { GameState } from './state';
 
 /**
@@ -137,4 +137,61 @@ export function storeDecor(state: GameState, spot: SpotId): boolean {
   d.stored[old] = (d.stored[old] ?? 0) + 1;
   delete d.placed[spot];
   return true;
+}
+
+// ---------------------------------------------------------------- specials
+
+export interface SpecialDef { id: SpecialId; name: string; emoji: string; price: Price }
+
+export const SPECIALS: Record<SpecialId, SpecialDef> = {
+  xmasTree: { id: 'xmasTree', name: '閃閃發光的聖誕樹', emoji: '🎄', price: { wheat: 400, carrot: 300, strawberry: 200 } },
+  balloon: { id: 'balloon', name: '熱氣球', emoji: '🎈', price: { wheat: 500, tomato: 400, pumpkin: 300 } },
+  rocket: { id: 'rocket', name: '火箭', emoji: '🚀', price: { carrot: 500, strawberry: 400, pumpkin: 400 } },
+  ufo: { id: 'ufo', name: '飛碟', emoji: '🛸', price: { wheat: 600, carrot: 500, tomato: 400, strawberry: 300 } },
+  dino: { id: 'dino', name: '恐龍', emoji: '🦖', price: { tomato: 400, strawberry: 300, pumpkin: 200 } },
+};
+export const SPECIAL_ORDER: readonly SpecialId[] = ['xmasTree', 'balloon', 'rocket', 'ufo', 'dino'];
+export const BIG_SLOTS = 2;
+
+/** The goal once the ranch is full: every house stands. */
+export function specialsOpen(state: GameState): boolean {
+  return SPECIES_ORDER.every((sp) => state.ranch.houses.some((h) => h.kind === SPECIES[sp].house));
+}
+
+export type SpecialCheck = { ok: true } | { ok: false; reason: 'locked' | 'owned' | 'short' };
+
+export function checkSpecial(state: GameState, id: SpecialId): SpecialCheck {
+  if (!specialsOpen(state)) return { ok: false, reason: 'locked' };
+  if (state.ranch.decor.specials.includes(id)) return { ok: false, reason: 'owned' };
+  return canPay(state, SPECIALS[id].price) ? { ok: true } : { ok: false, reason: 'short' };
+}
+
+/** Pays and keeps it in storage; showSpecial puts it on the map. */
+export function buySpecial(state: GameState, id: SpecialId): SpecialCheck {
+  const check = checkSpecial(state, id);
+  if (!check.ok) return check;
+  pay(state, SPECIALS[id].price);
+  state.ranch.decor.specials.push(id);
+  return check;
+}
+
+export function specialSlot(d: DecorState, id: SpecialId): 0 | 1 | null {
+  const i = d.big.indexOf(id);
+  return i === 0 || i === 1 ? i : null;
+}
+
+export type ShowResult =
+  | { ok: true; slot: 0 | 1; replaced: SpecialId | null }
+  | { ok: false; reason: 'not-owned' | 'shown' | 'full' };
+
+/** Shows a bought special: in the first free slot, or in `slot`, storing the one there. */
+export function showSpecial(state: GameState, id: SpecialId, slot?: 0 | 1): ShowResult {
+  const d = state.ranch.decor;
+  if (!d.specials.includes(id)) return { ok: false, reason: 'not-owned' };
+  if (specialSlot(d, id) !== null) return { ok: false, reason: 'shown' };
+  const at = slot ?? (d.big[0] === null ? 0 : d.big[1] === null ? 1 : null);
+  if (at === null) return { ok: false, reason: 'full' };
+  const replaced = d.big[at];
+  d.big[at] = id;
+  return { ok: true, slot: at, replaced };
 }
