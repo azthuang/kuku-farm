@@ -4,6 +4,9 @@ import { feedIcon } from './feedIcon';
 import { checkBuy, headcount, lockHint, nextHouse, priceOf, SUPPLY_AMOUNT, type ShopItemId } from '../core/shop';
 import { gardenOf } from '../core/garden';
 import {
+  SPECIALS, SPECIAL_ORDER, checkSpecial, specialSlot, specialsOpen, type SpecialId,
+} from '../core/decor';
+import {
   FARM_LOT, LOT_COUNT, PETS, PET_KINDS, PET_SNACK_EMOJI, PRODUCT_EMOJI, SPECIES, SPECIES_EMOJI, SPECIES_ORDER,
   speciesOfHouse, speciesOfLot,
   type HouseKind, type ProductId, type SpeciesId, type SupplyId,
@@ -22,6 +25,10 @@ export interface RanchUi {
   onBuy(cb: (item: ShopItemId) => void): void;
   /** Stars on a shop row after a purchase. */
   celebrate(item: ShopItemId): void;
+  /** A special's 買 (buy) or 擺出來 (show a stored one) at the end of the shop. */
+  onSpecial(cb: (id: SpecialId, action: 'buy' | 'show') => void): void;
+  /** Stars on a special's row. */
+  celebrateSpecial(id: SpecialId): void;
   /** Current page (0 the garden, 1 … 5 the pens) and every page's status (for the dots). Cheap: call it every tick. */
   setPage(index: number, status: readonly PageStatus[]): void;
   /** ◀ ▶ or a dot asked for page `index`. */
@@ -142,6 +149,7 @@ interface Row { row: HTMLElement; name: HTMLElement; price: HTMLElement; btn: HT
 export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   let toolCb: (t: Tool) => void = () => {};
   let buyCb: (item: ShopItemId) => void = () => {};
+  let specialCb: (id: SpecialId, action: 'buy' | 'show') => void = () => {};
   let pageCb: (index: number) => void = () => {};
   let overviewCb: () => void = () => {};
   let goFieldCb: () => void = () => {};
@@ -267,8 +275,9 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   shop.append(sheet);
 
   /** Rows are built once per item and updated in place (a rebuild would drop the purchase stars). */
-  const rows = new Map<ShopItemId, Row>();
-  function rowOf(it: { item: ShopItemId; icon: string | HTMLElement; name: string }): Row {
+  const rows = new Map<string, Row>();
+  /** `item` is a ShopItemId, or `special:<id>` / `specials-locked` for the specials at the end. */
+  function rowOf(it: { item: string; icon: string | HTMLElement; name: string }, click?: () => void): Row {
     let r = rows.get(it.item);
     if (r) return r;
     const row = el('div', 'shop-row');
@@ -282,7 +291,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     const btn = button('buy', '買');
     btn.addEventListener('click', () => {
       if (Date.now() < ignoreUntil || btn.disabled) return;
-      buyCb(it.item);
+      if (click) click();
+      else buyCb(it.item as ShopItemId);
     });
     row.append(what, price, btn);
     r = { row, name, price, btn };
@@ -396,18 +406,63 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     }
   }
 
-  /** Puts the shown species' rows, then the shared ones, into the list and refreshes them. */
+  const specialRow = (id: SpecialId): Row => rowOf(
+    { item: `special:${id}`, icon: SPECIALS[id].emoji, name: SPECIALS[id].name },
+    () => { if (state) specialCb(id, state.ranch.decor.specials.includes(id) ? 'show' : 'buy'); },
+  );
+  const lockedSpecials = (): Row => rowOf({ item: 'specials-locked', icon: '✨', name: '驚喜物件' }, () => {});
+
+  /** A special: 買 with its price, 擺出來 when stored, ✅ 擺著 when on the map. */
+  function renderSpecial(s: GameState, id: SpecialId, r: Row): void {
+    const { price, btn } = r;
+    price.replaceChildren();
+    btn.classList.remove('owned', 'full');
+    if (specialSlot(s.ranch.decor, id) !== null) {
+      btn.textContent = '✅ 擺著';
+      btn.classList.add('owned');
+      btn.disabled = true;
+      return;
+    }
+    if (s.ranch.decor.specials.includes(id)) {
+      btn.textContent = '擺出來';
+      btn.disabled = false;
+      return;
+    }
+    for (const [k, n] of Object.entries(SPECIALS[id].price) as [CropId, number][]) {
+      const chip = el('span', 'cost');
+      chip.append(el('span', '', priceEmoji(k)), el('b', s.inventory[k] >= n ? '' : 'short', String(n)));
+      price.append(chip);
+    }
+    btn.textContent = '買';
+    btn.disabled = !checkSpecial(s, id).ok;
+  }
+
+  /** Puts the shown species' rows, then the shared ones, then the specials into the list and refreshes them. */
   function renderShop(s: GameState): void {
     const next = nextHouse(s);
     const lead = shopSpecies ? speciesItems(shopSpecies) : next ? [houseItem(speciesOfHouse(next))] : [];
     const items = [...lead, ...SHARED];
-    const wanted = items.map(it => rowOf(it).row);
+    const open = specialsOpen(s);
+    const tail = open ? SPECIAL_ORDER.map(specialRow) : [lockedSpecials()];
+    const wanted = [...items.map(it => rowOf(it).row), ...tail.map(r => r.row)];
     const shown = Array.from(list.children);
     if (shown.length !== wanted.length || shown.some((c, i) => c !== wanted[i])) list.replaceChildren(...wanted);
     for (const it of items) {
       const r = rowOf(it);
       renderRow(s, it.item, r);
       r.row.classList.toggle('focus', it.item === focusItem);
+    }
+    if (open) {
+      SPECIAL_ORDER.forEach((id, i) => renderSpecial(s, id, tail[i]));
+    } else {
+      const { price, btn } = tail[0];
+      if (!price.childElementCount) {
+        price.classList.add('is-locked');
+        price.append(el('span', 'lock-icon', '🔒'), el('span', 'lock-hint', '五間房子都蓋好就能買'));
+      }
+      btn.textContent = '🔒';
+      btn.classList.add('locked');
+      btn.disabled = true;
     }
   }
 
@@ -435,6 +490,10 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   }
 
   function celebrate(item: ShopItemId): void {
+    celebrateKey(item);
+  }
+
+  function celebrateKey(item: string): void {
     const r = rows.get(item);
     if (!r) return;
     const star = el('span', 'shop-stars', '✨');
@@ -471,6 +530,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
 
   return {
     setTool, update, openShop, closeShop, celebrate, setPage, setOverview,
+    celebrateSpecial: id => celebrateKey(`special:${id}`),
+    onSpecial: cb => { specialCb = cb; },
     onTool: cb => { toolCb = cb; },
     onBuy: cb => { buyCb = cb; },
     onPage: cb => { pageCb = cb; },

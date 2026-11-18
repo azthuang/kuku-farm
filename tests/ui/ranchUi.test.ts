@@ -4,6 +4,8 @@ import { createRanchUi, lockText, type Tool } from '../../src/ui/ranchUi';
 import { createNewState, type GameState } from '../../src/core/state';
 import { buy } from '../../src/core/shop';
 import { pageStatus, type PageStatus } from '../../src/core/ranch';
+import { SPECIES, SPECIES_ORDER } from '../../src/core/species';
+import { buySpecial, showSpecial, type SpecialId } from '../../src/core/decor';
 
 const T0 = 1_700_000_000_000;
 const rng = () => 0;
@@ -183,7 +185,7 @@ describe('ranch pages', () => {
     expect(go).toBe(1);
     toolBtn(root, 'shop').click();
     // the garden page offers the next house to build, then what every page sells
-    expect(rowOrder(root)).toEqual(['coop', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    expect(rowOrder(root)).toEqual(['coop', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish', 'specials-locked']);
     ui.setPage(1, status({}));
     expect(bar.classList.contains('garden')).toBe(false);
     ui.setOverview(true);
@@ -255,14 +257,14 @@ describe('ranch shop', () => {
   it('lists the page\'s house, animal and feed first, then medicine and treats', () => {
     const { root, ui } = setup(rich(st()), 2);
     ui.openShop();
-    expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish', 'specials-locked']);
     expect(row(root, 'coop')).toBeNull();
   });
 
   it('a lot or feed focus from another page shows that species', () => {
     const { root, ui } = setup(rich(st()), 1);
     ui.openShop('sty');
-    expect(rowOrder(root)).toEqual(['sty', 'pig', 'feedPig', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    expect(rowOrder(root)).toEqual(['sty', 'pig', 'feedPig', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish', 'specials-locked']);
     expect(focused(root)).toBe('sty');
   });
 
@@ -363,10 +365,12 @@ describe('ranch shop', () => {
     buy(s, 'coop', T0, rng);
     const { root, ui } = setup(s, 0);
     ui.openShop();
-    expect(rowOrder(root)).toEqual(['barn', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    expect(rowOrder(root)).toEqual(['barn', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish', 'specials-locked']);
     for (const h of ['barn', 'sty', 'fold', 'hut'] as const) buy(s, h, T0, rng);
     ui.update(s);
-    expect(rowOrder(root)).toEqual(['medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    // every house stands: the specials open up at the end
+    expect(rowOrder(root)).toEqual(['medicine', 'treat', 'dog', 'bone', 'cat', 'fish',
+      'special:xmasTree', 'special:balloon', 'special:rocket', 'special:ufo', 'special:dino']);
   });
 
   it('the garden page shows a locked next house with its hint', () => {
@@ -409,7 +413,7 @@ describe('ranch shop', () => {
     const s = rich(st());
     const { root, ui } = setup(s, 2);
     ui.openShop();
-    expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish']);
+    expect(rowOrder(root)).toEqual(['barn', 'cow', 'feedCow', 'medicine', 'treat', 'dog', 'bone', 'cat', 'fish', 'specials-locked']);
     expect(buyBtn(root, 'bone').textContent).toBe('先買狗');
     expect(buyBtn(root, 'fish').textContent).toBe('先買貓');
     buy(s, 'dog', T0, rng);
@@ -435,5 +439,78 @@ describe('ranch shop', () => {
     toolBtn(root, 'treat').click();
     expect(shopOpen(root)).toBe(true);
     expect(focused(root)).toBe('treat');
+  });
+
+  describe('surprise specials', () => {
+    const allHouses = (s: GameState): GameState => {
+      for (const sp of SPECIES_ORDER) s.ranch.houses.push({ id: `h-${sp}`, kind: SPECIES[sp].house, lot: SPECIES[sp].lot, poop: 0 });
+      return s;
+    };
+    const SPECIAL_ROWS = ['special:xmasTree', 'special:balloon', 'special:rocket', 'special:ufo', 'special:dino'];
+
+    it('before all five houses: one locked row at the end', () => {
+      const { root, ui } = setup(rich(st()));
+      ui.openShop();
+      expect(rowOrder(root).at(-1)).toBe('specials-locked');
+      expect(rowOrder(root).filter(r => r?.startsWith('special:'))).toEqual([]);
+      const r = row(root, 'specials-locked')!;
+      expect(r.textContent).toContain('驚喜物件');
+      expect(r.querySelector('.shop-icon')!.textContent).toBe('✨');
+      expect(r.textContent).toContain('五間房子都蓋好就能買');
+      expect(r.querySelector<HTMLButtonElement>('.buy')!.disabled).toBe(true);
+    });
+
+    it('with all five houses: the five specials, priced, at the end', () => {
+      const { root, ui } = setup(allHouses(rich(st())));
+      ui.openShop();
+      expect(rowOrder(root).slice(-5)).toEqual(SPECIAL_ROWS);
+      expect(rowOrder(root)).not.toContain('specials-locked');
+      expect(buyBtn(root, 'special:rocket').textContent).toBe('買');
+      expect(row(root, 'special:rocket')!.textContent).toContain('火箭');
+      expect(row(root, 'special:rocket')!.querySelectorAll('.cost')).toHaveLength(3);
+    });
+
+    it('shown: ✅ 擺著; stored: 擺出來; neither priced', () => {
+      const s = allHouses(rich(st()));
+      for (const id of ['rocket', 'ufo'] as SpecialId[]) { rich(s); buySpecial(s, id); }
+      showSpecial(s, 'rocket');
+      const { root, ui } = setup(s);
+      ui.openShop();
+      expect(buyBtn(root, 'special:rocket').textContent).toBe('✅ 擺著');
+      expect(buyBtn(root, 'special:rocket').disabled).toBe(true);
+      expect(buyBtn(root, 'special:ufo').textContent).toBe('擺出來');
+      expect(buyBtn(root, 'special:ufo').disabled).toBe(false);
+      expect(row(root, 'special:ufo')!.querySelectorAll('.cost')).toHaveLength(0);
+      expect(row(root, 'special:rocket')!.querySelectorAll('.cost')).toHaveLength(0);
+    });
+
+    it('the buttons report buy and show', () => {
+      vi.useFakeTimers();
+      const s = allHouses(rich(st()));
+      buySpecial(s, 'ufo');
+      rich(s); // the ufo took 500 🥕; the rocket needs 500 more
+      const { root, ui } = setup(s);
+      const got: [SpecialId, string][] = [];
+      ui.onSpecial((id, action) => got.push([id, action]));
+      ui.openShop();
+      vi.advanceTimersByTime(400);
+      buyBtn(root, 'special:rocket').click();
+      buyBtn(root, 'special:ufo').click();
+      expect(got).toEqual([['rocket', 'buy'], ['ufo', 'show']]);
+      vi.useRealTimers();
+    });
+
+    it('short crops grey the button', () => {
+      const s = allHouses(st());
+      const { root, ui } = setup(s);
+      ui.openShop();
+      expect(buyBtn(root, 'special:dino').disabled).toBe(true);
+    });
+
+    it('the garden page lists the specials after the shared rows too', () => {
+      const { root, ui } = setup(allHouses(rich(st())), 0);
+      ui.openShop();
+      expect(rowOrder(root)).toEqual(['medicine', 'treat', 'dog', 'bone', 'cat', 'fish', ...SPECIAL_ROWS]);
+    });
   });
 });
