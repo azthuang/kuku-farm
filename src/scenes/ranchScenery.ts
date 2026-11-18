@@ -1,5 +1,5 @@
 import { seeded } from './ranchArt';
-import { BIG_SPOTS, SPOT_CLEAR, bigBox, bigFoot } from './decorLayout';
+import { BIG_SPOTS, bigBox, bigFoot } from './decorLayout';
 import { FARMHOUSE_SIZE, SCENERY_FRAMES, type SceneryFrame } from './sceneryAtlas';
 
 /**
@@ -271,8 +271,7 @@ export function footprint(p: Prop): Rect {
 export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
   const W = SCENERY_WORLD;
   const lots = cells;
-  // the plots, and the decoration spots (batch 3), which stay open lawn until something stands there
-  const keepOut = [...cells, ...SPOT_CLEAR];
+  const keepOut = cells;
   const bottom = (r: Rect): number => r.y + r.h;
   const centreX = (r: Rect): number => r.x + r.w / 2;
   // Each row's path runs through the band between its pens' fences and the next row.
@@ -374,8 +373,8 @@ export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
     // inside the grid: a few single-colour patches along the fences, open lawn elsewhere
     // (neighbouring patches of different flowers mix where they meet); each page's right half of
     // the strip above its fence is kept for the decoration spots (decorLayout)
-    { kinds: [...FLOWERS.yellow], x: 80, y: topBand, sx: 24, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.white], x: 175, y: topBand, sx: 18, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.yellow], x: 70, y: topBand, sx: 20, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.white], x: 150, y: topBand, sx: 18, sy: 3, n: 3, edge: true },
     { kinds: [...FLOWERS.blue], x: 680, y: topBand, sx: 24, sy: 3, n: 3, edge: true },
     { kinds: ['tuftA'], x: 775, y: topBand, sx: 18, sy: 3, n: 3, edge: true },
     { kinds: [...FLOWERS.white], x: 80, y: band1, sx: 24, sy: 3, n: 3, edge: true },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BIG_SPOTS, DECOR_SPOTS, bigBox, bigFoot, createBusy, spotBox } from '../../src/scenes/decorLayout';
+import { BIG_SPOTS, bigBox, bigFoot, createBusy, spotBox, spotFoot } from '../../src/scenes/decorLayout';
 import { LOT_IN_CELL, footprint, lotRect, overlaps, propBox, sceneryLayout, segDist, type Rect } from '../../src/scenes/ranchScenery';
 import { SPOT_IDS, spotLot } from '../../src/core/decor';
 
@@ -27,41 +27,42 @@ describe('decoration spots', () => {
     expect(lotRect(3)).toEqual({ x: 630, y: 680, w: 540, h: 440 });
   });
 
-  it('spots stay in their own page, off pens, paths and each other', () => {
+  it('two spots a page: in a pen along the inside of its front fence, either side of the gate', () => {
     for (const s of SPOT_IDS) {
-      const p = DECOR_SPOTS[s];
-      const b = spotBox(s);
       const lot = spotLot(s);
-      const cell = { x: (lot % 2) * 600, y: Math.floor(lot / 2) * 600, w: 600, h: 600 };
-      expect(b.x >= cell.x && b.x + b.w <= cell.x + cell.w && b.y >= cell.y && b.y + b.h <= cell.y + cell.h, s).toBe(true);
-      for (const r of LOTS) expect(overlaps(b, r), s).toBe(false);
-      expect(boxPathGap(b), s).toBeGreaterThan(layout.pathHalf);
-      expect(p.x).toBe(b.x + b.w / 2);
+      const b = spotBox(s);
+      const foot = spotFoot(s);
+      expect(b.w, s).toBe(s.endsWith('-0') ? 192 : 128);
+      expect(lot, s).not.toBe(0); // the garden has none
+      const r = LOTS[lot];
+      // inside the plot, its ground right against the front fence's inner side
+      expect(b.x >= r.x && b.x + b.w <= r.x + r.w && b.y >= r.y, s).toBe(true);
+      expect(foot.y + foot.h, s).toBe(r.y + r.h - 40);
+      // clear of the gate in the middle of the front fence
+      const gateX = r.x + r.w / 2;
+      expect(foot.x + foot.w < gateX - 30 || foot.x > gateX + 30, s).toBe(true);
     }
     for (const a of SPOT_IDS) for (const b of SPOT_IDS) {
-      if (a < b) expect(overlaps(spotBox(a), spotBox(b)), `${a} ${b}`).toBe(false);
+      if (a < b) expect(overlaps(spotFoot(a), spotFoot(b)), `${a} ${b}`).toBe(false);
     }
   });
 
-  it('big spots sit in the side strips, clear of the stream, the paths and the farmhouse', () => {
+  it('big spots: the same size, one in the west strip, one west of the stream (it may stand a little over the water)', () => {
+    expect(BIG_SPOTS[0].w).toBe(BIG_SPOTS[1].w);
+    expect(BIG_SPOTS[0].h).toBe(BIG_SPOTS[1].h);
     expect(BIG_SPOTS).toHaveLength(2);
-    const house = layout.props.find(p => p.kind === 'farmhouse')!;
+    expect(bigBox(0).x + bigBox(0).w <= 0).toBe(true);
+    expect(bigBox(1).x >= 1170).toBe(true);
+    const solid = layout.props.filter(p => p.kind === 'farmhouse' || p.kind === 'mill');
     for (const slot of [0, 1] as const) {
       const b = bigBox(slot);
-      expect(b.x + b.w <= 0 || b.x >= 1200, `slot ${slot}`).toBe(true);
       expect(b.x >= -300 && b.x + b.w <= 1500 && b.y >= 0 && b.y + b.h <= 1800, `slot ${slot}`).toBe(true);
-      for (const [x, y] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]) {
-        expect(riverGap(x, y), `slot ${slot}`).toBeGreaterThan(layout.riverHalf);
-      }
+      // standing on dry land: the middle of its base is off the water
+      expect(riverGap(BIG_SPOTS[slot].x, BIG_SPOTS[slot].y), `slot ${slot}`).toBeGreaterThan(layout.riverHalf);
       expect(boxPathGap(b), `slot ${slot}`).toBeGreaterThan(layout.pathHalf);
-      expect(overlaps(b, propBox(house)), `slot ${slot}`).toBe(false);
+      for (const p of solid) expect(overlaps(b, propBox(p)), `slot ${slot} ${p.kind}`).toBe(false);
+      for (const r of LOTS) expect(overlaps(b, r), `slot ${slot}`).toBe(false);
       for (const r of layout.petRest) expect(dist(r.spot, BIG_SPOTS[slot])).toBeGreaterThan(120);
-    }
-  });
-
-  it('the scenery leaves the ordinary spots wholly open', () => {
-    for (const p of layout.props) {
-      for (const s of SPOT_IDS) expect(overlaps(propBox(p), spotBox(s)), `${p.kind} at ${p.x},${p.y}`).toBe(false);
     }
   });
 

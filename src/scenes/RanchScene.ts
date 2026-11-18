@@ -14,7 +14,8 @@ import { SCENERY_FRAMES } from './sceneryAtlas';
 import { PATROL_LOOK_MS, RanchPets, type PatrolStop } from './ranchPets';
 import { buildRoamGraph, nearestNode, type RoamGraph } from './petRoam';
 import { PALETTES, recolor } from './recolor';
-import { DECOR_LPC_TEX, DecorLayer } from './ranchDecor';
+import { DECOR_LPC_TEX, DECOR_MADE_TEX, DecorLayer } from './ranchDecor';
+import { PEN_DECOR_ROW } from './decorLayout';
 import type { SpecialId, SpotId } from '../core/decor';
 
 /** World units per scenery pixel: 5 canvas pixels at camera zoom ASSET_RES, so every pixel stays square. */
@@ -325,14 +326,14 @@ function coatIndex(sp: SpeciesId, color: string): number {
   return Math.max(0, SPECIES[sp].colors.indexOf(color));
 }
 
-/** Fence-inner box of a lot below its house (world units). */
+/** Fence-inner box of a lot below its house, above the decoration row by the front fence (world units). */
 function yardOf(lot: Rect, kind: HouseKind): Run {
   const art = HOUSE_ART[kind];
   return {
     x0: lot.x + 4 * PX,
     x1: lot.x + lot.w - 4 * PX,
     y0: lot.y + (art.y + art.h + 8) * PX,
-    y1: lot.y + lot.h - 16 * PX,
+    y1: lot.y + lot.h - 16 * PX - PEN_DECOR_ROW,
   };
 }
 
@@ -443,7 +444,9 @@ export class RanchScene extends Phaser.Scene {
     const scenery = `${import.meta.env.BASE_URL}assets/scenery/`;
     if (!this.textures.exists(TEX.atlas)) this.load.image(TEX.atlas, `${scenery}scenery.png`);
     if (!this.textures.exists(TEX.farmhouse)) this.load.image(TEX.farmhouse, `${scenery}farmhouse.png`);
-    if (!this.textures.exists(DECOR_LPC_TEX)) this.load.image(DECOR_LPC_TEX, `${import.meta.env.BASE_URL}assets/decor/lpc.png`);
+    const decor = `${import.meta.env.BASE_URL}assets/decor/`;
+    if (!this.textures.exists(DECOR_LPC_TEX)) this.load.image(DECOR_LPC_TEX, `${decor}lpc.png`);
+    if (!this.textures.exists(DECOR_MADE_TEX)) this.load.image(DECOR_MADE_TEX, `${decor}made.png`);
     RanchPets.preload(this, base);
   }
 
@@ -490,6 +493,7 @@ export class RanchScene extends Phaser.Scene {
       emojiPx: EMOJI_PX,
       sparkle: (x, y) => this.sparkles.explode(24, x, y),
       depth: DEPTH.decor,
+      ySort: y => DEPTH.animal + y / 10000,
     });
 
     this.input.on('pointerdown', this.onDown, this);

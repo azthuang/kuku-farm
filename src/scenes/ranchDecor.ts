@@ -2,17 +2,20 @@ import Phaser from 'phaser';
 import {
   DECOR, SPECIALS, SPOT_IDS, type DecorId, type DecorState, type SpecialId, type SpotId,
 } from '../core/decor';
-import { BIG_SIZE, BIG_SPOTS, DECOR_SPOTS, SPOT_SIZE, bigBox, createBusy, spotBox } from './decorLayout';
+import { BIG_SPOTS, DECOR_SPOTS, bigBox, createBusy, spotFoot } from './decorLayout';
 import { DECOR_LPC_FRAMES } from './decorAtlas';
+import { DECOR_MADE_FRAMES, SPECIAL_FRAMES } from './decorMadeAtlas';
 
-/** Texture key of public/assets/decor/lpc.png (loaded by the scene). */
+/** Texture keys of public/assets/decor/lpc.png and made.png (loaded by the scene). */
 export const DECOR_LPC_TEX = 'decor-lpc';
+export const DECOR_MADE_TEX = 'decor-made';
+type Frames = Partial<Record<string, readonly [number, number, number, number]>>;
 /**
- * LPC pixels are drawn this many world units wide, like the scenery; taller ones shrink to MAX_H:
- * a spot stands 72 below its page's top edge, and a care page shows nothing above that edge.
+ * A decoration fills its spot: the largest whole-pixel scale that fits the spot's width (two or
+ * three tiles) and height limit, so its pixels stay crisp. Pigeons are drawn at PIGEON_SCALE.
  */
-const PIXEL = 2;
-const MAX_H = 70;
+const PIGEON_SCALE = 3;
+const fill = (w: number, h: number, boxW: number, boxH: number): number => Math.max(1, Math.floor(Math.min(boxW / w, boxH / h)));
 
 type Img = Phaser.GameObjects.Image;
 type Fx = Phaser.Tweens.Tween | Phaser.Time.TimerEvent;
@@ -23,22 +26,25 @@ export interface DecorDeps {
   emojiPx: number;
   /** Stars at a world point. */
   sparkle(x: number, y: number): void;
+  /** Depth of the garden's decorations and the specials. */
   depth: number;
+  /** Depth of something standing at world y inside a pen (sorted with the animals). */
+  ySort(y: number): number;
 }
 
 export type DecorHit = { spot: SpotId } | { slot: 0 | 1; id: SpecialId };
 
 /** World size of a decoration and of a special (their height; emoji are square). */
-const DECOR_PX = 64; // ≤ MAX_H
 const SPECIAL_PX = 150;
-const PIGEON_PX = 26;
+const PIGEON_PX = 40;
 /** A tap this far outside a spot's box still counts (small fingers, small targets). */
 const HIT_PAD = 10;
 /** How long each trick runs: a tap meanwhile starts nothing. */
 const SHOW_MS: Record<SpecialId, number> = { xmasTree: 900, balloon: 4200, rocket: 5200, ufo: 1600, dino: 1000 };
 export const PIGEON_FLY_MS = 1600;
 /** Where the three pigeons stand, around the spot's foot. */
-const PIGEON_AT = [{ x: -20, y: -4 }, { x: 6, y: -14 }, { x: 22, y: 0 }];
+/** Where the three pigeons stand, as fractions of the spot's width and px up from its front. */
+const PIGEON_AT = [{ x: -0.3, y: 6 }, { x: 0.02, y: 26 }, { x: 0.3, y: 2 }];
 
 interface SpotView {
   img: Img;
@@ -61,15 +67,19 @@ export class DecorLayer {
   private busy = createBusy();
 
   constructor(private scene: Phaser.Scene, private deps: DecorDeps) {
-    if (scene.textures.exists(DECOR_LPC_TEX)) {
-      const t = scene.textures.get(DECOR_LPC_TEX);
+    const frames = (key: string, list: Frames): void => {
+      if (!scene.textures.exists(key)) return;
+      const t = scene.textures.get(key);
       t.setFilter(Phaser.Textures.FilterMode.NEAREST);
-      for (const [id, [x, y, w, h]] of Object.entries(DECOR_LPC_FRAMES)) if (!t.has(id)) t.add(id, 0, x, y, w, h);
-    }
+      for (const [id, f] of Object.entries(list)) if (f && !t.has(id)) t.add(id, 0, f[0], f[1], f[2], f[3]);
+    };
+    frames(DECOR_LPC_TEX, DECOR_LPC_FRAMES);
+    frames(DECOR_MADE_TEX, { ...DECOR_MADE_FRAMES, ...SPECIAL_FRAMES });
     for (const s of SPOT_IDS) {
       const p = DECOR_SPOTS[s];
-      const img = scene.add.image(p.x, p.y, '__MISSING').setOrigin(0.5, 1).setDepth(deps.depth).setVisible(false);
-      this.spots.set(s, { img, plus: this.makePlus(p.x, p.y), birds: [], id: null, open: false, fx: [] });
+      const depth = this.depthOf(s, p.y);
+      const img = scene.add.image(p.x, p.y, '__MISSING').setOrigin(0.5, 1).setDepth(depth).setVisible(false);
+      this.spots.set(s, { img, plus: this.makePlus(p.x, p.y - p.h * 0, depth), birds: [], id: null, open: false, fx: [] });
     }
     const big = (i: 0 | 1): BigView => {
       const p = BIG_SPOTS[i];
@@ -79,8 +89,13 @@ export class DecorLayer {
     this.bigs = [big(0), big(1)];
   }
 
+  /** A decoration stands in a pen: it sorts with the animals by how far down it stands. */
+  private depthOf(_s: SpotId, y: number): number {
+    return this.deps.ySort(y);
+  }
+
   /** A small wooden sign with a white ＋, standing on the spot. */
-  private makePlus(x: number, y: number): Phaser.GameObjects.Container {
+  private makePlus(x: number, y: number, depth: number): Phaser.GameObjects.Container {
     const g = this.scene.add.graphics();
     const w = 46;
     const h = 34;
@@ -89,9 +104,18 @@ export class DecorLayer {
     g.fillStyle(0xc8945a, 1).fillRoundedRect(-w / 2, -26 - h, w, h, 7);
     g.lineStyle(3, 0x8a5a2b, 1).strokeRoundedRect(-w / 2, -26 - h, w, h, 7);
     g.fillStyle(0xffffff, 1).fillRoundedRect(-13, -26 - h / 2 - 3.5, 26, 7, 3).fillRoundedRect(-3.5, -26 - h / 2 - 13, 7, 26, 3);
-    const c = this.scene.add.container(x, y, [g]).setDepth(this.deps.depth).setAlpha(0.8).setVisible(false);
+    const c = this.scene.add.container(x, y - 12, [g]).setDepth(depth).setAlpha(0.8).setVisible(false);
     this.scene.tweens.add({ targets: c, alpha: 0.55, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     return c;
+  }
+
+  /** The art frame of a decoration, special or pigeon pose, if its sheet is loaded. */
+  private art(name: string): { key: string; h: number; w: number } | null {
+    const lpc = (DECOR_LPC_FRAMES as Frames)[name];
+    if (lpc && this.scene.textures.exists(DECOR_LPC_TEX)) return { key: DECOR_LPC_TEX, w: lpc[2], h: lpc[3] };
+    const made = ({ ...DECOR_MADE_FRAMES, ...SPECIAL_FRAMES } as Frames)[name];
+    if (made && this.scene.textures.exists(DECOR_MADE_TEX)) return { key: DECOR_MADE_TEX, w: made[2], h: made[3] };
+    return null;
   }
 
   private tex(img: Img, emoji: string, px: number): void {
@@ -133,18 +157,18 @@ export class DecorLayer {
     v.img.setVisible(!!id && id !== 'pigeons');
     if (!id) return;
     if (id !== 'pigeons') {
-      const f = (DECOR_LPC_FRAMES as Partial<Record<DecorId, readonly number[]>>)[id];
-      if (f && this.scene.textures.exists(DECOR_LPC_TEX)) {
-        v.img.setTexture(DECOR_LPC_TEX, id).setScale(Math.min(PIXEL, MAX_H / f[3]));
+      const a = this.art(id);
+      if (a) {
+        v.img.setTexture(a.key, id).setScale(fill(a.w, a.h, p.w, p.h));
       } else {
-        this.tex(v.img, DECOR[id].emoji, DECOR_PX);
+        this.tex(v.img, DECOR[id].emoji, Math.min(p.w, p.h) * 0.8);
       }
       return;
     }
     // a little flock pecking at the ground, one at a time
     v.birds = PIGEON_AT.map((o, i) => {
-      const b = this.scene.add.image(p.x + o.x, p.y + o.y, '__MISSING').setOrigin(0.5, 1).setDepth(this.deps.depth + o.y / 1000);
-      this.tex(b, DECOR.pigeons.emoji, PIGEON_PX);
+      const b = this.scene.add.image(p.x + o.x * p.w, p.y - o.y, '__MISSING').setOrigin(0.5, 1).setDepth(this.depthOf(s, p.y - o.y));
+      this.pigeon(b, 0);
       if (i === 1) b.setFlipX(true);
       return b;
     });
@@ -152,12 +176,22 @@ export class DecorLayer {
       if (this.busy.busy(s, this.scene.time.now)) return;
       const b = v.birds[Math.floor(Math.random() * v.birds.length)];
       if (Math.random() < 0.25) {
-        const home = p.x + PIGEON_AT[v.birds.indexOf(b)].x;
+        const home = p.x + PIGEON_AT[v.birds.indexOf(b)].x * p.w;
         this.scene.tweens.add({ targets: b, x: home + (Math.random() < 0.5 ? -8 : 8), duration: 260, yoyo: true });
+      } else if (this.art('pigeon1')) {
+        this.pigeon(b, 1); // head down to the ground, then up again
+        this.scene.time.delayedCall(320, () => { if (!this.busy.busy(s, this.scene.time.now)) this.pigeon(b, 0); });
       } else {
         this.scene.tweens.add({ targets: b, angle: b.flipX ? -24 : 24, duration: 140, yoyo: true, repeat: 1 });
       }
     });
+  }
+
+  /** A pigeon's pose: 0 standing, 1 pecking, 2 flying (emoji until the art is loaded). */
+  private pigeon(b: Img, pose: 0 | 1 | 2): void {
+    const a = this.art(`pigeon${pose}`);
+    if (a) b.setTexture(a.key, `pigeon${pose}`).setScale(PIGEON_SCALE);
+    else this.tex(b, DECOR.pigeons.emoji, PIGEON_PX);
   }
 
   private setBig(slot: 0 | 1, b: BigView, id: SpecialId | null): void {
@@ -167,7 +201,10 @@ export class DecorLayer {
     b.id = id;
     b.img.setPosition(p.x, p.y).setAngle(0).setAlpha(1).clearTint().setVisible(!!id);
     if (!id) return;
-    this.tex(b.img, SPECIALS[id].emoji, SPECIAL_PX);
+    const a = this.art(id);
+    // as big as its spot allows (about the farmhouse oak's size in the west strip)
+    if (a) b.img.setTexture(a.key, id).setScale(Math.min(p.w / a.w, p.h / a.h));
+    else this.tex(b.img, SPECIALS[id].emoji, SPECIAL_PX);
     const base = b.img.scaleX;
     switch (id) {
       case 'xmasTree': {
@@ -178,7 +215,7 @@ export class DecorLayer {
       }
       case 'balloon':
         b.fx.push(this.scene.tweens.add({ targets: b.img, y: p.y - 8, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.InOut' }));
-        this.loop(b.fx, 3200, () => this.puff(b.img.x, b.img.y - BIG_SIZE.h * 0.62, 0xffa640, 0.7));
+        this.loop(b.fx, 3200, () => this.puff(b.img.x, b.img.y - b.img.displayHeight * 0.3, 0xffa640, 0.7));
         break;
       case 'rocket':
         this.loop(b.fx, 1500, () => {
@@ -213,7 +250,12 @@ export class DecorLayer {
   hit(x: number, y: number): DecorHit | null {
     const inside = (r: { x: number; y: number; w: number; h: number }): boolean =>
       x >= r.x - HIT_PAD && x <= r.x + r.w + HIT_PAD && y >= r.y - HIT_PAD && y <= r.y + r.h + HIT_PAD;
-    for (const [s, v] of this.spots) if ((v.id || v.open) && inside(spotBox(s))) return { spot: s };
+    for (const [s, v] of this.spots) {
+      // a decoration: the picture itself; an open spot: its ground (the ＋ sign stands there)
+      const r = v.id && v.id !== 'pigeons' ? v.img.getBounds() : null;
+      const box = r ? { x: r.x, y: r.y, w: r.width, h: r.height } : v.id || v.open ? spotFoot(s) : null;
+      if (box && inside(box)) return { spot: s };
+    }
     for (const slot of [0, 1] as const) {
       const id = this.bigs[slot].id;
       if (id && inside(bigBox(slot))) return { slot, id };
@@ -230,12 +272,12 @@ export class DecorLayer {
     const tw = this.scene.tweens;
     switch (b.id) {
       case 'xmasTree':
-        this.deps.sparkle(p.x, p.y - BIG_SIZE.h * 0.6);
-        this.deps.sparkle(p.x, p.y - BIG_SIZE.h * 0.3);
+        this.deps.sparkle(p.x, p.y - img.displayHeight * 0.6);
+        this.deps.sparkle(p.x, p.y - img.displayHeight * 0.3);
         tw.add({ targets: img, scaleX: img.scaleX * 1.06, scaleY: img.scaleY * 1.06, duration: 160, yoyo: true, repeat: 1 });
         break;
       case 'balloon':
-        this.puff(p.x, p.y - BIG_SIZE.h * 0.62, 0xff8a30, 1);
+        this.puff(p.x, p.y - img.displayHeight * 0.3, 0xff8a30, 1);
         tw.killTweensOf(img);
         tw.chain({
           targets: img,
@@ -265,7 +307,7 @@ export class DecorLayer {
       }
       case 'ufo': {
         const beam = this.scene.add.graphics().setDepth(this.deps.depth + 0.05).setAlpha(0);
-        const y0 = img.y - BIG_SIZE.h * 0.35;
+        const y0 = img.y - img.displayHeight * 0.35;
         beam.fillStyle(0xfff6a8, 0.55).fillTriangle(p.x - 18, y0, p.x + 18, y0, p.x + 56, p.y + 30)
           .fillTriangle(p.x - 18, y0, p.x - 56, p.y + 30, p.x + 56, p.y + 30);
         tw.add({ targets: beam, alpha: 1, duration: 220, yoyo: true, hold: 900, onComplete: () => beam.destroy() });
@@ -289,12 +331,13 @@ export class DecorLayer {
     if (!v || v.id !== 'pigeons' || !this.busy.start(spot, PIGEON_FLY_MS, this.scene.time.now)) return false;
     const p = DECOR_SPOTS[spot];
     v.birds.forEach((b, i) => {
-      const home = { x: p.x + PIGEON_AT[i].x, y: p.y + PIGEON_AT[i].y };
+      const home = { x: p.x + PIGEON_AT[i].x * p.w, y: p.y - PIGEON_AT[i].y };
       const r = 40 + i * 10;
       const phase = (i / v.birds.length) * Math.PI * 2;
       const t = { a: 0 };
       this.scene.tweens.killTweensOf(b);
       b.setAngle(0);
+      this.pigeon(b, 2);
       this.scene.tweens.add({
         targets: t, a: 1, duration: PIGEON_FLY_MS, ease: 'Sine.InOut',
         onUpdate: () => {
@@ -304,7 +347,10 @@ export class DecorLayer {
           b.setPosition(home.x + Math.cos(ang) * r * k, home.y - lift + Math.sin(ang) * r * 0.4 * k);
           b.setFlipX(Math.sin(ang) > 0);
         },
-        onComplete: () => b.setPosition(home.x, home.y).setFlipX(i === 1),
+        onComplete: () => {
+          b.setPosition(home.x, home.y).setFlipX(i === 1);
+          this.pigeon(b, 0);
+        },
       });
     });
     return true;
@@ -321,11 +367,11 @@ export class DecorLayer {
 
   sparkleSpot(s: SpotId): void {
     const p = DECOR_SPOTS[s];
-    this.deps.sparkle(p.x, p.y - SPOT_SIZE.h / 2);
+    this.deps.sparkle(p.x, p.y - 40);
   }
 
   sparkleSlot(slot: 0 | 1): void {
     const p = BIG_SPOTS[slot];
-    this.deps.sparkle(p.x, p.y - BIG_SIZE.h / 2);
+    this.deps.sparkle(p.x, p.y - p.h / 2);
   }
 }

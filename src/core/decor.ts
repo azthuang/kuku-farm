@@ -3,15 +3,15 @@ import { FARM_LOT, LOT_COUNT, SPECIES, SPECIES_ORDER, speciesOfLot, type Price }
 import type { GameState } from './state';
 
 /**
- * Ranch decorations (batch 3). Ordinary ones go in the fixed spots, three per page; the child
+ * Ranch decorations (batch 3). Ordinary ones go in the fixed spots, two per page; the child
  * picks what stands where, may buy the same kind again (each one dearer) and swaps freely, and
  * nothing taken down is ever lost: it goes to storage. Specials are the big surprises; only two
  * of them stand on the map at a time.
  */
 
 export type DecorId =
-  | 'flowers' | 'sunflowers' | 'bush' | 'tree' | 'mailbox' | 'bench'
-  | 'hay' | 'scarecrow' | 'beehive' | 'pumpkins' | 'well' | 'pigeons';
+  | 'flowers' | 'sunflowers' | 'roses' | 'bluebells' | 'bush' | 'tree'
+  | 'bench' | 'mushroom' | 'scarecrow' | 'pumpkins' | 'well' | 'pigeons';
 export type SpecialId = 'xmasTree' | 'balloon' | 'rocket' | 'ufo' | 'dino';
 
 export interface DecorDef {
@@ -29,26 +29,32 @@ const def = (id: DecorId, name: string, emoji: string, base: Price, moves = fals
 export const DECOR: Record<DecorId, DecorDef> = {
   flowers: def('flowers', '彩色花圃', '🌷', { wheat: 60, carrot: 40 }),
   sunflowers: def('sunflowers', '向日葵花圃', '🌻', { wheat: 80, carrot: 60 }),
+  roses: def('roses', '玫瑰花圃', '🌹', { wheat: 80, carrot: 80 }),
+  bluebells: def('bluebells', '藍色花圃', '💐', { strawberry: 100, wheat: 80 }),
   bush: def('bush', '樹叢', '🌿', { carrot: 60, corn: 40 }),
   tree: def('tree', '小樹', '🌳', { wheat: 100, carrot: 80 }),
-  mailbox: def('mailbox', '信箱', '📮', { wheat: 80, carrot: 80 }),
   bench: def('bench', '長椅', '🪑', { carrot: 100, corn: 60 }),
-  hay: def('hay', '乾草堆', '🌾', { wheat: 150, corn: 60 }),
+  mushroom: def('mushroom', '大香菇', '🍄', { wheat: 150, corn: 60 }),
   scarecrow: def('scarecrow', '稻草人', '🧑‍🌾', { wheat: 120, carrot: 100 }),
-  beehive: def('beehive', '蜂箱', '🐝', { strawberry: 100, wheat: 80 }),
   pumpkins: def('pumpkins', '南瓜堆', '🎃', { pumpkin: 120, potato: 60 }),
   well: def('well', '水井', '🪣', { potato: 120, tomato: 100 }),
   pigeons: def('pigeons', '鴿子聚集地', '🕊️', { tomato: 150, strawberry: 150, pumpkin: 100 }, true),
 };
 export const DECOR_ORDER = Object.keys(DECOR) as readonly DecorId[];
 
-export type SpotId = `${number}-${0 | 1 | 2}`;
-export const SPOTS_PER_LOT = 3;
+/** Two spots in each pen: `<lot>-0` is three tiles wide, `<lot>-1` two. The garden has none. */
+export type SpotId = `${number}-${0 | 1}`;
+export const SPOTS_PER_LOT = 2;
 export const SPOT_IDS: readonly SpotId[] = Array.from({ length: LOT_COUNT * SPOTS_PER_LOT },
-  (_, i) => `${Math.floor(i / SPOTS_PER_LOT)}-${i % SPOTS_PER_LOT}` as SpotId);
+  (_, i) => `${Math.floor(i / SPOTS_PER_LOT)}-${i % SPOTS_PER_LOT}` as SpotId).filter((s) => !s.startsWith(`${FARM_LOT}-`));
 
 export function spotLot(s: SpotId): number {
   return Number(s.split('-')[0]);
+}
+
+/** How many tiles wide a spot is: 3 or 2 (one tile deep either way). */
+export function spotSpan(s: SpotId): 2 | 3 {
+  return s.endsWith('-0') ? 3 : 2;
 }
 
 export interface DecorState {
@@ -79,11 +85,9 @@ export function decorPrice(state: GameState, id: DecorId): Price {
   return out;
 }
 
-/** The garden's spots from the start; a pen page's once its house stands. */
+/** A pen's spots open once its house stands. */
 export function spotOpen(state: GameState, spot: SpotId): boolean {
-  const lot = spotLot(spot);
-  if (lot === FARM_LOT) return true;
-  const sp = speciesOfLot(lot);
+  const sp = speciesOfLot(spotLot(spot));
   return sp !== null && state.ranch.houses.some((h) => h.kind === SPECIES[sp].house);
 }
 
