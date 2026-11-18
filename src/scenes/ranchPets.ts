@@ -2,22 +2,19 @@ import Phaser from 'phaser';
 import type { Pet } from '../core/ranch';
 import { PETS, type PetKind } from '../core/species';
 import { nearestNode, route, type RoamGraph } from './petRoam';
+import { SLEEP_COL, petFrame, walkCycle } from './petSheet';
 
 /**
  * The dog and the cat: they walk the farm's paths, stop to sniff, and lie down to sleep at a
  * resting spot (💤). A tap makes one jump and call; a snack makes it eat and do a trick. They have
- * no needs at all. Each sheet holds four breeds (or coats) side by side, 4 columns each; rows:
- * walk right (+ asleep), walk up, walk down, walk left (+ asleep), then eat (facing the viewer).
+ * no needs at all. Each sheet holds four breeds side by side (layout in petSheet.ts).
  */
 
 type Img = Phaser.GameObjects.Image;
 type Dir = 'R' | 'U' | 'D' | 'L';
 
-const SHEET_COLS = 16;
 const ROW: Record<Dir, number> = { R: 0, U: 1, D: 2, L: 3 };
 const EAT_ROW = 4;
-/** Lying-down frames: the fourth column of the right and left walk rows. */
-const SLEEP_COL = 3;
 /** Per sheet: frame size, drawn scale, ground row in the frame, tag height, eat frame order. */
 interface SheetLook { frame: number; scale: number; feet: number; tagY: number; eat: number[] }
 const LOOK: Record<PetKind, SheetLook> = {
@@ -91,7 +88,7 @@ export class RanchPets {
   }
 
   private frame(v: { coat: number }, row: number, col: number): number {
-    return row * SHEET_COLS + v.coat * 4 + col;
+    return petFrame(v.coat, row, col);
   }
 
   private ensureAnims(kind: PetKind, coat: number): void {
@@ -99,10 +96,10 @@ export class RanchPets {
     this.scene.textures.get(PET_TEX[kind]).setFilter(Phaser.Textures.FilterMode.NEAREST);
     const a = this.scene.anims;
     const tex = PET_TEX[kind];
-    const f = (row: number, col: number) => ({ key: tex, frame: row * SHEET_COLS + coat * 4 + col });
+    const f = (row: number, col: number) => ({ key: tex, frame: petFrame(coat, row, col) });
     for (const d of ['R', 'U', 'D', 'L'] as const) {
       const key = `${tex}-${coat}-walk-${d}`;
-      if (!a.exists(key)) a.create({ key, frames: [f(ROW[d], 0), f(ROW[d], 1), f(ROW[d], 2), f(ROW[d], 1)], frameRate: 8, repeat: -1 });
+      if (!a.exists(key)) a.create({ key, frames: walkCycle(coat, ROW[d]).map(frame => ({ key: tex, frame })), frameRate: 8, repeat: -1 });
     }
     const eat = `${tex}-${coat}-eat`;
     if (!a.exists(eat)) a.create({ key: eat, frames: LOOK[kind].eat.map(c => f(EAT_ROW, c)), frameRate: 6, repeat: 0 });
