@@ -5,6 +5,7 @@ import {
 } from '../../src/core/save';
 import { createRanch, type RanchState } from '../../src/core/ranch';
 import { Game } from '../../src/core/game';
+import { createDecor } from '../../src/core/decor';
 
 function memoryStorage() {
   const m = new Map<string, string>();
@@ -399,5 +400,54 @@ describe('save', () => {
     if (!r.ok) throw new Error('expected ok');
     expect(r.ranchReset).toBeUndefined();
     expect(r.state.ranch.houses[0]).toMatchObject({ kind: 'coop', lot: 1 });
+  });
+
+  describe('decor', () => {
+    const withDecor = (d: unknown): string => {
+      const s = createNewState(5);
+      return JSON.stringify({ ...s, ranch: { ...s.ranch, decor: d } });
+    };
+    const loaded = (raw: string): GameState => {
+      const r = parseSave(raw);
+      if (!r.ok) throw new Error(r.error);
+      return r.state;
+    };
+
+    it('an old save gets an empty decor', () => {
+      const s = createNewState(5);
+      const { decor: _d, ...ranch } = s.ranch;
+      expect(loaded(JSON.stringify({ ...s, ranch })).ranch.decor).toEqual(createDecor());
+    });
+
+    it('decor round-trips', () => {
+      const s = createNewState(5);
+      s.ranch.decor = { placed: { '0-0': 'well' }, stored: { flowers: 2 }, specials: ['rocket', 'ufo'], big: ['ufo', null] };
+      expect(loaded(serialize(s)).ranch.decor).toEqual(s.ranch.decor);
+    });
+
+    it('broken decor is repaired, never fatal', () => {
+      const d = {
+        placed: { '0-0': 'well', '9-9': 'flowers', '1-1': 'lava' },
+        stored: { flowers: 1.7, bush: -3, lava: 4 },
+        specials: ['rocket', 'rocket', 'lava'],
+        big: ['ufo', 'rocket', 'rocket'],
+      };
+      expect(loaded(withDecor(d)).ranch.decor).toEqual({
+        placed: { '0-0': 'well' },
+        stored: { flowers: 2 }, // 1 (rounded down) + the one from the unknown spot '9-9'
+        specials: ['rocket'],
+        big: [null, 'rocket'], // 'ufo' was never bought; the pair is cut to 2
+      });
+    });
+
+    it('the same special in both slots keeps the first', () => {
+      expect(loaded(withDecor({ placed: {}, stored: {}, specials: ['ufo'], big: ['ufo', 'ufo'] })).ranch.decor.big)
+        .toEqual(['ufo', null]);
+    });
+
+    it('decor that is not an object reads as empty', () => {
+      expect(loaded(withDecor('oops')).ranch.decor).toEqual(createDecor());
+      expect(loaded(withDecor({ placed: 3, stored: null, specials: 'x', big: {} })).ranch.decor).toEqual(createDecor());
+    });
   });
 });

@@ -1,4 +1,6 @@
-import { createDecor } from './decor';
+import {
+  DECOR_ORDER, SPECIAL_ORDER, SPOT_IDS, createDecor, type DecorId, type DecorState, type SpecialId, type SpotId,
+} from './decor';
 import { CROP_BY_ROW, type CropId } from './levels';
 import {
   SPECIES, HOUSE_KINDS, LEGACY_PET_COLORS, PETS, PET_KINDS, PET_SNACK_IDS, speciesOfHouse, PRODUCT_IDS, SUPPLY_IDS,
@@ -150,7 +152,42 @@ function validateRanch(data: unknown, version: number): RanchState {
 
   const settledAt = finite(o.settledAt);
   if (!isIntIn(o.nextId, 1, Number.MAX_SAFE_INTEGER)) fail();
-  return { houses, animals, pets, decor: createDecor(), supplies, products, settledAt, nextId: o.nextId };
+  return { houses, animals, pets, decor: parseDecor(o.decor), supplies, products, settledAt, nextId: o.nextId };
+}
+
+/**
+ * Batch 3's decorations. Nothing here may sink the save: a missing or garbled field reads as
+ * empty, unknown kinds are dropped, and a known decoration on an unknown spot goes to storage.
+ */
+function parseDecor(v: unknown): DecorState {
+  const d = createDecor();
+  const obj = (x: unknown): Record<string, unknown> | null =>
+    typeof x === 'object' && x !== null && !Array.isArray(x) ? x as Record<string, unknown> : null;
+  const o = obj(v);
+  if (!o) return d;
+  const isDecor = (x: unknown): x is DecorId => DECOR_ORDER.includes(x as DecorId);
+  const isSpecial = (x: unknown): x is SpecialId => SPECIAL_ORDER.includes(x as SpecialId);
+  const addStored = (id: DecorId, n: number): void => {
+    if (n >= 1) d.stored[id] = (d.stored[id] ?? 0) + n;
+  };
+  for (const [k, n] of Object.entries(obj(o.stored) ?? {})) {
+    if (isDecor(k) && typeof n === 'number' && Number.isFinite(n)) addStored(k, Math.floor(n));
+  }
+  for (const [spot, id] of Object.entries(obj(o.placed) ?? {})) {
+    if (!isDecor(id)) continue;
+    if (SPOT_IDS.includes(spot as SpotId)) d.placed[spot as SpotId] = id;
+    else addStored(id, 1);
+  }
+  if (Array.isArray(o.specials)) {
+    for (const id of o.specials) if (isSpecial(id) && !d.specials.includes(id)) d.specials.push(id);
+  }
+  if (Array.isArray(o.big)) {
+    for (const i of [0, 1] as const) {
+      const id = o.big[i];
+      if (isSpecial(id) && d.specials.includes(id) && !d.big.includes(id)) d.big[i] = id;
+    }
+  }
+  return d;
 }
 
 /** A pet's breed as the sheet names it now: an old coat name maps to the breed that looks like it. */
