@@ -156,5 +156,5 @@ describe('app-produced saves round trip', () => {
         expect(p, `seed ${seed} step ${step}`).toEqual({ ok: true, state: s });
       }
     }
-  });
+  }, 30_000); // 12 seeded games: ~1.3 s alone, but a busy machine running every file at once can take 5 s+
 });
