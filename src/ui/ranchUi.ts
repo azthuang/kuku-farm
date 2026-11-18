@@ -126,7 +126,7 @@ function button(cls: string, text: string, label?: string): HTMLButtonElement {
 }
 
 /** A close button whose ✕ is drawn, so it is the same size and centred on every device's fonts. */
-function closeButton(cls: string, label: string): HTMLButtonElement {
+export function closeButton(cls: string, label: string): HTMLButtonElement {
   const b = button(cls, '', label);
   b.innerHTML = '<svg class="x-icon" viewBox="0 0 24 24" aria-hidden="true">'
     + '<path d="M5 5L19 19M19 5L5 19" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" fill="none"/></svg>';

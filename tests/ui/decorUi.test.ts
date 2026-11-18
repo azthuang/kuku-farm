@@ -1,0 +1,127 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { createDecorUi } from '../../src/ui/decorUi';
+import { createNewState, type GameState } from '../../src/core/state';
+import { DECOR_ORDER, placeDecor } from '../../src/core/decor';
+
+function st(unlocked: number): GameState {
+  const s = createNewState(0);
+  s.unlocked = unlocked;
+  return s;
+}
+function rich(s: GameState): GameState {
+  for (const k of Object.keys(s.inventory) as (keyof GameState['inventory'])[]) s.inventory[k] = 900;
+  return s;
+}
+
+let root: HTMLElement;
+function setup() {
+  root = document.createElement('div');
+  document.body.append(root);
+  return createDecorUi(root);
+}
+const title = () => root.querySelector('.decor-pick .shop-title')!.textContent;
+const rowIds = () => Array.from(root.querySelectorAll<HTMLElement>('.decor-pick .shop-row')).map(r => r.dataset.item);
+const row = (id: string) => root.querySelector<HTMLElement>(`.decor-pick .shop-row[data-item="${id}"]`)!;
+const btn = (id: string) => row(id).querySelector<HTMLButtonElement>('.buy')!;
+
+afterEach(() => {
+  vi.useRealTimers();
+  document.body.replaceChildren();
+});
+
+describe('decoration picker', () => {
+  it('an empty spot: 🌻 放什麼？ and every decoration in order', () => {
+    const ui = setup();
+    ui.open('0-0', rich(st(9)));
+    expect(ui.isOpen()).toBe(true);
+    expect(title()).toBe('🌻 放什麼？');
+    expect(rowIds()).toEqual([...DECOR_ORDER]);
+    expect(btn('flowers').textContent).toBe('買');
+    expect(btn('flowers').disabled).toBe(false);
+  });
+
+  it('a placed spot: 換成什麼？ with 📦 收起來 first; the decoration standing there is not offered', () => {
+    const ui = setup();
+    const s = rich(st(9));
+    placeDecor(s, '0-0', 'flowers');
+    ui.open('0-0', s);
+    expect(title()).toBe('換成什麼？');
+    expect(rowIds()[0]).toBe('store');
+    expect(row('store').textContent).toContain('📦 收起來');
+    expect(rowIds()).not.toContain('flowers');
+  });
+
+  it('stored ones say 放這裡 and 收納 2, with no price', () => {
+    const ui = setup();
+    const s = st(1);
+    s.ranch.decor.stored.well = 2;
+    ui.open('0-0', s);
+    expect(btn('well').textContent).toBe('放這裡');
+    expect(btn('well').disabled).toBe(false);
+    expect(row('well').textContent).toContain('收納 2');
+    expect(row('well').querySelectorAll('.cost')).toHaveLength(0);
+  });
+
+  it('short crops show red and a grey 買; a locked crop shows 🔒 and its level', () => {
+    const ui = setup();
+    ui.open('0-0', st(2));
+    expect(btn('flowers').disabled).toBe(true);
+    expect(row('flowers').querySelector('b.short')).not.toBeNull();
+    expect(row('well').textContent).toContain('解鎖 4× 就有 🥔');
+    expect(btn('well').disabled).toBe(true);
+  });
+
+  it('picking reports the spot and the decoration, then closes', () => {
+    vi.useFakeTimers();
+    const ui = setup();
+    const picked: [string, string][] = [];
+    ui.onPick((spot, id) => picked.push([spot, id]));
+    ui.open('0-2', rich(st(9)));
+    vi.advanceTimersByTime(400); // past the ghost-click guard
+    btn('bush').click();
+    expect(picked).toEqual([['0-2', 'bush']]);
+    expect(ui.isOpen()).toBe(false);
+  });
+
+  it('📦 收起來 reports the spot', () => {
+    vi.useFakeTimers();
+    const ui = setup();
+    const s = rich(st(9));
+    placeDecor(s, '0-1', 'tree');
+    const stored: string[] = [];
+    ui.onStore(spot => stored.push(spot));
+    ui.open('0-1', s);
+    vi.advanceTimersByTime(400);
+    btn('store').click();
+    expect(stored).toEqual(['0-1']);
+    expect(ui.isOpen()).toBe(false);
+  });
+
+  it('update refreshes prices while open', () => {
+    const ui = setup();
+    const s = st(9);
+    ui.open('0-0', s);
+    expect(btn('flowers').disabled).toBe(true);
+    rich(s);
+    ui.update(s);
+    expect(btn('flowers').disabled).toBe(false);
+  });
+
+  it('askSlot offers the two shown specials and 取消', async () => {
+    vi.useFakeTimers();
+    const ui = setup();
+    const p = ui.askSlot(['ufo', 'rocket']);
+    vi.advanceTimersByTime(400);
+    expect(root.querySelector('.slot-ask .shop-title')!.textContent).toBe('要換掉哪一個？');
+    expect(root.querySelector('[data-slot="0"]')!.textContent).toContain('🛸');
+    expect(root.querySelector('[data-slot="1"]')!.textContent).toContain('🚀');
+    root.querySelector<HTMLElement>('[data-slot="1"]')!.click();
+    await expect(p).resolves.toBe(1);
+    const q = ui.askSlot(['ufo', 'rocket']);
+    vi.advanceTimersByTime(400);
+    root.querySelector<HTMLElement>('.slot-cancel')!.click();
+    await expect(q).resolves.toBeNull();
+    expect(root.querySelector<HTMLElement>('.slot-ask')!.hidden).toBe(true);
+  });
+});

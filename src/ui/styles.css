@@ -530,3 +530,16 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 .feed-sack .sack-tie { fill: none; stroke: #b5473a; stroke-width: 3; stroke-linecap: round; }
 .feed-sack .sack-stitch { fill: none; stroke: #8a5a24; stroke-width: 1.3; stroke-dasharray: 2.5 2.5; stroke-linecap: round; opacity: 0.7; }
 .feed-sack-emoji { position: absolute; left: 0; right: 0; top: 30%; text-align: center; line-height: 1; font-size: calc(var(--sack) * 0.56); }
+
+/* ---- batch 3: the decoration picker and the which-special-to-swap question ---- */
+.decor-pick .stored { font-size: 15px; font-weight: 800; color: var(--leaf-deep, #4c7a2c); }
+.slot-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.slot-choice {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-height: 140px; padding: 12px 6px; border: 0; border-radius: 18px;
+  background: #fff; box-shadow: 0 4px 0 #e2d4b0; font: inherit; color: inherit; cursor: pointer;
+}
+.slot-choice:active { transform: scale(0.95) translateY(2px); }
+.slot-icon { font-size: 64px; line-height: 1; }
+.slot-name { font-size: 15px; font-weight: 800; }
+.slot-cancel { align-self: center; margin-top: 6px; }
