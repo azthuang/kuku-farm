@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createDecorUi } from '../../src/ui/decorUi';
+import { PIGEON_DOUBLE_MS, createDecorUi, isSecondTap } from '../../src/ui/decorUi';
 import { createNewState, type GameState } from '../../src/core/state';
 import { DECOR_ORDER, placeDecor } from '../../src/core/decor';
 
@@ -123,5 +123,15 @@ describe('decoration picker', () => {
     root.querySelector<HTMLElement>('.slot-cancel')!.click();
     await expect(q).resolves.toBeNull();
     expect(root.querySelector<HTMLElement>('.slot-ask')!.hidden).toBe(true);
+  });
+});
+
+describe('pigeons: a second tap opens the list', () => {
+  it('the same spot again while they fly counts; later, or another spot, does not', () => {
+    expect(PIGEON_DOUBLE_MS).toBe(1600);
+    expect(isSecondTap(null, '1-1', 0)).toBe(false);
+    expect(isSecondTap({ spot: '1-1', at: 1000 }, '1-1', 2500)).toBe(true);
+    expect(isSecondTap({ spot: '1-1', at: 1000 }, '1-1', 2600)).toBe(false);
+    expect(isSecondTap({ spot: '1-1', at: 1000 }, '1-2', 1200)).toBe(false);
   });
 });

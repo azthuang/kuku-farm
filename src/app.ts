@@ -27,7 +27,10 @@ import { createSfx, voiceOf, type SfxName } from './ui/sfx';
 
 const petVoice = (kind: PetKind): SfxName => (kind === 'dog' ? 'woof' : 'meow');
 import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
-import { spotOpen } from './core/decor';
+import {
+  buySpecial, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
+} from './core/decor';
+import { createDecorUi, isSecondTap } from './ui/decorUi';
 import { careFeedback } from './ui/ranchFeedback';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
@@ -40,6 +43,11 @@ const EXPORT_URL_TTL_MS = 40_000;
 const HINT: Record<Mode, string> = { basic: '點一列開始', challenge: '準備好了就開始！' };
 /** The ranch is settled and redrawn this often while its tab is on screen. */
 const RANCH_TICK_MS = 1000;
+/** A special just shown: stars once the overview has zoomed out, then back to the page 2 s later. */
+const SHOW_SPARKLE_MS = 700;
+const SHOW_BACK_MS = 2000;
+/** The sound of each special's trick. */
+const SPECIAL_SFX: Record<SpecialId, SfxName> = { xmasTree: 'jingle', balloon: 'burner', rocket: 'rocket', ufo: 'ufo', dino: 'roar' };
 /** The ranch opens on the coop (the parent's choice); the garden is the page before it. */
 const START_PAGE = SPECIES.chicken.lot;
 /** A scene still booting/loading can't be slept or woken yet: look again after this long. */
@@ -97,6 +105,8 @@ export function startApp(root: HTMLElement): void {
   const scene = new FieldScene();
   const ranchScene = new RanchScene();
   const ranchUi = createRanchUi(layout.ranch, layout.ranchNav);
+  // after ranchUi: it replaces the ranch root's children, the picker appends its sheets
+  const decorUi = createDecorUi(layout.ranch);
   const phaser = new Phaser.Game({
     type: Phaser.AUTO,
     parent: layout.stage,
@@ -320,6 +330,7 @@ export function startApp(root: HTMLElement): void {
     busy = false;
     speech.cancel();
     ranchUi.closeShop(); // the shop may be open on the old ranch's species
+    decorUi.close();
     game = new Game(r.state, clock, rng);
     readOnly = false; // importing is an explicit choice to use this progress: saving resumes
     speech.setEnabled(game.state.settings.speech);
@@ -412,6 +423,10 @@ export function startApp(root: HTMLElement): void {
 
   /** The pet the camera follows (zoomed in, on its rounds), or null. */
   let following: string | null = null;
+  /** Bumped by every move the child makes; a special's showing returns to its page only if unchanged. */
+  let backToken = 0;
+  /** The last tap on a flock of pigeons: a second one soon after opens 「換成什麼？」. */
+  let lastPigeonTap: { spot: SpotId; at: number } | null = null;
 
   function followLabel(): string | null {
     const p = following ? game.state.ranch.pets.find(x => x.id === following) : undefined;
@@ -419,6 +434,7 @@ export function startApp(root: HTMLElement): void {
   }
 
   function startFollow(id: string): void {
+    backToken++;
     following = id;
     ranchOverview = false;
     ranchScene.follow(id);
@@ -437,6 +453,7 @@ export function startApp(root: HTMLElement): void {
 
   /** Care view of page `i` (from a swipe, the arrows, a dot or an overview tap). */
   function goPage(i: number, animate = tab === 'ranch'): void {
+    backToken++; // the child went somewhere: no automatic return from a special's showing
     following = null; // showPage ends any follow view
     ranchUi.setFollow(null);
     ranchPage = Math.max(0, Math.min(LOT_COUNT - 1, i));
@@ -448,6 +465,7 @@ export function startApp(root: HTMLElement): void {
 
   /** The map button: into the overview, or back to the page the child came from. */
   function toggleOverview(): void {
+    backToken++;
     if (ranchOverview) {
       goPage(ranchPage);
       return;
@@ -477,6 +495,7 @@ export function startApp(root: HTMLElement): void {
   function ranchChanged(): void {
     renderRanch();
     ranchUi.update(game.state);
+    decorUi.update(game.state);
     syncNav();
     save();
   }
@@ -602,6 +621,23 @@ export function startApp(root: HTMLElement): void {
       ranchUi.setFollow(null);
       goPage(ranchPage, false);
     },
+    onDecorSpot: spot => {
+      if (game.state.ranch.decor.placed[spot] === 'pigeons') {
+        const now = Date.now();
+        if (isSecondTap(lastPigeonTap, spot, now)) {
+          lastPigeonTap = null;
+          decorUi.open(spot, game.state);
+          return;
+        }
+        lastPigeonTap = { spot, at: now };
+        if (ranchScene.flyPigeons(spot)) sfx.play('flap');
+        return;
+      }
+      decorUi.open(spot, game.state);
+    },
+    onSpecial: (id, slot) => {
+      if (ranchScene.playSpecial(slot)) sfx.play(SPECIAL_SFX[id]);
+    },
     onIdleVoice: id => {
       // The scene only runs on the ranch tab; the guard also covers a hidden page.
       const a = game.state.ranch.animals.find(x => x.id === id);
@@ -654,6 +690,58 @@ export function startApp(root: HTMLElement): void {
     }
   });
 
+  decorUi.onPick((spot, id) => {
+    const res = placeDecor(game.state, spot, id);
+    if (!res.ok) {
+      sfx.play('nope');
+      return;
+    }
+    sfx.play('buy');
+    ranchChanged();
+    layout.updateHud(game.state);
+    ranchScene.decorSparkle({ spot });
+  });
+  decorUi.onStore(spot => {
+    if (!storeDecor(game.state, spot)) return;
+    sfx.play('sweep');
+    ranchChanged();
+  });
+
+  /** Buys (if needed) and shows a special, asking which one to swap out when both spots are taken. */
+  async function showOff(id: SpecialId, action: 'buy' | 'show'): Promise<void> {
+    if (action === 'buy') {
+      const bought = buySpecial(game.state, id);
+      if (!bought.ok) {
+        sfx.play('nope');
+        return;
+      }
+      sfx.play('buy');
+      ranchUi.celebrateSpecial(id);
+      ranchChanged(); // bought: it is the child's now, whatever happens next
+      layout.updateHud(game.state);
+    }
+    let res = showSpecial(game.state, id);
+    if (!res.ok && res.reason === 'full') {
+      const [a, b] = game.state.ranch.decor.big;
+      const slot = a && b ? await decorUi.askSlot([a, b]) : null;
+      if (slot === null) return; // 取消: it waits in storage (擺出來 later)
+      res = showSpecial(game.state, id, slot);
+    }
+    if (!res.ok) return;
+    ranchChanged();
+    ranchUi.closeShop();
+    // the big spots are at the map's corner: show it appearing there, then go back
+    const back = ranchPage;
+    if (!ranchOverview) toggleOverview();
+    const token = ++backToken;
+    const slot = res.slot;
+    window.setTimeout(() => ranchScene.decorSparkle({ slot }), SHOW_SPARKLE_MS);
+    window.setTimeout(() => {
+      if (token === backToken && ranchOverview && tab === 'ranch') goPage(back);
+    }, SHOW_SPARKLE_MS + SHOW_BACK_MS);
+  }
+  ranchUi.onSpecial((id, action) => { void showOff(id, action); });
+
   layout.onSoundToggle(on => {
     game.state.settings.sound = on;
     sfx.setEnabled(on);
@@ -675,6 +763,7 @@ export function startApp(root: HTMLElement): void {
       syncNav();
     } else {
       ranchUi.closeShop();
+      decorUi.close();
       // A question planted while the ranch was open was not spoken: say it now.
       const q = game.mode !== null ? game.current : null;
       if (q && !busy) say(questionText(q.a, q.b));
