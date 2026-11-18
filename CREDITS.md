@@ -9,6 +9,8 @@
 | public/assets/ranch/{chicken,cow,pig,sheep,llama}_{walk,eat}.png、chicken/cow/llama_shadow.png（羊駝檔由 llama_walk_0 / llama_eat_0 改名） | https://opengameart.org/content/lpc-style-farm-animals | Daniel Eddeland | CC-BY 3.0（原作雙授權 CC-BY 3.0 / GPL 2.0，本專案採用 CC-BY 3.0） |
 | public/assets/scenery/scenery.png、farmhouse.png（由下方「牧場景觀」各素材包裁切、拼合） | 見下方「牧場景觀」 | 見下方「牧場景觀」 | CC-BY-SA 3.0 |
 | public/assets/ranch/dog.png、cat.png（狗：柴犬、大麥町、柯基、邊境牧羊犬；貓：橘虎斑、三花貓、賓士貓、暹羅貓） | 本專案以 Google Antigravity CLI 的圖像模型（gemini-3.1-flash-image）生成，再去背、縮小、量化成 40 px 像素圖 | 本專案（AI 生成） | 本專案自製，不含第三方素材 |
+| public/assets/decor/lpc.png（裝飾：彩色、向日葵、玫瑰、藍色花圃、樹叢、小樹、大香菇；由「牧場景觀」的 LPC Flowers / Plants / Fungi / Wood 與 Trees 素材包裁切、拼合） | 見下方「牧場景觀」 | 見下方「牧場景觀」 | CC-BY-SA 3.0 |
+| public/assets/decor/made.png（裝飾：長椅、稻草人、水井、南瓜堆、白鴿；驚喜物件：聖誕樹、熱氣球、火箭、飛碟、恐龍） | 本專案以 Google Antigravity CLI 的圖像模型（gemini-3.1-flash-image）生成，再去背、縮小、量化成像素圖（恐龍、白鴿另外換色） | 本專案（AI 生成） | 本專案自製，不含第三方素材 |
 
 ## 牧場景觀（LPC）
 
