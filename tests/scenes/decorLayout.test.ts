@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BIG_SPOTS, DECOR_SPOTS, bigBox, bigFoot, spotBox } from '../../src/scenes/decorLayout';
+import { BIG_SPOTS, DECOR_SPOTS, bigBox, bigFoot, createBusy, spotBox } from '../../src/scenes/decorLayout';
 import { LOT_IN_CELL, footprint, lotRect, overlaps, propBox, sceneryLayout, segDist, type Rect } from '../../src/scenes/ranchScenery';
 import { SPOT_IDS, spotLot } from '../../src/core/decor';
 
@@ -72,5 +72,30 @@ describe('decoration spots', () => {
         if (p.y > BIG_SPOTS[slot].y - 10) expect(overlaps(propBox(p), bigBox(slot)), `${p.kind} at ${p.x},${p.y}`).toBe(false);
       }
     }
+  });
+});
+
+describe('one show at a time', () => {
+  it('a second start while the first still runs is refused; after it ends it starts again', () => {
+    const busy = createBusy();
+    expect(busy.start('rocket', 4000, 1000)).toBe(true);
+    expect(busy.busy('rocket', 2000)).toBe(true);
+    expect(busy.start('rocket', 4000, 4999)).toBe(false);
+    expect(busy.busy('rocket', 5000)).toBe(false);
+    expect(busy.start('rocket', 4000, 5000)).toBe(true);
+  });
+
+  it('keys are independent', () => {
+    const busy = createBusy();
+    busy.start('rocket', 4000, 0);
+    expect(busy.start('1-1', 1600, 10)).toBe(true);
+    expect(busy.busy('ufo', 10)).toBe(false);
+  });
+
+  it('clear ends every show (a new scene, an import)', () => {
+    const busy = createBusy();
+    busy.start('rocket', 4000, 0);
+    busy.clear();
+    expect(busy.busy('rocket', 1)).toBe(false);
   });
 });

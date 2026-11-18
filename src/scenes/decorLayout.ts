@@ -53,3 +53,25 @@ export function bigFoot(slot: 0 | 1): Rect {
 
 /** The ordinary spots: the scenery leaves these boxes wholly open. */
 export const SPOT_CLEAR: readonly Rect[] = SPOT_IDS.map(spotBox);
+
+/** Which shows are running (a special's trick, the pigeons' flight): a tap mid-show starts nothing. */
+export interface Busy {
+  /** Starts `key` for `ms` from `now` unless it is still running; true when it started. */
+  start(key: string, ms: number, now: number): boolean;
+  busy(key: string, now: number): boolean;
+  clear(): void;
+}
+
+export function createBusy(): Busy {
+  const until = new Map<string, number>();
+  const busy = (key: string, now: number): boolean => (until.get(key) ?? -Infinity) > now;
+  return {
+    busy,
+    start(key, ms, now) {
+      if (busy(key, now)) return false;
+      until.set(key, now + ms);
+      return true;
+    },
+    clear: () => until.clear(),
+  };
+}

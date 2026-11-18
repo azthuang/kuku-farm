@@ -596,6 +596,16 @@ export class RanchScene extends Phaser.Scene {
     this.decor?.sync(r.decor, view.spotOpen ?? (() => false), this.isOverview);
   }
 
+  /** A special's trick; false while its last one still runs (then make no sound either). */
+  playSpecial(slot: 0 | 1): boolean {
+    return this.decor?.play(slot) ?? false;
+  }
+
+  /** The pigeons on `spot` fly a round; false while they are already up. */
+  flyPigeons(spot: SpotId): boolean {
+    return this.decor?.flyPigeons(spot) ?? false;
+  }
+
   /** Stars over a decoration spot or a special's big spot (just placed or shown). */
   decorSparkle(target: { spot: SpotId } | { slot: 0 | 1 }): void {
     if ('spot' in target) this.decor?.sparkleSpot(target.spot);
