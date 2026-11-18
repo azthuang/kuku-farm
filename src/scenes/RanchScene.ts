@@ -8,12 +8,14 @@ import { ASSETS, ASSET_RES, EMOJI_FONT, makePlaceholderTextures } from './assets
 import { VIEW } from './FieldScene';
 import { HOUSE_ART, dashedRect, drawGardenPlot, drawRun, gardenBeds, hash, seeded } from './ranchArt';
 import {
-  BAKE_H, BAKE_W, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, sceneryLayout, wheelFrameOrder, type SceneryLayout,
+  BAKE_H, BAKE_W, LOT_IN_CELL, SCENERY_SCALE, SCENERY_WORLD, bakeScenery, lotRect, sceneryLayout, wheelFrameOrder, type SceneryLayout,
 } from './ranchScenery';
 import { SCENERY_FRAMES } from './sceneryAtlas';
 import { PATROL_LOOK_MS, RanchPets, type PatrolStop } from './ranchPets';
 import { buildRoamGraph, nearestNode, type RoamGraph } from './petRoam';
 import { PALETTES, recolor } from './recolor';
+import { DecorLayer } from './ranchDecor';
+import type { SpecialId, SpotId } from '../core/decor';
 
 /** World units per scenery pixel: 5 canvas pixels at camera zoom ASSET_RES, so every pixel stays square. */
 const PX = 2.5;
@@ -112,24 +114,15 @@ const GRID_H = ROWS * VIEW;
 const OVERVIEW_ZOOM = ASSET_RES * Math.min(VIEW / GRID_W, VIEW / GRID_H);
 /** Following the dog or the cat: closer than a care page, so the walk feels like its own. */
 const FOLLOW_ZOOM = ASSET_RES * 1.6;
-/** The lot inside its cell (multiples of PX so the baked pixel art lines up). */
-const LOT_IN_CELL: Rect = { x: 30, y: 80, w: 540, h: 440 };
-
-function cellRect(i: number): Rect {
-  return {
-    x: (i % COLS) * VIEW + LOT_IN_CELL.x, y: Math.floor(i / COLS) * VIEW + LOT_IN_CELL.y,
-    w: LOT_IN_CELL.w, h: LOT_IN_CELL.h,
-  };
-}
 /** Every page's fenced plot, by lot (the garden's and the pens'). */
-const LOTS: readonly Rect[] = Array.from({ length: PAGES }, (_, i) => cellRect(i));
+const LOTS: readonly Rect[] = Array.from({ length: PAGES }, (_, i) => lotRect(i));
 const KIND_OF_LOT: Readonly<Record<number, HouseKind>> = Object.fromEntries(
   SPECIES_ORDER.map(s => [SPECIES[s].lot, SPECIES[s].house]),
 );
 const HOUSE_KINDS_IN_ORDER: readonly HouseKind[] = SPECIES_ORDER.map(s => SPECIES[s].house);
 
 /** Animals are y-sorted within [animal, animal + 0.18]; items sit above them so none is ever hidden. */
-const DEPTH = { grass: 0, water: 0.4, scenery: 0.5, lot: 1, house: 2, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
+const DEPTH = { grass: 0, water: 0.4, scenery: 0.5, lot: 1, house: 2, decor: 3, ground: 5, animal: 10, item: 10.5, tag: 30, badge: 35, fx: 40, fly: 50 };
 
 const TEX = {
   src: (sp: SpeciesId, kind: 'walk' | 'eat') => `${sp}-${kind}-src`,
@@ -185,6 +178,10 @@ export interface RanchHandlers {
   onPet?(petId: string): void;
   /** The followed pet is gone (e.g. another save was imported): the follow view has ended. */
   onFollowLost?(): void;
+  /** A decoration spot was tapped: a decoration standing there, or an open spot's ＋ sign. */
+  onDecorSpot?(spot: SpotId): void;
+  /** A special on the map was tapped (care view or following a pet; never in the overview). */
+  onSpecial?(id: SpecialId, slot: 0 | 1): void;
 }
 
 /** What the app knows that the ranch state does not: which empty lots are locked, and by which crop. */
@@ -194,6 +191,8 @@ export interface RanchView {
   lockCrop?: Partial<Record<HouseKind, string>>;
   /** The times-table progress drawn in the garden (cell FARM_LOT). */
   garden?: Garden;
+  /** Whether a decoration spot is open (its page's house stands; the garden's always). */
+  spotOpen?: (spot: SpotId) => boolean;
 }
 
 /**
@@ -375,6 +374,7 @@ export class RanchScene extends Phaser.Scene {
   private tappedPoop: Img | null = null;
   private pending = new Set<() => void>();
   private sparkles!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private decor: DecorLayer | null = null;
   /** Running-time ms until the next ambient voice; only counts down while the scene updates. */
   private voiceIn = 0;
 
@@ -484,6 +484,12 @@ export class RanchScene extends Phaser.Scene {
       tint: [0xffd23f, 0xfff4b0, 0xffffff],
       blendMode: 'ADD',
     }).setDepth(DEPTH.fx);
+    this.decor = new DecorLayer(this, {
+      emojiTex: e => this.emojiTex(e),
+      emojiPx: EMOJI_PX,
+      sparkle: (x, y) => this.sparkles.explode(24, x, y),
+      depth: DEPTH.decor,
+    });
 
     this.input.on('pointerdown', this.onDown, this);
     this.input.on('pointerup', this.onUp, this);
@@ -587,6 +593,13 @@ export class RanchScene extends Phaser.Scene {
       this.syncBadges(lv, status[lv.lot]);
     }
     if (view.garden) this.syncGarden(view.garden);
+    this.decor?.sync(r.decor, view.spotOpen ?? (() => false), this.isOverview);
+  }
+
+  /** Stars over a decoration spot or a special's big spot (just placed or shown). */
+  decorSparkle(target: { spot: SpotId } | { slot: 0 | 1 }): void {
+    if ('spot' in target) this.decor?.sparkleSpot(target.spot);
+    else this.decor?.sparkleSlot(target.slot);
   }
 
   get following(): string | null {
@@ -891,6 +904,7 @@ export class RanchScene extends Phaser.Scene {
    */
   private applyModeVisuals(animate: boolean, arrived = false): void {
     if (!this.built) return;
+    this.decor?.setOverview(this.isOverview);
     const showTags = !this.isOverview && (arrived || !animate);
     if (this.isOverview || showTags) {
       if (showTags !== this.tagsShown) {
@@ -1897,6 +1911,13 @@ export class RanchScene extends Phaser.Scene {
       this.handlers.onPet?.(petHit);
       return;
     }
+    // Decorations last: they stand outside the pens, so nothing above ever competes with them.
+    const decor = this.decor?.hit(w.x, w.y);
+    if (decor) {
+      if ('spot' in decor) this.handlers.onDecorSpot?.(decor.spot);
+      else this.handlers.onSpecial?.(decor.id, decor.slot);
+      return;
+    }
     // following a pet, any plot in view counts; otherwise the page's own
     const lv = this.followId
       ? this.lots.find(l => w.x >= l.rect.x && w.x <= l.rect.x + l.rect.w && w.y >= l.rect.y && w.y <= l.rect.y + l.rect.h)
@@ -1946,6 +1967,7 @@ export class RanchScene extends Phaser.Scene {
     this.garden = null;
     this.pets?.clear();
     this.pets = null;
+    this.decor = null;
     this.roam = null;
     this.followId = null;
     this.tappedPoop = null;

@@ -27,6 +27,7 @@ import { createSfx, voiceOf, type SfxName } from './ui/sfx';
 
 const petVoice = (kind: PetKind): SfxName => (kind === 'dog' ? 'woof' : 'meow');
 import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
+import { spotOpen } from './core/decor';
 import { careFeedback } from './ui/ranchFeedback';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
@@ -388,7 +389,7 @@ export function startApp(root: HTMLElement): void {
       const hint = locked[kind] ? lockHint(game.state, kind) : null;
       if (hint) lockCrop[kind] = CROP_BY_ROW[hint.row].emoji;
     }
-    return { locked, lockCrop, garden: gardenOf(game.state) };
+    return { locked, lockCrop, garden: gardenOf(game.state), spotOpen: spot => spotOpen(game.state, spot) };
   }
 
   function renderRanch(): void {

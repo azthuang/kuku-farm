@@ -1,4 +1,5 @@
 import { seeded } from './ranchArt';
+import { BIG_SPOTS, SPOT_CLEAR, bigBox, bigFoot } from './decorLayout';
 import { FARMHOUSE_SIZE, SCENERY_FRAMES, type SceneryFrame } from './sceneryAtlas';
 
 /**
@@ -17,6 +18,12 @@ export const SCENERY_SCALE = 2;
  * strip on each side. The baked canvas covers exactly this.
  */
 export const SCENERY_WORLD: Rect = { x: -300, y: 0, w: 1800, h: 1800 };
+/** The fenced plot inside its 600-wide page cell (multiples of the pixel scale so baked art lines up). */
+export const LOT_IN_CELL: Rect = { x: 30, y: 80, w: 540, h: 440 };
+/** Lot i's plot in world units: cell i of the 2 × 3 grid, row-major. */
+export function lotRect(i: number): Rect {
+  return { x: (i % 2) * 600 + LOT_IN_CELL.x, y: Math.floor(i / 2) * 600 + LOT_IN_CELL.y, w: LOT_IN_CELL.w, h: LOT_IN_CELL.h };
+}
 export const BAKE_W = SCENERY_WORLD.w / SCENERY_SCALE;
 export const BAKE_H = SCENERY_WORLD.h / SCENERY_SCALE;
 
@@ -245,7 +252,7 @@ interface ClusterSpec {
 }
 
 /** The bottom strip a prop stands on: a tree's trunk, a bush's base, a flower's whole tuft. */
-function footprint(p: Prop): Rect {
+export function footprint(p: Prop): Rect {
   const b = propBox(p);
   const f = isTree(p.kind) ? 0.36 : isBig(p.kind) ? 0.7 : 0.9;
   const h = Math.min(b.h, isBig(p.kind) ? 22 : 18);
@@ -264,7 +271,8 @@ function footprint(p: Prop): Rect {
 export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
   const W = SCENERY_WORLD;
   const lots = cells;
-  const keepOut = cells;
+  // the plots, and the decoration spots (batch 3), which stay open lawn until something stands there
+  const keepOut = [...cells, ...SPOT_CLEAR];
   const bottom = (r: Rect): number => r.y + r.h;
   const centreX = (r: Rect): number => r.x + r.w / 2;
   // Each row's path runs through the band between its pens' fences and the next row.
@@ -335,8 +343,9 @@ export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
     // focal 1: a few mushrooms in the big tree's shade
     { kinds: ['mushRed'], x: W.x + 46, y: 985, sx: 10, sy: 8, n: 3 },
     // secondary: the bottom-left wood, three layers deep, bushes at its feet
-    { kinds: ['treePine', 'treeTall'], x: W.x + 125, y: 1470, sx: 50, sy: 110, n: 5, gap: 0.8 },
-    { kinds: ['roundBushBig', 'bushC'], x: W.x + 125, y: 1782, sx: 50, sy: 6, n: 3 },
+    { kinds: ['treePine', 'treeTall'], x: W.x + 125, y: 1380, sx: 50, sy: 110, n: 5, gap: 0.8 },
+    // (the specials' two big spots stand in front of the wood, so its bushes grow just behind them)
+    { kinds: ['roundBushBig', 'bushC'], x: W.x + 125, y: 1700, sx: 50, sy: 6, n: 3 },
     { kinds: ['stump', 'stumpRoots'], x: W.x + 208, y: 1000, sx: 8, sy: 14, n: 2 },
     { kinds: ['mushPurple'], x: W.x + 40, y: 1700, sx: 8, sy: 40, n: 3 },
     // by the farmhouse: a rose bed at the corner of the path, marigolds by the veggie patch
@@ -345,7 +354,7 @@ export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
     // meadow flowers in the left strip, at the edges of the big tree's lawn and the wood
     { kinds: [...FLOWERS.white], x: W.x + 240, y: 1150, sx: 20, sy: 40, n: 5, edge: true },
     { kinds: [...FLOWERS.yellow], x: W.x + 60, y: 1140, sx: 30, sy: 20, n: 3, strays: 2 },
-    { kinds: [...FLOWERS.blue], x: W.x + 250, y: 1740, sx: 16, sy: 30, n: 3, edge: true },
+    { kinds: [...FLOWERS.blue], x: W.x + 250, y: 1320, sx: 16, sy: 30, n: 3, edge: true },
     // secondary: the top-right wood past the stream, shrubs on the near bank
     { kinds: ['treeTall', 'treeDark'], x: E - 76, y: 330, sx: 6, sy: 50, n: 3 },
     { kinds: ['bushA', 'bushB'], x: E - 108, y: 500, sx: 40, sy: 3, n: 2 },
@@ -363,20 +372,21 @@ export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
     { kinds: [...FLOWERS.red], x: 1240, y: 1760, sx: 16, sy: 10, n: 3 },
     { kinds: ['roundBushBig', 'bushC'], x: E - 44, y: 1690, sx: 4, sy: 50, n: 3 },
     // inside the grid: a few single-colour patches along the fences, open lawn elsewhere
-    // (neighbouring patches of different flowers mix where they meet)
-    { kinds: [...FLOWERS.yellow], x: 150, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.white], x: 280, y: topBand, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.blue], x: 760, y: topBand, sx: 36, sy: 3, n: 3, edge: true },
-    { kinds: ['tuftA'], x: 1070, y: topBand, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.white], x: 160, y: band1, sx: 36, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.red], x: 290, y: band1, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.blue], x: 830, y: band1, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: ['tuftC'], x: 1060, y: band1, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.white], x: 140, y: band2, sx: 36, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.yellow], x: 260, y: band2, sx: 30, sy: 3, n: 3, edge: true },
-    { kinds: ['rockB', 'rockC'], x: 430, y: band2, sx: 20, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.blue], x: 780, y: band2, sx: 36, sy: 3, n: 3, edge: true },
-    { kinds: [...FLOWERS.red], x: 1020, y: band2, sx: 30, sy: 3, n: 3, edge: true },
+    // (neighbouring patches of different flowers mix where they meet); each page's right half of
+    // the strip above its fence is kept for the decoration spots (decorLayout)
+    { kinds: [...FLOWERS.yellow], x: 80, y: topBand, sx: 24, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.white], x: 175, y: topBand, sx: 18, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.blue], x: 680, y: topBand, sx: 24, sy: 3, n: 3, edge: true },
+    { kinds: ['tuftA'], x: 775, y: topBand, sx: 18, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.white], x: 80, y: band1, sx: 24, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.red], x: 175, y: band1, sx: 18, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.blue], x: 680, y: band1, sx: 24, sy: 3, n: 3, edge: true },
+    { kinds: ['tuftC'], x: 775, y: band1, sx: 18, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.white], x: 70, y: band2, sx: 18, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.yellow], x: 160, y: band2, sx: 18, sy: 3, n: 3, edge: true },
+    { kinds: ['rockB', 'rockC'], x: 240, y: band2 - 8, sx: 16, sy: 12, n: 3, edge: true },
+    { kinds: [...FLOWERS.blue], x: 680, y: band2, sx: 24, sy: 3, n: 3, edge: true },
+    { kinds: [...FLOWERS.red], x: 775, y: band2, sx: 18, sy: 3, n: 3, edge: true },
   ];
   const clusters: Cluster[] = specs.map(s => ({ kinds: s.kinds, x: s.x, y: s.y }));
 
@@ -399,6 +409,11 @@ export function sceneryLayout(cells: readonly Rect[]): SceneryLayout {
     if (!isBig(p.kind) && overlaps(footprint(p), doorLawn)) return false;
     if (b.x < W.x + 4 || b.y < W.y + 4 || b.x + b.w > W.x + W.w - 4 || b.y + b.h > W.y + W.h - 4) return false;
     for (const r of keepOut) if (overlaps(b, r, 8)) return false;
+    // a special's big spot: nothing grows where it stands, nor in front of it
+    for (const slot of [0, 1] as const) {
+      if (overlaps(footprint(p), bigFoot(slot), 8)) return false;
+      if (p.y > BIG_SPOTS[slot].y - 10 && overlaps(b, bigBox(slot))) return false;
+    }
     if (crossesPageEdge(b)) return false;
     if (hard.some(h => overlaps(b, h, 6))) return false;
     const big = isBig(p.kind);
