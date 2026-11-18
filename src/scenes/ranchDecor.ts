@@ -3,6 +3,16 @@ import {
   DECOR, SPECIALS, SPOT_IDS, type DecorId, type DecorState, type SpecialId, type SpotId,
 } from '../core/decor';
 import { BIG_SIZE, BIG_SPOTS, DECOR_SPOTS, SPOT_SIZE, bigBox, createBusy, spotBox } from './decorLayout';
+import { DECOR_LPC_FRAMES } from './decorAtlas';
+
+/** Texture key of public/assets/decor/lpc.png (loaded by the scene). */
+export const DECOR_LPC_TEX = 'decor-lpc';
+/**
+ * LPC pixels are drawn this many world units wide, like the scenery; taller ones shrink to MAX_H:
+ * a spot stands 72 below its page's top edge, and a care page shows nothing above that edge.
+ */
+const PIXEL = 2;
+const MAX_H = 70;
 
 type Img = Phaser.GameObjects.Image;
 type Fx = Phaser.Tweens.Tween | Phaser.Time.TimerEvent;
@@ -19,7 +29,7 @@ export interface DecorDeps {
 export type DecorHit = { spot: SpotId } | { slot: 0 | 1; id: SpecialId };
 
 /** World size of a decoration and of a special (their height; emoji are square). */
-const DECOR_PX = 64;
+const DECOR_PX = 64; // ≤ MAX_H
 const SPECIAL_PX = 150;
 const PIGEON_PX = 26;
 /** A tap this far outside a spot's box still counts (small fingers, small targets). */
@@ -51,6 +61,11 @@ export class DecorLayer {
   private busy = createBusy();
 
   constructor(private scene: Phaser.Scene, private deps: DecorDeps) {
+    if (scene.textures.exists(DECOR_LPC_TEX)) {
+      const t = scene.textures.get(DECOR_LPC_TEX);
+      t.setFilter(Phaser.Textures.FilterMode.NEAREST);
+      for (const [id, [x, y, w, h]] of Object.entries(DECOR_LPC_FRAMES)) if (!t.has(id)) t.add(id, 0, x, y, w, h);
+    }
     for (const s of SPOT_IDS) {
       const p = DECOR_SPOTS[s];
       const img = scene.add.image(p.x, p.y, '__MISSING').setOrigin(0.5, 1).setDepth(deps.depth).setVisible(false);
@@ -118,7 +133,12 @@ export class DecorLayer {
     v.img.setVisible(!!id && id !== 'pigeons');
     if (!id) return;
     if (id !== 'pigeons') {
-      this.tex(v.img, DECOR[id].emoji, DECOR_PX);
+      const f = (DECOR_LPC_FRAMES as Partial<Record<DecorId, readonly number[]>>)[id];
+      if (f && this.scene.textures.exists(DECOR_LPC_TEX)) {
+        v.img.setTexture(DECOR_LPC_TEX, id).setScale(Math.min(PIXEL, MAX_H / f[3]));
+      } else {
+        this.tex(v.img, DECOR[id].emoji, DECOR_PX);
+      }
       return;
     }
     // a little flock pecking at the ground, one at a time

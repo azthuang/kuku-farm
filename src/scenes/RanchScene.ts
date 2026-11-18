@@ -14,7 +14,7 @@ import { SCENERY_FRAMES } from './sceneryAtlas';
 import { PATROL_LOOK_MS, RanchPets, type PatrolStop } from './ranchPets';
 import { buildRoamGraph, nearestNode, type RoamGraph } from './petRoam';
 import { PALETTES, recolor } from './recolor';
-import { DecorLayer } from './ranchDecor';
+import { DECOR_LPC_TEX, DecorLayer } from './ranchDecor';
 import type { SpecialId, SpotId } from '../core/decor';
 
 /** World units per scenery pixel: 5 canvas pixels at camera zoom ASSET_RES, so every pixel stays square. */
@@ -443,6 +443,7 @@ export class RanchScene extends Phaser.Scene {
     const scenery = `${import.meta.env.BASE_URL}assets/scenery/`;
     if (!this.textures.exists(TEX.atlas)) this.load.image(TEX.atlas, `${scenery}scenery.png`);
     if (!this.textures.exists(TEX.farmhouse)) this.load.image(TEX.farmhouse, `${scenery}farmhouse.png`);
+    if (!this.textures.exists(DECOR_LPC_TEX)) this.load.image(DECOR_LPC_TEX, `${import.meta.env.BASE_URL}assets/decor/lpc.png`);
     RanchPets.preload(this, base);
   }
 
