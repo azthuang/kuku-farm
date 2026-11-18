@@ -116,11 +116,12 @@ describe('specials', () => {
   });
 
   it('prices from the spec table', () => {
-    expect(SPECIALS.xmasTree.price).toEqual({ wheat: 400, carrot: 300, strawberry: 200 });
-    expect(SPECIALS.dino.price).toEqual({ tomato: 400, strawberry: 300, pumpkin: 200 });
-    expect(SPECIALS.balloon.price).toEqual({ wheat: 500, tomato: 400, pumpkin: 300 });
-    expect(SPECIALS.rocket.price).toEqual({ carrot: 500, strawberry: 400, pumpkin: 400 });
-    expect(SPECIALS.ufo.price).toEqual({ wheat: 600, carrot: 500, tomato: 400, strawberry: 300 });
+    // the spec's table × 0.55 (rounded to tens): the simulation's 1–2 weeks to all five (median 14 days)
+    expect(SPECIALS.xmasTree.price).toEqual({ wheat: 220, carrot: 170, strawberry: 110 });
+    expect(SPECIALS.dino.price).toEqual({ tomato: 220, strawberry: 170, pumpkin: 110 });
+    expect(SPECIALS.balloon.price).toEqual({ wheat: 280, tomato: 220, pumpkin: 170 });
+    expect(SPECIALS.rocket.price).toEqual({ carrot: 280, strawberry: 220, pumpkin: 220 });
+    expect(SPECIALS.ufo.price).toEqual({ wheat: 330, carrot: 280, tomato: 220, strawberry: 170 });
   });
 
   it('buying does not show it; a full pair needs a slot', () => {
@@ -149,6 +150,6 @@ describe('specials', () => {
     expect(s.ranch.decor.specials).toEqual([]);
     rich(s);
     buySpecial(s, 'rocket');
-    expect(s.inventory).toMatchObject({ carrot: 400, strawberry: 500, pumpkin: 500 });
+    expect(s.inventory).toMatchObject({ carrot: 620, strawberry: 680, pumpkin: 680 });
   });
 });

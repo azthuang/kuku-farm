@@ -143,12 +143,16 @@ export function storeDecor(state: GameState, spot: SpotId): boolean {
 
 export interface SpecialDef { id: SpecialId; name: string; emoji: string; price: Price }
 
+/**
+ * Prices: the design's table × 0.55. Simulated from a full ranch, three challenge rounds a day
+ * while also buying ordinary decorations, all five take a median 14 days (p90 17).
+ */
 export const SPECIALS: Record<SpecialId, SpecialDef> = {
-  xmasTree: { id: 'xmasTree', name: '閃閃發光的聖誕樹', emoji: '🎄', price: { wheat: 400, carrot: 300, strawberry: 200 } },
-  balloon: { id: 'balloon', name: '熱氣球', emoji: '🎈', price: { wheat: 500, tomato: 400, pumpkin: 300 } },
-  rocket: { id: 'rocket', name: '火箭', emoji: '🚀', price: { carrot: 500, strawberry: 400, pumpkin: 400 } },
-  ufo: { id: 'ufo', name: '飛碟', emoji: '🛸', price: { wheat: 600, carrot: 500, tomato: 400, strawberry: 300 } },
-  dino: { id: 'dino', name: '恐龍', emoji: '🦖', price: { tomato: 400, strawberry: 300, pumpkin: 200 } },
+  xmasTree: { id: 'xmasTree', name: '閃閃發光的聖誕樹', emoji: '🎄', price: { wheat: 220, carrot: 170, strawberry: 110 } },
+  balloon: { id: 'balloon', name: '熱氣球', emoji: '🎈', price: { wheat: 280, tomato: 220, pumpkin: 170 } },
+  rocket: { id: 'rocket', name: '火箭', emoji: '🚀', price: { carrot: 280, strawberry: 220, pumpkin: 220 } },
+  ufo: { id: 'ufo', name: '飛碟', emoji: '🛸', price: { wheat: 330, carrot: 280, tomato: 220, strawberry: 170 } },
+  dino: { id: 'dino', name: '恐龍', emoji: '🦖', price: { tomato: 220, strawberry: 170, pumpkin: 110 } },
 };
 export const SPECIAL_ORDER: readonly SpecialId[] = ['xmasTree', 'balloon', 'rocket', 'ufo', 'dino'];
 export const BIG_SLOTS = 2;
