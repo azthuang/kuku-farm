@@ -1,0 +1,140 @@
+import { CROP_BY_ROW, LEVEL_ORDER, type CropId } from './levels';
+import { FARM_LOT, LOT_COUNT, SPECIES, speciesOfLot, type Price } from './species';
+import type { GameState } from './state';
+
+/**
+ * Ranch decorations (batch 3). Ordinary ones go in the fixed spots, three per page; the child
+ * picks what stands where, may buy the same kind again (each one dearer) and swaps freely, and
+ * nothing taken down is ever lost: it goes to storage. Specials are the big surprises; only two
+ * of them stand on the map at a time.
+ */
+
+export type DecorId =
+  | 'flowers' | 'sunflowers' | 'bush' | 'tree' | 'mailbox' | 'bench'
+  | 'hay' | 'scarecrow' | 'beehive' | 'pumpkins' | 'well' | 'pigeons';
+export type SpecialId = 'xmasTree' | 'balloon' | 'rocket' | 'ufo' | 'dino';
+
+export interface DecorDef {
+  id: DecorId;
+  name: string;
+  emoji: string;
+  /** Price of the first one; each one owned adds DECOR_GROWTH of it. */
+  base: Price;
+  /** Moves by itself (the pigeons). */
+  moves: boolean;
+}
+
+const def = (id: DecorId, name: string, emoji: string, base: Price, moves = false): DecorDef => ({ id, name, emoji, base, moves });
+
+export const DECOR: Record<DecorId, DecorDef> = {
+  flowers: def('flowers', '彩色花圃', '🌷', { wheat: 60, carrot: 40 }),
+  sunflowers: def('sunflowers', '向日葵花圃', '🌻', { wheat: 80, carrot: 60 }),
+  bush: def('bush', '樹叢', '🌿', { carrot: 60, corn: 40 }),
+  tree: def('tree', '小樹', '🌳', { wheat: 100, carrot: 80 }),
+  mailbox: def('mailbox', '信箱', '📮', { wheat: 80, carrot: 80 }),
+  bench: def('bench', '長椅', '🪑', { carrot: 100, corn: 60 }),
+  hay: def('hay', '乾草堆', '🌾', { wheat: 150, corn: 60 }),
+  scarecrow: def('scarecrow', '稻草人', '🧑‍🌾', { wheat: 120, carrot: 100 }),
+  beehive: def('beehive', '蜂箱', '🐝', { strawberry: 100, wheat: 80 }),
+  pumpkins: def('pumpkins', '南瓜堆', '🎃', { pumpkin: 120, potato: 60 }),
+  well: def('well', '水井', '🪣', { potato: 120, tomato: 100 }),
+  pigeons: def('pigeons', '鴿子聚集地', '🕊️', { tomato: 150, strawberry: 150, pumpkin: 100 }, true),
+};
+export const DECOR_ORDER = Object.keys(DECOR) as readonly DecorId[];
+
+export type SpotId = `${number}-${0 | 1 | 2}`;
+export const SPOTS_PER_LOT = 3;
+export const SPOT_IDS: readonly SpotId[] = Array.from({ length: LOT_COUNT * SPOTS_PER_LOT },
+  (_, i) => `${Math.floor(i / SPOTS_PER_LOT)}-${i % SPOTS_PER_LOT}` as SpotId);
+
+export function spotLot(s: SpotId): number {
+  return Number(s.split('-')[0]);
+}
+
+export interface DecorState {
+  placed: Partial<Record<SpotId, DecorId>>;
+  stored: Partial<Record<DecorId, number>>;
+  specials: SpecialId[];
+  big: [SpecialId | null, SpecialId | null];
+}
+
+export function createDecor(): DecorState {
+  return { placed: {}, stored: {}, specials: [], big: [null, null] };
+}
+
+export const DECOR_GROWTH = 0.5;
+export const DECOR_CROP_MAX = 900;
+
+/** Placed plus stored. */
+export function ownedCount(d: DecorState, id: DecorId): number {
+  return Object.values(d.placed).filter((x) => x === id).length + (d.stored[id] ?? 0);
+}
+
+export function decorPrice(state: GameState, id: DecorId): Price {
+  const n = ownedCount(state.ranch.decor, id);
+  const out: Price = {};
+  for (const [k, v] of Object.entries(DECOR[id].base) as [CropId, number][]) {
+    out[k] = Math.min(DECOR_CROP_MAX, Math.round((v * (1 + DECOR_GROWTH * n)) / 10) * 10);
+  }
+  return out;
+}
+
+/** The garden's spots from the start; a pen page's once its house stands. */
+export function spotOpen(state: GameState, spot: SpotId): boolean {
+  const lot = spotLot(spot);
+  if (lot === FARM_LOT) return true;
+  const sp = speciesOfLot(lot);
+  return sp !== null && state.ranch.houses.some((h) => h.kind === SPECIES[sp].house);
+}
+
+/** The first crop of `price` whose level is not unlocked yet, or null. */
+export function lockedCrop(state: GameState, price: Price): { row: number; crop: CropId } | null {
+  const open = LEVEL_ORDER.slice(0, state.unlocked);
+  for (const key of Object.keys(price)) {
+    const row = LEVEL_ORDER.find((r) => CROP_BY_ROW[r].id === key);
+    if (row !== undefined && !open.includes(row)) return { row, crop: key as CropId };
+  }
+  return null;
+}
+
+function canPay(state: GameState, price: Price): boolean {
+  return (Object.entries(price) as [CropId, number][]).every(([k, n]) => state.inventory[k] >= n);
+}
+
+function pay(state: GameState, price: Price): void {
+  for (const [k, n] of Object.entries(price) as [CropId, number][]) state.inventory[k] -= n;
+}
+
+export type DecorCheck = { ok: true; free: boolean } | { ok: false; reason: 'short' | 'locked' | 'closed' };
+
+export function checkDecor(state: GameState, spot: SpotId, id: DecorId): DecorCheck {
+  if (!spotOpen(state, spot)) return { ok: false, reason: 'closed' };
+  const d = state.ranch.decor;
+  if (d.placed[spot] === id || (d.stored[id] ?? 0) > 0) return { ok: true, free: true };
+  const price = decorPrice(state, id);
+  if (lockedCrop(state, price)) return { ok: false, reason: 'locked' };
+  return canPay(state, price) ? { ok: true, free: false } : { ok: false, reason: 'short' };
+}
+
+/** Puts `id` on `spot`, from storage if one is there, else bought; whatever stood there is stored. */
+export function placeDecor(state: GameState, spot: SpotId, id: DecorId): DecorCheck {
+  const check = checkDecor(state, spot, id);
+  const d = state.ranch.decor;
+  if (!check.ok || d.placed[spot] === id) return check;
+  if (check.free) d.stored[id] = (d.stored[id] ?? 1) - 1;
+  else pay(state, decorPrice(state, id));
+  if (d.stored[id] === 0) delete d.stored[id];
+  storeDecor(state, spot);
+  d.placed[spot] = id;
+  return check;
+}
+
+/** Takes the decoration on `spot` down into storage; false when the spot is empty. */
+export function storeDecor(state: GameState, spot: SpotId): boolean {
+  const d = state.ranch.decor;
+  const old = d.placed[spot];
+  if (!old) return false;
+  d.stored[old] = (d.stored[old] ?? 0) + 1;
+  delete d.placed[spot];
+  return true;
+}

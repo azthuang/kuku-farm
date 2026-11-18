@@ -1,0 +1,101 @@
+import { describe, it, expect } from 'vitest';
+import { createNewState, type GameState } from '../../src/core/state';
+import { createRanch } from '../../src/core/ranch';
+import {
+  DECOR, SPOT_IDS, checkDecor, decorPrice, lockedCrop, placeDecor, spotLot, spotOpen, storeDecor,
+} from '../../src/core/decor';
+
+function st(unlocked: number): GameState {
+  return { ...createNewState(0), unlocked, ranch: createRanch(0) };
+}
+function rich(s: GameState): GameState {
+  for (const k of Object.keys(s.inventory) as (keyof GameState['inventory'])[]) s.inventory[k] = 900;
+  return s;
+}
+
+describe('decorations', () => {
+  it('18 spots, 3 per page', () => {
+    expect(SPOT_IDS).toHaveLength(18);
+    expect(SPOT_IDS.filter((s) => spotLot(s) === 2)).toEqual(['2-0', '2-1', '2-2']);
+  });
+
+  it('prices from the spec table', () => {
+    const s = st(9);
+    expect(decorPrice(s, 'flowers')).toEqual({ wheat: 60, carrot: 40 });
+    expect(decorPrice(s, 'pigeons')).toEqual({ tomato: 150, strawberry: 150, pumpkin: 100 });
+  });
+
+  it('each one owned adds half the first price, rounded to 10, capped at 900', () => {
+    const s = st(9);
+    s.ranch.decor.stored.flowers = 1;
+    expect(decorPrice(s, 'flowers')).toEqual({ wheat: 90, carrot: 60 });
+    s.ranch.decor.placed['0-0'] = 'flowers'; // placed ones count too
+    expect(decorPrice(s, 'flowers')).toEqual({ wheat: 120, carrot: 80 });
+    s.ranch.decor.stored.pigeons = 40;
+    expect(decorPrice(s, 'pigeons')).toEqual({ tomato: 900, strawberry: 900, pumpkin: 900 });
+  });
+
+  it('garden spots are open from the start; a pen page once its house stands', () => {
+    const s = st(9);
+    expect(spotOpen(s, '0-1')).toBe(true);
+    expect(spotOpen(s, '2-0')).toBe(false);
+    s.ranch.houses.push({ id: 'h1', kind: 'barn', lot: 2, poop: 0 });
+    expect(spotOpen(s, '2-0')).toBe(true);
+    expect(checkDecor(st(9), '3-0', 'flowers')).toEqual({ ok: false, reason: 'closed' });
+  });
+
+  it('a decoration with a locked crop is locked', () => {
+    const s = rich(st(2)); // only 1× and 2× open: the well's 🥔 (4×) is the first locked crop
+    expect(checkDecor(s, '0-0', 'well')).toEqual({ ok: false, reason: 'locked' });
+    expect(lockedCrop(s, DECOR.well.base)).toEqual({ row: 4, crop: 'potato' });
+    expect(lockedCrop(s, DECOR.flowers.base)).toBeNull();
+  });
+
+  it('buying pays; short does not', () => {
+    const s = st(9);
+    s.inventory.wheat = 59; s.inventory.carrot = 40;
+    expect(placeDecor(s, '0-0', 'flowers')).toEqual({ ok: false, reason: 'short' });
+    expect(s.ranch.decor.placed['0-0']).toBeUndefined();
+    s.inventory.wheat = 60;
+    expect(placeDecor(s, '0-0', 'flowers')).toEqual({ ok: true, free: false });
+    expect(s.inventory).toMatchObject({ wheat: 0, carrot: 0 });
+    expect(s.ranch.decor.placed['0-0']).toBe('flowers');
+  });
+
+  it('placing over a decoration stores the old one', () => {
+    const s = rich(st(9));
+    placeDecor(s, '0-0', 'flowers');
+    placeDecor(s, '0-0', 'bush');
+    expect(s.ranch.decor.placed['0-0']).toBe('bush');
+    expect(s.ranch.decor.stored.flowers).toBe(1);
+    const wheat = s.inventory.wheat;
+    expect(placeDecor(s, '0-1', 'flowers')).toEqual({ ok: true, free: true }); // from storage, no crops
+    expect(s.inventory.wheat).toBe(wheat);
+    expect(s.ranch.decor.stored.flowers ?? 0).toBe(0);
+    expect(storeDecor(s, '0-1')).toBe(true);
+    expect(s.ranch.decor.placed['0-1']).toBeUndefined();
+    expect(s.ranch.decor.stored.flowers).toBe(1);
+    expect(storeDecor(s, '0-2')).toBe(false);
+  });
+
+  it('a stored decoration goes out even while its crop is locked or short', () => {
+    const s = st(1);
+    s.ranch.decor.stored.well = 1;
+    expect(checkDecor(s, '0-0', 'well')).toEqual({ ok: true, free: true });
+  });
+
+  it('a closed spot takes nothing, not even from storage', () => {
+    const s = st(9);
+    s.ranch.decor.stored.well = 1;
+    expect(placeDecor(s, '4-0', 'well')).toEqual({ ok: false, reason: 'closed' });
+    expect(s.ranch.decor.stored.well).toBe(1);
+  });
+
+  it('putting the same decoration back on its spot changes nothing', () => {
+    const s = rich(st(9));
+    placeDecor(s, '0-0', 'flowers');
+    const before = JSON.stringify(s);
+    expect(placeDecor(s, '0-0', 'flowers')).toEqual({ ok: true, free: true });
+    expect(JSON.stringify(s)).toBe(before);
+  });
+});

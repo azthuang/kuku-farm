@@ -1,5 +1,7 @@
 import { FARM_LOT, LOT_COUNT, PETS, SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type PetKind, type ProductId, type SpeciesId, type SupplyId } from './species';
 
+import { createDecor, type DecorState } from './decor';
+
 const MS_HOUR = 3_600_000;
 const STEP_MS = 60_000;
 const MAX_SETTLE_MS = 30 * 24 * MS_HOUR;
@@ -60,6 +62,8 @@ export interface RanchState {
   animals: Animal[];
   /** At most one of each kind. */
   pets: Pet[];
+  /** Batch 3: what stands in the decoration spots, what is stored, the specials. */
+  decor: DecorState;
   supplies: Record<SupplyId, number>;
   products: Record<ProductId, number>;
   settledAt: number;
@@ -75,6 +79,7 @@ export function createRanch(now: number): RanchState {
     houses: [],
     animals: [],
     pets: [],
+    decor: createDecor(),
     supplies: Object.fromEntries(SUPPLY_IDS.map((k) => [k, 0])) as Record<SupplyId, number>,
     products: Object.fromEntries(PRODUCT_IDS.map((k) => [k, 0])) as Record<ProductId, number>,
     settledAt: now,

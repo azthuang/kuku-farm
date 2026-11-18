@@ -1,3 +1,4 @@
+import { createDecor } from './decor';
 import { CROP_BY_ROW, type CropId } from './levels';
 import {
   SPECIES, HOUSE_KINDS, LEGACY_PET_COLORS, PETS, PET_KINDS, PET_SNACK_IDS, speciesOfHouse, PRODUCT_IDS, SUPPLY_IDS,
@@ -149,7 +150,7 @@ function validateRanch(data: unknown, version: number): RanchState {
 
   const settledAt = finite(o.settledAt);
   if (!isIntIn(o.nextId, 1, Number.MAX_SAFE_INTEGER)) fail();
-  return { houses, animals, pets, supplies, products, settledAt, nextId: o.nextId };
+  return { houses, animals, pets, decor: createDecor(), supplies, products, settledAt, nextId: o.nextId };
 }
 
 /** A pet's breed as the sheet names it now: an old coat name maps to the breed that looks like it. */
