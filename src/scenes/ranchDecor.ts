@@ -37,6 +37,8 @@ export type DecorHit = { spot: SpotId } | { slot: 0 | 1; id: SpecialId };
 /** World size of a decoration and of a special (their height; emoji are square). */
 const SPECIAL_PX = 150;
 const PIGEON_PX = 40;
+/** A decoration with an animal or poop behind it turns see-through, so nothing the child must see hides. */
+export const FADED_ALPHA = 0.45;
 /** A tap this far outside a spot's box still counts (small fingers, small targets). */
 const HIT_PAD = 10;
 /** How long each trick runs: a tap meanwhile starts nothing. */
@@ -133,6 +135,15 @@ export class DecorLayer {
     fx.push(this.scene.time.addEvent({ delay: ms, loop: true, callback: fn }));
   }
 
+  /** A one-off callback owned by `fx`: stop(fx) cancels it if it has not run yet. */
+  private once(fx: Fx[], ms: number, fn: () => void): void {
+    const e = this.scene.time.delayedCall(ms, () => {
+      fx.splice(fx.indexOf(e), 1);
+      fn();
+    });
+    fx.push(e);
+  }
+
   // ---------------------------------------------------------------- sync
 
   sync(d: DecorState, open: (s: SpotId) => boolean, overview: boolean): void {
@@ -150,7 +161,11 @@ export class DecorLayer {
 
   private setSpot(s: SpotId, v: SpotView, id: DecorId | null): void {
     this.stop(v.fx);
-    for (const b of v.birds) b.destroy();
+    v.img.setAlpha(1);
+    for (const b of v.birds) {
+      this.scene.tweens.killTweensOf(b);
+      b.destroy();
+    }
     v.birds = [];
     v.id = id;
     const p = DECOR_SPOTS[s];
@@ -180,7 +195,7 @@ export class DecorLayer {
         this.scene.tweens.add({ targets: b, x: home + (Math.random() < 0.5 ? -8 : 8), duration: 260, yoyo: true });
       } else if (this.art('pigeon1')) {
         this.pigeon(b, 1); // head down to the ground, then up again
-        this.scene.time.delayedCall(320, () => { if (!this.busy.busy(s, this.scene.time.now)) this.pigeon(b, 0); });
+        this.once(v.fx, 320, () => { if (!this.busy.busy(s, this.scene.time.now)) this.pigeon(b, 0); });
       } else {
         this.scene.tweens.add({ targets: b, angle: b.flipX ? -24 : 24, duration: 140, yoyo: true, repeat: 1 });
       }
@@ -189,6 +204,7 @@ export class DecorLayer {
 
   /** A pigeon's pose: 0 standing, 1 pecking, 2 flying (emoji until the art is loaded). */
   private pigeon(b: Img, pose: 0 | 1 | 2): void {
+    if (!b.active) return; // a bird taken away (swapped, stored, a save imported) mid-move
     const a = this.art(`pigeon${pose}`);
     if (a) b.setTexture(a.key, `pigeon${pose}`).setScale(PIGEON_SCALE);
     else this.tex(b, DECOR.pigeons.emoji, PIGEON_PX);
@@ -236,6 +252,20 @@ export class DecorLayer {
           this.scene.tweens.add({ targets: b.img, scaleY: base * 0.96, duration: 90, yoyo: true });
         });
         break;
+    }
+  }
+
+  /**
+   * Fades each decoration that has one of `pts` (an animal's feet or body, a poop) behind it, and
+   * restores the others. Cheap enough for every frame: ten spots, a few points.
+   */
+  fade(pts: readonly { x: number; y: number }[]): void {
+    for (const v of this.spots.values()) {
+      if (!v.id || v.id === 'pigeons') continue;
+      const r = v.img.getBounds();
+      const hidden = pts.some(p => p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height);
+      const a = hidden ? FADED_ALPHA : 1;
+      if (v.img.alpha !== a) v.img.setAlpha(a);
     }
   }
 
@@ -338,9 +368,11 @@ export class DecorLayer {
       this.scene.tweens.killTweensOf(b);
       b.setAngle(0);
       this.pigeon(b, 2);
-      this.scene.tweens.add({
+      // the flight tweens a plain number, so it is owned by the spot's fx: a swap stops it
+      const fly = this.scene.tweens.add({
         targets: t, a: 1, duration: PIGEON_FLY_MS, ease: 'Sine.InOut',
         onUpdate: () => {
+          if (!b.active) return;
           const lift = Math.sin(t.a * Math.PI) * 110;
           const ang = phase + t.a * Math.PI * 2;
           const k = Math.sin(t.a * Math.PI);
@@ -348,10 +380,13 @@ export class DecorLayer {
           b.setFlipX(Math.sin(ang) > 0);
         },
         onComplete: () => {
+          v.fx.splice(v.fx.indexOf(fly), 1);
+          if (!b.active) return;
           b.setPosition(home.x, home.y).setFlipX(i === 1);
           this.pigeon(b, 0);
         },
       });
+      v.fx.push(fly);
     });
     return true;
   }

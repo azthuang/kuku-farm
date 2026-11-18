@@ -376,6 +376,8 @@ export class RanchScene extends Phaser.Scene {
   private pending = new Set<() => void>();
   private sparkles!: Phaser.GameObjects.Particles.ParticleEmitter;
   private decor: DecorLayer | null = null;
+  /** Reused every frame: what may stand behind a decoration (animals' feet and bodies, poop). */
+  private behindDecor: { x: number; y: number }[] = [];
   /** Running-time ms until the next ambient voice; only counts down while the scene updates. */
   private voiceIn = 0;
 
@@ -515,6 +517,17 @@ export class RanchScene extends Phaser.Scene {
     const list = this.animalList;
     for (let i = 0; i < list.length; i++) this.step(list[i], time, dt);
     this.pets?.update(time, dt);
+    if (this.decor) {
+      // a decoration with an animal or poop behind it turns see-through
+      const pts = this.behindDecor;
+      pts.length = 0;
+      for (let i = 0; i < list.length; i++) {
+        const b = list[i].box;
+        pts.push({ x: b.x, y: b.y }, { x: b.x, y: b.y - list[i].look.body });
+      }
+      for (const hv of this.houses.values()) for (const p of hv.poops) pts.push({ x: p.x, y: p.y });
+      this.decor.fade(pts);
+    }
     if (this.followId) this.trackFollowed(dt);
     this.voiceIn -= dt * 1000;
     if (this.voiceIn <= 0) {
