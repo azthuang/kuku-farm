@@ -41,7 +41,11 @@ function fakeCtx() {
   return { ctx: ctx as unknown as AudioContext, calls };
 }
 
-const NAMES = ['cluck', 'collect', 'sweep', 'buy', 'heal', 'nope', 'moo', 'oink', 'baa', 'hum', 'woof', 'meow'] as const;
+const NAMES = [
+  'cluck', 'collect', 'sweep', 'buy', 'heal', 'nope', 'moo', 'oink', 'baa', 'hum', 'woof', 'meow',
+  // batch 3: the specials and the pigeons
+  'jingle', 'burner', 'rocket', 'ufo', 'roar', 'flap',
+] as const;
 
 describe('voiceOf', () => {
   it('gives each species its own voice', () => {

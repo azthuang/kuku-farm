@@ -1,6 +1,8 @@
 import type { SpeciesId } from '../core/species';
 
-export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope' | 'moo' | 'oink' | 'baa' | 'hum' | 'woof' | 'meow';
+export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope' | 'moo' | 'oink' | 'baa' | 'hum' | 'woof' | 'meow'
+  // batch 3: the specials (tree, balloon, rocket, UFO, dinosaur) and the pigeons
+  | 'jingle' | 'burner' | 'rocket' | 'ufo' | 'roar' | 'flap';
 
 const VOICES: Record<SpeciesId, SfxName> = { chicken: 'cluck', cow: 'moo', pig: 'oink', sheep: 'baa', llama: 'hum' };
 
@@ -80,6 +82,29 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
     g.connect(c.destination);
     src.start(t);
     src.stop(t + 0.26);
+  }
+
+  /** Filtered noise sweeping f0 → f1: a hiss, a roar of flame, wings. */
+  function noise(c: AudioContext, t: number, dur: number, f0: number, f1: number, gain: number, type: BiquadFilterType = 'bandpass'): void {
+    const len = Math.max(1, Math.floor(c.sampleRate * dur));
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const filt = c.createBiquadFilter();
+    filt.type = type;
+    filt.frequency.setValueAtTime(f0, t);
+    filt.frequency.linearRampToValueAtTime(f1, t + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain * level, t + Math.min(0.08, dur / 3));
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    src.connect(filt);
+    filt.connect(g);
+    g.connect(c.destination);
+    src.start(t);
+    src.stop(t + dur + 0.02);
   }
 
   /** A bleat: a sawtooth with a wavering pitch from a low-frequency oscillator. */
@@ -165,6 +190,34 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
           break;
         case 'heal':
           blip(c, t, 400, 900, 0.3, 0.13);
+          break;
+        case 'jingle':
+          // little bells: two quick high runs
+          arp(c, t, [1568, 1976, 2349], 0.08, 0.22, 0.09);
+          arp(c, t + 0.3, [1760, 2349, 2637], 0.08, 0.26, 0.09);
+          break;
+        case 'burner':
+          noise(c, t, 0.7, 300, 900, 0.16, 'lowpass');
+          break;
+        case 'rocket':
+          // 3, 2, 1 … whoosh
+          for (let i = 0; i < 3; i++) blip(c, t + i * 0.3, 880, 880, 0.08, 0.1, 'square');
+          noise(c, t + 0.9, 0.6, 200, 2400, 0.16, 'bandpass');
+          break;
+        case 'ufo':
+          // wee-ooo wee-ooo
+          blip(c, t, 600, 1200, 0.25, 0.08, 'sine');
+          blip(c, t + 0.25, 1200, 600, 0.25, 0.08, 'sine');
+          blip(c, t + 0.5, 600, 1200, 0.25, 0.08, 'sine');
+          blip(c, t + 0.75, 1200, 600, 0.25, 0.08, 'sine');
+          break;
+        case 'roar':
+          // a friendly rumble, not a scare: low, short, soft-edged
+          blip(c, t, 150, 95, 0.55, 0.14, 'sawtooth');
+          noise(c, t, 0.5, 500, 250, 0.08, 'lowpass');
+          break;
+        case 'flap':
+          for (let i = 0; i < 4; i++) noise(c, t + i * 0.09, 0.07, 1200, 700, 0.1, 'bandpass');
           break;
         case 'nope':
           blip(c, t, 220, 200, 0.11, 0.14, 'triangle');
