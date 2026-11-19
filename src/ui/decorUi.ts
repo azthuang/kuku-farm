@@ -13,7 +13,7 @@ const CROP_EMOJI = Object.fromEntries(
   Object.values(CROP_BY_ROW).map(c => [c.id, c.emoji]),
 ) as Record<CropId, string>;
 
-/** The pigeons fly on the first tap; a second tap on them within this long opens 「換成什麼？」. */
+/** A tap plays the pigeons, pond or bush; a second tap on them within this long opens 「換成什麼？」. */
 export const PIGEON_DOUBLE_MS = 1600;
 
 export function isSecondTap(last: { spot: SpotId; at: number } | null, spot: SpotId, now: number): boolean {

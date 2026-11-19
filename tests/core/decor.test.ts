@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createNewState, type GameState } from '../../src/core/state';
 import { createRanch } from '../../src/core/ranch';
 import {
-  DECOR, DECOR_ORDER, SPECIALS, spotSpan, SPOT_IDS, buySpecial, checkDecor, checkSpecial, decorPrice, lockedCrop, placeDecor,
+  DECOR, DECOR_ORDER, hasTrick, SPECIALS, spotSpan, SPOT_IDS, buySpecial, checkDecor, checkSpecial, decorPrice, lockedCrop, placeDecor,
   showSpecial, specialSlot, spotLot, spotOpen, storeDecor,
 } from '../../src/core/decor';
 import { SPECIES, SPECIES_ORDER } from '../../src/core/species';
@@ -169,5 +169,11 @@ describe('specials', () => {
     rich(s);
     buySpecial(s, 'rocket');
     expect(s.inventory).toMatchObject({ carrot: 620, strawberry: 680, pumpkin: 680 });
+  });
+});
+
+describe('hasTrick', () => {
+  it('the pigeons fly, the fish jumps from the pond, the rabbit hops out of the bush; the rest only open 換成什麼？', () => {
+    expect(DECOR_ORDER.filter(hasTrick)).toEqual(['bush', 'pond', 'pigeons']);
   });
 });

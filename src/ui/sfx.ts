@@ -2,7 +2,7 @@ import type { SpeciesId } from '../core/species';
 
 export type SfxName = 'cluck' | 'collect' | 'sweep' | 'buy' | 'heal' | 'nope' | 'moo' | 'oink' | 'baa' | 'hum' | 'woof' | 'meow'
   // batch 3: the specials (tree, balloon, rocket, UFO, dinosaur) and the pigeons
-  | 'jingle' | 'burner' | 'rocket' | 'ufo' | 'roar' | 'flap';
+  | 'jingle' | 'burner' | 'rocket' | 'ufo' | 'roar' | 'flap' | 'splash' | 'hop';
 
 const VOICES: Record<SpeciesId, SfxName> = { chicken: 'cluck', cow: 'moo', pig: 'oink', sheep: 'baa', llama: 'hum' };
 
@@ -218,6 +218,14 @@ export function createSfx(ctxFactory: () => AudioContext | null, enabled: boolea
           break;
         case 'flap':
           for (let i = 0; i < 4; i++) noise(c, t + i * 0.09, 0.07, 1200, 700, 0.1, 'bandpass');
+          break;
+        case 'splash':
+          // a bloop as the fish leaves the water, a splash as it falls back in
+          blip(c, t, 520, 260, 0.12, 0.1, 'sine');
+          noise(c, t + 0.75, 0.3, 1800, 500, 0.12, 'lowpass');
+          break;
+        case 'hop':
+          for (let i = 0; i < 2; i++) blip(c, t + i * 0.18, 420, 760, 0.07, 0.08, 'triangle');
           break;
         case 'nope':
           blip(c, t, 220, 200, 0.11, 0.14, 'triangle');

@@ -101,6 +101,31 @@ describe('decoration layer: pigeons', () => {
     layer.sync(decor({}), open, false); // stored while the flock is up
     expect(flush).not.toThrow();
   });
+
+  it('a tap plays the pond (a fish jumps), the bush (a rabbit hops out) and the pigeons, once at a time', () => {
+    const { scene } = fakeScene();
+    const layer = new DecorLayer(scene as never, deps);
+    layer.sync(decor({ '1-0': 'pond', '1-1': 'bush', '2-0': 'pigeons', '2-1': 'flowers' }), open, false);
+    expect(layer.trick('1-0')).toBe(true);
+    expect(layer.trick('1-0')).toBe(false); // the fish is still in the air
+    expect(layer.trick('1-1')).toBe(true);
+    expect(layer.trick('2-0')).toBe(true);
+    expect(layer.trick('2-1')).toBe(false); // flower beds have no trick
+  });
+
+  it('storing the pond or the bush mid-trick takes the fish and the rabbit with it', () => {
+    const { scene, flush, images } = fakeScene();
+    const layer = new DecorLayer(scene as never, deps);
+    layer.sync(decor({ '1-0': 'pond', '1-1': 'bush' }), open, false);
+    const before = images.length;
+    layer.trick('1-0');
+    layer.trick('1-1');
+    const actors = images.slice(before);
+    expect(actors).toHaveLength(2);
+    layer.sync(decor({}), open, false);
+    expect(actors.every(a => a.active === false)).toBe(true);
+    expect(flush).not.toThrow();
+  });
 });
 
 describe('decoration layer: nothing hides behind a decoration', () => {

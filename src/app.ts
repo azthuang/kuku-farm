@@ -28,7 +28,7 @@ import { createSfx, voiceOf, type SfxName } from './ui/sfx';
 const petVoice = (kind: PetKind): SfxName => (kind === 'dog' ? 'woof' : 'meow');
 import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
 import {
-  buySpecial, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
+  buySpecial, hasTrick, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
 } from './core/decor';
 import { createDecorUi, isSecondTap } from './ui/decorUi';
 import { careFeedback, TOAST_PET_EATS } from './ui/ranchFeedback';
@@ -427,7 +427,7 @@ export function startApp(root: HTMLElement): void {
   /** Bumped by every move the child makes; a special's showing returns to its page only if unchanged. */
   let backToken = 0;
   /** The last tap on a flock of pigeons: a second one soon after opens 「換成什麼？」. */
-  let lastPigeonTap: { spot: SpotId; at: number } | null = null;
+  let lastTrickTap: { spot: SpotId; at: number } | null = null;
 
   function followLabel(): string | null {
     const p = following ? game.state.ranch.pets.find(x => x.id === following) : undefined;
@@ -629,15 +629,17 @@ export function startApp(root: HTMLElement): void {
       goPage(ranchPage, false);
     },
     onDecorSpot: spot => {
-      if (game.state.ranch.decor.placed[spot] === 'pigeons') {
+      const id = game.state.ranch.decor.placed[spot];
+      // pigeons, pond, bush: a tap plays, a quick second tap opens 換成什麼？
+      if (id && hasTrick(id)) {
         const now = Date.now();
-        if (isSecondTap(lastPigeonTap, spot, now)) {
-          lastPigeonTap = null;
+        if (isSecondTap(lastTrickTap, spot, now)) {
+          lastTrickTap = null;
           decorUi.open(spot, game.state);
           return;
         }
-        lastPigeonTap = { spot, at: now };
-        if (ranchScene.flyPigeons(spot)) sfx.play('flap');
+        lastTrickTap = { spot, at: now };
+        if (ranchScene.playDecor(spot)) sfx.play(id === 'pond' ? 'splash' : id === 'bush' ? 'hop' : 'flap');
         return;
       }
       decorUi.open(spot, game.state);

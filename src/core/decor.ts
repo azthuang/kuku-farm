@@ -41,6 +41,12 @@ export const DECOR: Record<DecorId, DecorDef> = {
   pigeons: def('pigeons', '鴿子聚集地', '🕊️', { tomato: 150, strawberry: 150, pumpkin: 100 }, true),
 };
 export const DECOR_ORDER = Object.keys(DECOR) as readonly DecorId[];
+
+/** A tap plays these (the pigeons fly, a fish jumps from the pond, a rabbit hops out of the bush); a quick second tap opens 換成什麼？. */
+const TRICKS: ReadonlySet<DecorId> = new Set(['pigeons', 'pond', 'bush']);
+export function hasTrick(id: DecorId): boolean {
+  return TRICKS.has(id);
+}
 /** Decorations that were replaced, by what stands in their place now. */
 export const LEGACY_DECOR: Readonly<Record<string, DecorId>> = { bench: 'pond' };
 

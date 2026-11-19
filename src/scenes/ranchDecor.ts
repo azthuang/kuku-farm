@@ -5,6 +5,7 @@ import {
 import { BIG_SPOTS, DECOR_SPOTS, bigBox, createBusy, spotFoot } from './decorLayout';
 import { DECOR_LPC_FRAMES } from './decorAtlas';
 import { DECOR_MADE_FRAMES, SPECIAL_FRAMES } from './decorMadeAtlas';
+import { FISH_PALETTE, FISH_ROWS, RABBIT_PALETTE, RABBIT_ROWS, pixelTexture } from './pixelArt';
 
 /** Texture keys of public/assets/decor/lpc.png and made.png (loaded by the scene). */
 export const DECOR_LPC_TEX = 'decor-lpc';
@@ -54,6 +55,9 @@ const HIT_PAD = 10;
 /** How long each trick runs: a tap meanwhile starts nothing. */
 const SHOW_MS: Record<SpecialId, number> = { xmasTree: 900, balloon: 4200, rocket: 5200, ufo: 1600, dino: 1000 };
 export const PIGEON_FLY_MS = 1600;
+/** The pond's fish: out of the water, an arc, back in. The bush's rabbit: out, a look round, back in. */
+export const FISH_JUMP_MS = 1000;
+export const RABBIT_MS = 2200;
 /** Where the three pigeons stand, around the spot's foot. */
 /** Where the three pigeons stand, as fractions of the spot's width and px up from its front. */
 const PIGEON_AT = [{ x: -0.3, y: 6 }, { x: 0.02, y: 26 }, { x: 0.3, y: 2 }];
@@ -62,6 +66,8 @@ interface SpotView {
   img: Img;
   plus: Phaser.GameObjects.Container;
   birds: Img[];
+  /** The pond's fish or the bush's rabbit while its trick runs (gone with the decoration). */
+  actors: Img[];
   id: DecorId | null;
   open: boolean;
   fx: Fx[];
@@ -91,7 +97,7 @@ export class DecorLayer {
       const p = DECOR_SPOTS[s];
       const depth = this.depthOf(s, p.y);
       const img = scene.add.image(p.x, p.y, '__MISSING').setOrigin(0.5, 1).setDepth(depth).setVisible(false);
-      this.spots.set(s, { img, plus: this.makePlus(p.x, p.y - p.h * 0, depth), birds: [], id: null, open: false, fx: [] });
+      this.spots.set(s, { img, plus: this.makePlus(p.x, p.y - p.h * 0, depth), birds: [], actors: [], id: null, open: false, fx: [] });
     }
     const big = (i: 0 | 1): BigView => {
       const p = BIG_SPOTS[i];
@@ -177,6 +183,8 @@ export class DecorLayer {
       b.destroy();
     }
     v.birds = [];
+    for (const a of v.actors) a.destroy();
+    v.actors = [];
     v.id = id;
     const p = DECOR_SPOTS[s];
     v.img.setVisible(!!id && id !== 'pigeons');
@@ -369,6 +377,115 @@ export class DecorLayer {
         break;
     }
     return true;
+  }
+
+  /** A decoration's trick on a tap (pigeons, pond, bush); false for one without, or while it still runs. */
+  trick(spot: SpotId): boolean {
+    const id = this.spots.get(spot)?.id;
+    if (id === 'pigeons') return this.flyPigeons(spot);
+    if (id === 'pond') return this.jumpFish(spot);
+    if (id === 'bush') return this.hopRabbit(spot);
+    return false;
+  }
+
+  /** A sprite owned by a spot's trick: it goes when the trick ends or the decoration does. */
+  private actor(v: SpotView, key: string, depth: number): Img {
+    const a = this.scene.add.image(0, 0, key).setOrigin(0.5, 1).setDepth(depth);
+    a.setScale(Math.max(3, Math.round(v.img.scaleX) + 1));
+    v.actors.push(a);
+    return a;
+  }
+
+  private dropActor(v: SpotView, a: Img): void {
+    const i = v.actors.indexOf(a);
+    if (i >= 0) v.actors.splice(i, 1);
+    a.destroy();
+  }
+
+  /** A red fish leaps out of the middle of the pond, arcs over and drops back in with a splash. */
+  private jumpFish(spot: SpotId): boolean {
+    const v = this.spots.get(spot)!;
+    if (!this.busy.start(spot, FISH_JUMP_MS + 300, this.scene.time.now)) return false;
+    const r = v.img.getBounds();
+    const cx = r.x + r.width / 2;
+    const cy = r.y + r.height * 0.6;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const span = Math.min(34, r.width * 0.25);
+    const fish = this.actor(v, pixelTexture(this.scene, 'px-fish', FISH_ROWS, FISH_PALETTE), (v.img.depth ?? 0) + 0.01);
+    fish.setOrigin(0.5, 0.5).setFlipX(dir < 0).setPosition(cx - dir * span, cy).setAlpha(0);
+    this.splash(cx - dir * span, cy);
+    const t = { a: 0 };
+    const jump = this.scene.tweens.add({
+      targets: t, a: 1, duration: FISH_JUMP_MS,
+      onUpdate: () => {
+        if (!fish.active) return;
+        const k = t.a;
+        fish.setPosition(cx - dir * span + 2 * dir * span * k, cy - 4 * 120 * k * (1 - k));
+        fish.setAngle(dir * (-60 + 120 * k)); // nose up on the way out, nose down on the way in
+        fish.setAlpha(Math.min(1, k * 10, (1 - k) * 10));
+      },
+      onComplete: () => {
+        v.fx.splice(v.fx.indexOf(jump), 1);
+        if (!fish.active) return;
+        this.dropActor(v, fish);
+        this.splash(cx + dir * span, cy);
+      },
+    });
+    v.fx.push(jump);
+    return true;
+  }
+
+  /** A rabbit hops out from behind the bush, looks round, turns and hops back in. */
+  private hopRabbit(spot: SpotId): boolean {
+    const v = this.spots.get(spot)!;
+    if (!this.busy.start(spot, RABBIT_MS + 200, this.scene.time.now)) return false;
+    const p = DECOR_SPOTS[spot];
+    const r = v.img.getBounds();
+    const dir = spot.endsWith('-0') ? 1 : -1; // out toward the middle of the pen, away from its fence
+    const x0 = p.x + dir * r.width * 0.1;
+    const x1 = p.x + dir * (r.width / 2 + 34);
+    const ground = p.y - 4;
+    // just behind the bush: it shows once it is out to the side
+    const rabbit = this.actor(v, pixelTexture(this.scene, 'px-rabbit', RABBIT_ROWS, RABBIT_PALETTE), (v.img.depth ?? 0) - 0.001);
+    rabbit.setFlipX(dir < 0).setPosition(x0, ground);
+    let turned = false;
+    const t = { a: 0 };
+    const run = this.scene.tweens.add({
+      targets: t, a: 1, duration: RABBIT_MS,
+      onUpdate: () => {
+        if (!rabbit.active) return;
+        const k = t.a;
+        const hops = (u: number): number => Math.abs(Math.sin(u * Math.PI * 2)) * 18; // two hops
+        if (k < 0.3) {
+          const u = k / 0.3;
+          rabbit.setPosition(x0 + (x1 - x0) * u, ground - hops(u));
+        } else if (k < 0.65) {
+          rabbit.setPosition(x1, ground);
+          if (!turned && k > 0.5) { turned = true; rabbit.setFlipX(dir > 0); } // looks round: back the way it came
+        } else {
+          const u = (k - 0.65) / 0.35;
+          rabbit.setPosition(x1 + (x0 - x1) * u, ground - hops(u));
+        }
+      },
+      onComplete: () => {
+        v.fx.splice(v.fx.indexOf(run), 1);
+        if (rabbit.active) this.dropActor(v, rabbit);
+      },
+    });
+    v.fx.push(run);
+    return true;
+  }
+
+  /** Water thrown up where the fish breaks the surface: a widening ring and a few drops. */
+  private splash(x: number, y: number): void {
+    const ring = this.scene.add.graphics().setDepth(this.deps.depth + 0.2).setPosition(x, y);
+    ring.lineStyle(3, 0xffffff, 0.9).strokeEllipse(0, 0, 26, 9);
+    this.scene.tweens.add({ targets: ring, scaleX: 2.2, scaleY: 2.2, alpha: 0, duration: 520, onComplete: () => ring.destroy() });
+    for (const dx of [-12, 0, 12]) {
+      const d = this.scene.add.graphics().setDepth(this.deps.depth + 0.2).setPosition(x + dx * 0.3, y);
+      d.fillStyle(0xd8f4ff, 1).fillCircle(0, 0, 3.5);
+      this.scene.tweens.add({ targets: d, x: x + dx, y: y - 22 - Math.abs(dx) * 0.5, alpha: 0, duration: 420, ease: 'Quad.Out', onComplete: () => d.destroy() });
+    }
   }
 
   /** The pigeons take off, circle once and land again; false while they are still up. */

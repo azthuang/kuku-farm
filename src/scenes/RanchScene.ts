@@ -619,9 +619,9 @@ export class RanchScene extends Phaser.Scene {
     return this.decor?.play(slot) ?? false;
   }
 
-  /** The pigeons on `spot` fly a round; false while they are already up. */
-  flyPigeons(spot: SpotId): boolean {
-    return this.decor?.flyPigeons(spot) ?? false;
+  /** A decoration's trick (pigeons fly, a fish jumps, a rabbit hops out); false if none ran. */
+  playDecor(spot: SpotId): boolean {
+    return this.decor?.trick(spot) ?? false;
   }
 
   /** Stars over a decoration spot or a special's big spot (just placed or shown). */

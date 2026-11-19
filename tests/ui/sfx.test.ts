@@ -45,6 +45,8 @@ const NAMES = [
   'cluck', 'collect', 'sweep', 'buy', 'heal', 'nope', 'moo', 'oink', 'baa', 'hum', 'woof', 'meow',
   // batch 3: the specials and the pigeons
   'jingle', 'burner', 'rocket', 'ufo', 'roar', 'flap',
+  // the pond's fish and the bush's rabbit
+  'splash', 'hop',
 ] as const;
 
 describe('voiceOf', () => {
