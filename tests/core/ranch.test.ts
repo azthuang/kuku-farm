@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FEED_FULL_AT, HUNGRY_SHOW_AT, createRanch, settle, feed, pet, brush, giveTreat, giveMedicine, cleanPoop, collect,
-  pageStatus, type RanchState, type Animal,
+  giveSnack, pageStatus, type RanchState, type Animal,
 } from '../../src/core/ranch';
 
 const H = 3_600_000;
@@ -306,5 +306,36 @@ describe('pageStatus', () => {
     r.houses.push({ id: 'h1', kind: 'coop', lot: 0, poop: 3 });
     r.animals.push(animal('a1', 'h1', { waiting: 2 }));
     expect(pageStatus(r)[0]).toEqual(calm);
+  });
+});
+
+describe('giveSnack', () => {
+  function withPets(): RanchState {
+    const r = createRanch(T0);
+    r.pets = [{ id: 'p1', kind: 'dog', name: '旺財', color: '柴犬' }, { id: 'p2', kind: 'cat', name: '咪咪', color: '三花貓' }];
+    return r;
+  }
+
+  it('the dog gets its bone and the cat its fish first', () => {
+    const r = withPets();
+    r.supplies.bone = 1; r.supplies.fish = 1; r.supplies.treat = 2;
+    expect(giveSnack(r, 'p1')).toEqual({ ok: true, used: 'bone' });
+    expect(giveSnack(r, 'p2')).toEqual({ ok: true, used: 'fish' });
+    expect([r.supplies.bone, r.supplies.fish, r.supplies.treat]).toEqual([0, 0, 2]);
+  });
+
+  it('with no bone or fish left, a 🍪 treat does the trick too', () => {
+    const r = withPets();
+    r.supplies.bone = 0; r.supplies.fish = 0; r.supplies.treat = 2;
+    expect(giveSnack(r, 'p1')).toEqual({ ok: true, used: 'treat' });
+    expect(giveSnack(r, 'p2')).toEqual({ ok: true, used: 'treat' });
+    expect(r.supplies.treat).toBe(0);
+  });
+
+  it('nothing to give: none left, and nothing used', () => {
+    const r = withPets();
+    r.supplies.bone = 0; r.supplies.treat = 0;
+    expect(giveSnack(r, 'p1')).toEqual({ ok: false, reason: 'none-left' });
+    expect(giveSnack(r, 'nobody')).toEqual({ ok: false, reason: 'nothing' });
   });
 });

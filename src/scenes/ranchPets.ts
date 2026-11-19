@@ -370,8 +370,8 @@ export class RanchPets {
     this.pause(v, 1500, 3000);
   }
 
-  /** Eats a snack, then the dog spins round and the cat stretches; hearts all round. */
-  trick(id: string): void {
+  /** Eats a snack (its own bone or fish unless told), then the dog spins round and the cat stretches; hearts all round. */
+  trick(id: string, snack?: string): void {
     const v = this.views.get(id);
     if (!v || v.mode === 'trick') return;
     if (v.mode === 'sleep') this.wake(v);
@@ -379,7 +379,7 @@ export class RanchPets {
     v.body.y = 0;
     this.scene.tweens.killTweensOf(v.body);
     v.body.play(`${PET_TEX[v.kind]}-${v.coat}-eat`);
-    this.pop(v, PETS[v.kind].snack === 'bone' ? '🦴' : '🐟');
+    this.pop(v, snack ?? (PETS[v.kind].snack === 'bone' ? '🦴' : '🐟'));
     v.body.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       if (!this.views.has(v.id)) return;
       const done = (): void => {

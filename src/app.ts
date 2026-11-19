@@ -19,7 +19,7 @@ import {
 } from './core/ranch';
 import { buy, isLocked, lockHint, nextName, type ShopItemId } from './core/shop';
 import {
-  FEED_IDS, HOUSE_KINDS, LOT_COUNT, PETS, PET_KINDS, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfHouse,
+  FEED_IDS, HOUSE_KINDS, LOT_COUNT, PETS, PET_KINDS, PET_SNACK_EMOJI, PRODUCT_EMOJI, SPECIES, SPECIES_ORDER, speciesOfHouse,
   speciesOfLot, type HouseKind, type PetKind, type SpeciesId,
 } from './core/species';
 import { gardenOf } from './core/garden';
@@ -605,7 +605,7 @@ export function startApp(root: HTMLElement): void {
         if (following !== id) startFollow(id);
         return;
       }
-      // 🍪 on the dog or the cat hands it its own snack (a bone, a fish)
+      // 🍪 on the dog or the cat hands it its own snack (a bone, a fish), or a 🍪 when none is left
       const res = giveSnack(game.state.ranch, id);
       if (!res.ok) {
         sfx.play('collect'); // a gentle cue, then the shop at that snack
@@ -613,7 +613,7 @@ export function startApp(root: HTMLElement): void {
         return;
       }
       ranchChanged();
-      ranchScene.petFx(id, 'trick');
+      ranchScene.petFx(id, 'trick', res.used === 'treat' ? '🍪' : PET_SNACK_EMOJI[res.used]);
       sfx.play(petVoice(p.kind));
     },
     onFollowLost: () => {

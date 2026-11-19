@@ -1,4 +1,4 @@
-import { FARM_LOT, LOT_COUNT, PETS, SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type PetKind, type ProductId, type SpeciesId, type SupplyId } from './species';
+import { FARM_LOT, LOT_COUNT, PETS, SPECIES, PRODUCT_IDS, SUPPLY_IDS, type HouseKind, type PetKind, type PetSnackId, type ProductId, type SpeciesId, type SupplyId } from './species';
 
 import { createDecor, type DecorState } from './decor';
 
@@ -168,14 +168,20 @@ export function feed(r: RanchState, animalId: string, now: number): CareResult {
   });
 }
 
-/** Gives the dog a bone or the cat a fish: it only uses the snack (the scene plays the trick). */
-export function giveSnack(r: RanchState, petId: string): CareResult {
+export type SnackResult = { ok: true; used: PetSnackId | 'treat' } | { ok: false; reason: 'none-left' | 'nothing' };
+
+/**
+ * Gives the dog a bone or the cat a fish, or a 🍪 treat when none is left: it only uses the snack
+ * (the scene plays the trick with whatever was used).
+ */
+export function giveSnack(r: RanchState, petId: string): SnackResult {
   const p = r.pets.find((x) => x.id === petId);
   if (!p) return { ok: false, reason: 'nothing' };
   const snack = PETS[p.kind].snack;
-  if (r.supplies[snack] < 1) return { ok: false, reason: 'none-left' };
-  r.supplies[snack] -= 1;
-  return { ok: true };
+  const used = r.supplies[snack] > 0 ? snack : r.supplies.treat > 0 ? 'treat' : null;
+  if (!used) return { ok: false, reason: 'none-left' };
+  r.supplies[used] -= 1;
+  return { ok: true, used };
 }
 
 export function pet(r: RanchState, animalId: string, now: number): CareResult {

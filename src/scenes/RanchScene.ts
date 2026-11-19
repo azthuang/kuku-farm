@@ -744,11 +744,11 @@ export class RanchScene extends Phaser.Scene {
     return this.pets?.busy(petId) ?? false;
   }
 
-  /** The dog or the cat: 'jump' for a tap, 'trick' after a snack. */
-  petFx(petId: string, kind: 'jump' | 'trick'): void {
+  /** The dog or the cat: 'jump' for a tap, 'trick' after a snack (`snack` is the emoji it eats). */
+  petFx(petId: string, kind: 'jump' | 'trick', snack?: string): void {
     if (!this.built || !this.pets) return;
     if (kind === 'jump') this.pets.jump(petId);
-    else this.pets.trick(petId);
+    else this.pets.trick(petId, snack);
   }
 
   fx(animalId: string, kind: FxKind): void {
