@@ -168,21 +168,20 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 }
 .rn-map {
   position: absolute; top: 4px; right: 8px;
-  width: 52px; height: 52px;
+  width: 60px; height: 60px;
   border: 0; border-radius: 50%;
   background: var(--white);
-  font-size: 30px;
+  font-size: 36px;
   box-shadow: var(--shadow);
 }
-/* Until the child has opened the map once: a short wiggle every few seconds says "press me". */
-.rn-map.hint:not(.active) { animation: map-hint 3.5s ease-in-out infinite; }
+/* Always a short wiggle every few seconds, so anyone new sees it is a button (still while on the map). */
+.rn-map:not(.active) { animation: map-hint 3.5s ease-in-out infinite; }
 @keyframes map-hint {
-  0%, 70%, 100% { transform: scale(1) rotate(0); }
-  75% { transform: scale(1.18) rotate(-14deg); }
-  80% { transform: scale(1.18) rotate(12deg); }
-  85% { transform: scale(1.18) rotate(-10deg); }
-  90% { transform: scale(1.12) rotate(6deg); }
-  95% { transform: scale(1.05) rotate(0); }
+  0%, 70%, 100% { transform: rotate(0); }
+  75% { transform: rotate(-14deg); }
+  80% { transform: rotate(12deg); }
+  85% { transform: rotate(-10deg); }
+  90% { transform: rotate(6deg); }
 }
 /* Following a pet: a ✕ at the top left ends it (the 🗺️ still goes to the overview). */
 .rn-close {
