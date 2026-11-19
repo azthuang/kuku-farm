@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { Pet } from '../core/ranch';
 import { PETS, type PetKind } from '../core/species';
 import { nearestNode, route, type RoamGraph } from './petRoam';
-import { SLEEP_COL, petFrame, walkCycle } from './petSheet';
+import { SLEEP_COL, WALK_FPS, petFrame, walkCycle } from './petSheet';
 
 /**
  * The dog and the cat: they walk the farm's paths, stop to sniff, and lie down to sleep at a
@@ -99,7 +99,7 @@ export class RanchPets {
     const f = (row: number, col: number) => ({ key: tex, frame: petFrame(coat, row, col) });
     for (const d of ['R', 'U', 'D', 'L'] as const) {
       const key = `${tex}-${coat}-walk-${d}`;
-      if (!a.exists(key)) a.create({ key, frames: walkCycle(coat, ROW[d]).map(frame => ({ key: tex, frame })), frameRate: 8, repeat: -1 });
+      if (!a.exists(key)) a.create({ key, frames: walkCycle(coat, ROW[d]).map(frame => ({ key: tex, frame })), frameRate: WALK_FPS, repeat: -1 });
     }
     const eat = `${tex}-${coat}-eat`;
     if (!a.exists(eat)) a.create({ key: eat, frames: LOOK[kind].eat.map(c => f(EAT_ROW, c)), frameRate: 6, repeat: 0 });

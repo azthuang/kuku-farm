@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { BREED_COLS, SHEET_COLS, SLEEP_COL, petFrame, walkCycle } from '../../src/scenes/petSheet';
+import { BREED_COLS, SHEET_COLS, SLEEP_COL, WALK_FPS, petFrame, walkCycle } from '../../src/scenes/petSheet';
 
 describe('pet sheet layout', () => {
-  it('four breeds side by side, five columns each: four walk frames, then lying down', () => {
+  it('four breeds side by side, five columns each: walk frames, then lying down', () => {
     expect(BREED_COLS).toBe(5);
     expect(SHEET_COLS).toBe(20);
     expect(SLEEP_COL).toBe(4);
@@ -11,8 +11,9 @@ describe('pet sheet layout', () => {
     expect(petFrame(3, 4, 4)).toBe(4 * 20 + 15 + 4);
   });
 
-  it('a walk plays all four steps in order and loops (no back-and-forth)', () => {
-    expect(walkCycle(1, 0)).toEqual([5, 6, 7, 8]);
-    expect(walkCycle(2, 3)).toEqual([70, 71, 72, 73]);
+  it('a walk is two poses, legs spread then gathered, six a second', () => {
+    expect(walkCycle(1, 0)).toEqual([5, 6]);
+    expect(walkCycle(2, 3)).toEqual([70, 71]);
+    expect(WALK_FPS).toBe(6);
   });
 });
