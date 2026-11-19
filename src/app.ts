@@ -659,7 +659,19 @@ export function startApp(root: HTMLElement): void {
   syncNav();
   ranchUi.onTool(selectTool);
   ranchUi.onPage(i => goPage(i));
-  ranchUi.onOverview(toggleOverview);
+  // The 🗺️ wiggles until the child has pressed it once on this device.
+  const MAP_SEEN_KEY = 'kuku-farm.mapSeen';
+  let mapSeen = true;
+  try { mapSeen = store?.getItem(MAP_SEEN_KEY) === '1'; } catch { /* storage refused: no hint */ }
+  ranchUi.setMapHint(!mapSeen);
+  ranchUi.onOverview(() => {
+    if (!mapSeen) {
+      mapSeen = true;
+      ranchUi.setMapHint(false);
+      try { store?.setItem(MAP_SEEN_KEY, '1'); } catch { /* fine: it stops for this visit */ }
+    }
+    toggleOverview();
+  });
   ranchUi.onGoField(() => layout.setTab('field'));
   ranchUi.onFollowClose(endFollow);
   /** The care view of a species' pen, unless it is already showing (the shop can open elsewhere). */

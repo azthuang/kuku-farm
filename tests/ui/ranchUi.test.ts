@@ -217,6 +217,16 @@ describe('ranch pages', () => {
     expect(maps).toBe(1);
   });
 
+  it('🗺️ wiggles as a hint until the child has found it', () => {
+    const { nav, ui } = setup(st(), 1);
+    const map = nav.querySelector<HTMLElement>('.rn-map')!;
+    expect(map.classList.contains('hint')).toBe(false);
+    ui.setMapHint(true);
+    expect(map.classList.contains('hint')).toBe(true);
+    ui.setMapHint(false);
+    expect(map.classList.contains('hint')).toBe(false);
+  });
+
   it('following a pet: its name as the title, a ✕ instead of arrows and dots', () => {
     const { nav, ui, root } = setup(st(), 0);
     let closed = 0;

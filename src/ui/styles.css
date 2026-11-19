@@ -168,11 +168,21 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 }
 .rn-map {
   position: absolute; top: 4px; right: 8px;
-  width: 44px; height: 44px;
+  width: 52px; height: 52px;
   border: 0; border-radius: 50%;
   background: var(--white);
-  font-size: 24px;
+  font-size: 30px;
   box-shadow: var(--shadow);
+}
+/* Until the child has opened the map once: a short wiggle every few seconds says "press me". */
+.rn-map.hint:not(.active) { animation: map-hint 3.5s ease-in-out infinite; }
+@keyframes map-hint {
+  0%, 70%, 100% { transform: scale(1) rotate(0); }
+  75% { transform: scale(1.18) rotate(-14deg); }
+  80% { transform: scale(1.18) rotate(12deg); }
+  85% { transform: scale(1.18) rotate(-10deg); }
+  90% { transform: scale(1.12) rotate(6deg); }
+  95% { transform: scale(1.05) rotate(0); }
 }
 /* Following a pet: a ✕ at the top left ends it (the 🗺️ still goes to the overview). */
 .rn-close {

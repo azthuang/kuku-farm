@@ -36,6 +36,8 @@ export interface RanchUi {
   /** 🗺️ was pressed (in either view). */
   onOverview(cb: () => void): void;
   setOverview(on: boolean): void;
+  /** 🗺️ wiggles now and then, so a newcomer sees it is a button (until it has been pressed once). */
+  setMapHint(on: boolean): void;
   /** The garden page's「去農田種菜」button. */
   onGoField(cb: () => void): void;
   /** Following a pet: its label (e.g. 「🐕 旺財」) as the title, a ✕ instead of arrows and dots; null ends it. */
@@ -535,6 +537,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     onBuy: cb => { buyCb = cb; },
     onPage: cb => { pageCb = cb; },
     onOverview: cb => { overviewCb = cb; },
+    setMapHint: on => { mapBtn.classList.toggle('hint', on); },
     onGoField: cb => { goFieldCb = cb; },
     setFollow: label => {
       if (label === followLabel) return;
