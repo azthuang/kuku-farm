@@ -65,13 +65,30 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
           </label>
           <button type="button" class="set-btn set-credits-btn">📜 素材來源</button>
           <div class="set-credits" hidden>
-            農場動物圖：Daniel Eddeland（LPC style farm animals），授權 CC-BY 3.0<br />
-            <span class="set-url">https://opengameart.org/content/lpc-style-farm-animals</span><br />
-            狗和貓、部分裝飾與驚喜物件：本遊戲以 Google Antigravity（Gemini 圖像模型）生成，再整理成像素圖<br />
-            牧場景觀：[LPC] Terrains、Trees、Flowers / Plants / Fungi / Wood、Thatched-roof Cottage（bluecarrot16 等，CC-BY-SA 3.0）與 [LPC] Farm 的水車（bluecarrot16、TheraHedwig、Ivan Voirol，CC-BY 4.0）；拼合圖以 CC-BY-SA 3.0 釋出，完整作者見 assets/scenery/CREDITS-*.txt；花圃、樹叢、小樹、大香菇等裝飾也由這些素材裁切<br />
-            <span class="set-url">https://opengameart.org/content/lpc-terrains</span>
+            <h3>🎮 遊戲設計與製作</h3>
+            <p>Azt</p>
+            <h3>🐔 農場動物</h3>
+            <p>LPC style farm animals：Daniel Eddeland（CC-BY 3.0）
+              <span class="set-url">opengameart.org/content/lpc-style-farm-animals</span></p>
+            <h3>🌳 牧場景觀與花圃、樹叢、小樹、大香菇、池塘</h3>
+            <p>[LPC] Terrains、[LPC] Trees、[LPC] Flowers / Plants / Fungi / Wood、[LPC] Thatched-roof Cottage：bluecarrot16、Lanea Zimmerman (Sharm) 等多位作者（CC-BY-SA 3.0）
+              <span class="set-url">opengameart.org/content/lpc-terrains</span>
+              <span class="set-url">opengameart.org/content/lpc-trees</span>
+              <span class="set-url">opengameart.org/content/lpc-flowers-plants-fungi-wood</span>
+              <span class="set-url">opengameart.org/content/lpc-thatched-roof-cottage</span></p>
+            <p>本遊戲由這些素材裁切、拼合的圖，同樣以 CC-BY-SA 3.0 釋出。</p>
+            <h3>💧 水車</h3>
+            <p>[LPC] Farm：bluecarrot16、Wolthera van Hövell tot Westerflier (TheraHedwig)、Ivan Voirol（CC-BY 4.0）
+              <span class="set-url">opengameart.org/content/lpc-farm</span></p>
+            <h3>🐶 狗、貓、稻草人、水井、南瓜堆、白鴿與驚喜物件</h3>
+            <p>Azt 以 Google Antigravity（Gemini 圖像模型）生成，再整理成像素圖。</p>
+            <h3>🌾 作物與小圖示</h3>
+            <p>裝置內建的 emoji 與程式繪製的圖形。</p>
+            <p class="set-note">每個素材包的完整作者名單見
+              <span class="set-url">github.com/azthuang/kuku-farm/blob/main/CREDITS.md</span></p>
           </div>
           <button type="button" class="set-btn set-close">關閉</button>
+          <p class="set-author">九九農場 · 作者 Azt</p>
         </div>
       </div>
     </div>`;
