@@ -1,5 +1,5 @@
 import {
-  DECOR_ORDER, SPECIAL_ORDER, SPOT_IDS, createDecor, type DecorId, type DecorState, type SpecialId, type SpotId,
+  DECOR_ORDER, LEGACY_DECOR, SPECIAL_ORDER, SPOT_IDS, createDecor, type DecorId, type DecorState, type SpecialId, type SpotId,
 } from './decor';
 import { CROP_BY_ROW, type CropId } from './levels';
 import {
@@ -157,7 +157,8 @@ function validateRanch(data: unknown, version: number): RanchState {
 
 /**
  * Batch 3's decorations. Nothing here may sink the save: a missing or garbled field reads as
- * empty, unknown kinds are dropped, and a known decoration on an unknown spot goes to storage.
+ * empty, unknown kinds are dropped, a replaced kind becomes its successor (a bench is a pond now),
+ * and a known decoration on an unknown spot goes to storage.
  */
 function parseDecor(v: unknown): DecorState {
   const d = createDecor();
@@ -166,14 +167,17 @@ function parseDecor(v: unknown): DecorState {
   const o = obj(v);
   if (!o) return d;
   const isDecor = (x: unknown): x is DecorId => DECOR_ORDER.includes(x as DecorId);
+  const current = (x: unknown): unknown => (typeof x === 'string' && Object.prototype.hasOwnProperty.call(LEGACY_DECOR, x) ? LEGACY_DECOR[x] : x);
   const isSpecial = (x: unknown): x is SpecialId => SPECIAL_ORDER.includes(x as SpecialId);
   const addStored = (id: DecorId, n: number): void => {
     if (n >= 1) d.stored[id] = (d.stored[id] ?? 0) + n;
   };
-  for (const [k, n] of Object.entries(obj(o.stored) ?? {})) {
+  for (const [key, n] of Object.entries(obj(o.stored) ?? {})) {
+    const k = current(key);
     if (isDecor(k) && typeof n === 'number' && Number.isFinite(n)) addStored(k, Math.floor(n));
   }
-  for (const [spot, id] of Object.entries(obj(o.placed) ?? {})) {
+  for (const [spot, was] of Object.entries(obj(o.placed) ?? {})) {
+    const id = current(was);
     if (!isDecor(id)) continue;
     if (SPOT_IDS.includes(spot as SpotId)) d.placed[spot as SpotId] = id;
     else addStored(id, 1);

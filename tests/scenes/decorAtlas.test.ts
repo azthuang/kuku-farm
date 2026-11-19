@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DECOR_LPC_FRAMES, DECOR_LPC_SIZE } from '../../src/scenes/decorAtlas';
 
 describe('decoration atlas (LPC)', () => {
-  it('has the seven LPC decorations, each inside the image', () => {
-    expect(Object.keys(DECOR_LPC_FRAMES).sort()).toEqual(['bluebells', 'bush', 'flowers', 'mushroom', 'roses', 'sunflowers', 'tree']);
+  it('has the eight LPC decorations (the pond too), each inside the image', () => {
+    expect(Object.keys(DECOR_LPC_FRAMES).sort()).toEqual(['bluebells', 'bush', 'flowers', 'mushroom', 'pond', 'roses', 'sunflowers', 'tree']);
     for (const [id, [x, y, w, h]] of Object.entries(DECOR_LPC_FRAMES)) {
       expect(x >= 0 && y >= 0 && w > 0 && h > 0, id).toBe(true);
       expect(x + w <= DECOR_LPC_SIZE.w && y + h <= DECOR_LPC_SIZE.h, id).toBe(true);

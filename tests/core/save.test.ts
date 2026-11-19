@@ -445,6 +445,12 @@ describe('save', () => {
         .toEqual(['ufo', null]);
     });
 
+    it('a bench from before the pond replaced it becomes a pond, placed or stored', () => {
+      const d = loaded(withDecor({ placed: { '1-1': 'bench', '2-0': 'well' }, stored: { bench: 2, pond: 1 }, specials: [], big: [null, null] })).ranch.decor;
+      expect(d.placed).toEqual({ '1-1': 'pond', '2-0': 'well' });
+      expect(d.stored).toEqual({ pond: 3 });
+    });
+
     it('decor that is not an object reads as empty', () => {
       expect(loaded(withDecor('oops')).ranch.decor).toEqual(createDecor());
       expect(loaded(withDecor({ placed: 3, stored: null, specials: 'x', big: {} })).ranch.decor).toEqual(createDecor());

@@ -11,7 +11,7 @@ import type { GameState } from './state';
 
 export type DecorId =
   | 'flowers' | 'sunflowers' | 'roses' | 'bluebells' | 'bush' | 'tree'
-  | 'bench' | 'mushroom' | 'scarecrow' | 'pumpkins' | 'well' | 'pigeons';
+  | 'pond' | 'mushroom' | 'scarecrow' | 'pumpkins' | 'well' | 'pigeons';
 export type SpecialId = 'xmasTree' | 'balloon' | 'rocket' | 'ufo' | 'dino';
 
 export interface DecorDef {
@@ -33,7 +33,7 @@ export const DECOR: Record<DecorId, DecorDef> = {
   bluebells: def('bluebells', '藍色花圃', '💐', { strawberry: 100, wheat: 80 }),
   bush: def('bush', '樹叢', '🌿', { carrot: 60, corn: 40 }),
   tree: def('tree', '小樹', '🌳', { wheat: 100, carrot: 80 }),
-  bench: def('bench', '長椅', '🪑', { carrot: 100, corn: 60 }),
+  pond: def('pond', '池塘', '🪷', { carrot: 100, corn: 60 }), // took the bench's place (old saves: LEGACY_DECOR)
   mushroom: def('mushroom', '大香菇', '🍄', { wheat: 150, corn: 60 }),
   scarecrow: def('scarecrow', '稻草人', '🧑‍🌾', { wheat: 120, carrot: 100 }),
   pumpkins: def('pumpkins', '南瓜堆', '🎃', { pumpkin: 120, potato: 60 }),
@@ -41,6 +41,8 @@ export const DECOR: Record<DecorId, DecorDef> = {
   pigeons: def('pigeons', '鴿子聚集地', '🕊️', { tomato: 150, strawberry: 150, pumpkin: 100 }, true),
 };
 export const DECOR_ORDER = Object.keys(DECOR) as readonly DecorId[];
+/** Decorations that were replaced, by what stands in their place now. */
+export const LEGACY_DECOR: Readonly<Record<string, DecorId>> = { bench: 'pond' };
 
 /** Two spots in each pen: `<lot>-0` is three tiles wide, `<lot>-1` two. The garden has none. */
 export type SpotId = `${number}-${0 | 1}`;

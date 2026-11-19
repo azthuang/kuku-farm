@@ -34,8 +34,11 @@ describe('decorations', () => {
 
   it('the twelve decorations: flower beds and a big mushroom instead of the mailbox, haystack and beehive', () => {
     expect([...DECOR_ORDER]).toEqual([
-      'flowers', 'sunflowers', 'roses', 'bluebells', 'bush', 'tree', 'bench', 'mushroom', 'scarecrow', 'pumpkins', 'well', 'pigeons',
+      'flowers', 'sunflowers', 'roses', 'bluebells', 'bush', 'tree', 'pond', 'mushroom', 'scarecrow', 'pumpkins', 'well', 'pigeons',
     ]);
+    // the pond took the bench's place, name and all, at the bench's price
+    expect(DECOR.pond.name).toBe('池塘');
+    expect(decorPrice(st(9), 'pond')).toEqual({ carrot: 100, corn: 60 });
     expect(decorPrice(st(9), 'roses')).toEqual({ wheat: 80, carrot: 80 });
     expect(decorPrice(st(9), 'bluebells')).toEqual({ strawberry: 100, wheat: 80 });
     expect(decorPrice(st(9), 'mushroom')).toEqual({ wheat: 150, corn: 60 });

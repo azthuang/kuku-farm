@@ -4,7 +4,6 @@
  * art). Generated with the atlas.
  */
 export const DECOR_MADE_FRAMES = {
-  bench: [2, 2, 51, 48],
   scarecrow: [55, 2, 52, 60],
   well: [109, 2, 41, 60],
   pumpkins: [152, 2, 51, 44],

@@ -138,7 +138,7 @@ describe('decoration size', () => {
     expect(fitScale('flowers', 67, 42, 192, 180)).toBe(2.5); // on a three-tile spot: no longer 2
     expect(fitScale('bluebells', 67, 40, 128, 150)).toBe(1.5);
     expect(fitScale('tree', 43, 50, 128, 150)).toBe(2.5);
-    expect(fitScale('bench', 51, 48, 128, 150)).toBe(2); // the parent liked these as they were
+    expect(fitScale('pond', 64, 38, 128, 150)).toBe(2); // the parent liked these as they were
     expect(fitScale('pumpkins', 51, 44, 192, 180)).toBe(3);
     expect(fitScale('well', 41, 60, 128, 150)).toBe(2);
     expect(fitScale('roses', 300, 300, 128, 150)).toBe(0.5); // never vanishes
