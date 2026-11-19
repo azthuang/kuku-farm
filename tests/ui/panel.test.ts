@@ -16,4 +16,13 @@ describe('panel feedback', () => {
     panel.showWrong(q, 8);
     expect(fb.textContent).toContain('2 × 4 = 8');
   });
+
+  it('the exit ✖ is a drawn icon (a font glyph shows tiny on an iPad)', () => {
+    const root = document.createElement('div');
+    createPanel(root);
+    const exit = root.querySelector<HTMLButtonElement>('.exit-btn')!;
+    expect(exit.querySelector('svg.x-icon')).not.toBeNull();
+    expect(exit.textContent).toBe('');
+    expect(exit.getAttribute('aria-label')).toBe('離開');
+  });
 });

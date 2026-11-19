@@ -18,4 +18,13 @@ describe('numpad', () => {
     pad.setLocked(false); pad.clear(); press('ok');
     expect(got).toEqual([1]);
   });
+
+  it('⌫ is a drawn icon (a font glyph shows tiny on an iPad), still named for screen readers', () => {
+    const root = document.createElement('div');
+    createNumpad(root, () => {});
+    const back = root.querySelector<HTMLButtonElement>('[data-key="back"]')!;
+    expect(back.querySelector('svg.back-icon')).not.toBeNull();
+    expect(back.textContent).toBe('');
+    expect(back.getAttribute('aria-label')).toBe('刪除');
+  });
 });

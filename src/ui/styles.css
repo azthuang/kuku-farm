@@ -264,10 +264,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 .shop-head { display: flex; align-items: center; justify-content: space-between; }
 .shop-title { font-size: 20px; font-weight: 800; }
 .shop-close {
-  width: 40px; height: 40px;
+  width: 44px; height: 44px;
   border: 0; border-radius: 50%;
   background: var(--white);
-  font-size: 18px; font-weight: 800;
+  font-size: 22px; font-weight: 800;
   box-shadow: 0 3px 0 #d9c9a0;
 }
 .shop-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 3px; }
@@ -367,7 +367,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   width: 36px; height: 36px;
   border: 0; border-radius: 50%;
   background: var(--berry); color: var(--white);
-  font-size: 16px; font-weight: 800;
+  font-size: 20px; font-weight: 800;
   box-shadow: 0 3px 0 var(--berry-deep);
 }
 .q-feedback {
@@ -416,7 +416,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   transition: transform 0.06s;
 }
 .key-ok { background: var(--grass); color: var(--white); box-shadow: 0 4px 0 var(--grass-deep); }
-.key-back { background: var(--sun); box-shadow: 0 4px 0 var(--sun-deep); }
+.key-back { background: var(--sun); box-shadow: 0 4px 0 var(--sun-deep); display: grid; place-items: center; padding: 0; color: var(--ink); }
+.back-icon { width: clamp(32px, 6vmin, 48px); height: clamp(32px, 6vmin, 48px); display: block; }
 /* row 3: ⌫ takes 1 column, ✔ fills the other 4 so it is the biggest target */
 .key-back { grid-column: span 1; }
 .key-ok { grid-column: span 4; font-size: 30px; }
@@ -511,8 +512,12 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   .app { max-width: 600px; margin: 0 auto; }
   /* Tablets: the round icon buttons and their icons a size up (the HUD stays 48 px tall). */
   .hud-gear { width: 44px; height: 44px; font-size: 27px; }
-  .rn-map, .rn-close { width: 54px; height: 54px; font-size: 31px; }
-  .shop-close { width: 48px; height: 48px; font-size: 24px; }
+  .rn-close { width: 54px; height: 54px; font-size: 31px; }
+  .rn-map { width: 64px; height: 64px; font-size: 38px; }
+  .q-head { height: 46px; flex-basis: 46px; }
+  .exit-btn { width: 46px; height: 46px; font-size: 26px; }
+  .q-feedback { top: 50px; } /* below the taller head */
+  .shop-close { width: 54px; height: 54px; font-size: 30px; }
   .rn-prev, .rn-next { font-size: 26px; }
 }
 
@@ -520,7 +525,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
  * Round icon buttons hold one emoji or a drawn ✕: no default button padding (Safari's would push a
  * wide Apple emoji out of the circle) and the icon centred on its own box, not on the text line.
  */
-.hud-gear, .rn-map, .rn-close, .shop-close, .rn-prev, .rn-next {
+.hud-gear, .rn-map, .rn-close, .shop-close, .rn-prev, .rn-next, .exit-btn {
   padding: 0;
   -webkit-appearance: none;
   appearance: none;

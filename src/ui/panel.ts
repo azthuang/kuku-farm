@@ -1,3 +1,4 @@
+import { X_ICON } from './icons';
 import type { Mode } from '../core/mastery';
 import type { Question } from '../core/game';
 import { createNumpad, type Numpad } from './numpad';
@@ -34,8 +35,9 @@ export function createPanel(root: HTMLElement): Panel {
   const question = el('div', 'panel-question');
   root.append(idle, question);
 
-  const exitBtn = el('button', 'exit-btn', '✖');
+  const exitBtn = el('button', 'exit-btn', '');
   exitBtn.type = 'button';
+  exitBtn.innerHTML = X_ICON;
   exitBtn.setAttribute('aria-label', '離開');
   exitBtn.addEventListener('click', () => exitCb());
   const qText = el('div', 'q-text');

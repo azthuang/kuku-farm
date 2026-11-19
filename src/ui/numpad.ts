@@ -1,3 +1,5 @@
+import { BACK_ICON } from './icons';
+
 export interface Numpad {
   value(): string;
   clear(): void;
@@ -5,7 +7,7 @@ export interface Numpad {
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'back', 'ok'];
-const LABEL: Record<string, string> = { back: '⌫', ok: '✔' };
+const LABEL: Record<string, string> = { ok: '✔' };
 
 export function createNumpad(root: HTMLElement, onSubmit: (n: number) => void): Numpad {
   let value = '';
@@ -28,7 +30,12 @@ export function createNumpad(root: HTMLElement, onSubmit: (n: number) => void): 
     btn.type = 'button';
     btn.className = 'key' + (k === 'ok' ? ' key-ok' : k === 'back' ? ' key-back' : '');
     btn.dataset.key = k;
-    btn.textContent = LABEL[k] ?? k;
+    if (k === 'back') {
+      btn.innerHTML = BACK_ICON; // drawn: the ⌫ glyph shows tiny on an iPad
+      btn.setAttribute('aria-label', '刪除');
+    } else {
+      btn.textContent = LABEL[k] ?? k;
+    }
     btn.addEventListener('click', () => {
       if (locked) return;
       if (k === 'back') {
