@@ -1,8 +1,9 @@
 /**
  * Layout of the dog and cat sheets (public/assets/ranch/dog.png, cat.png): four breeds side by
  * side, BREED_COLS columns each. Rows: walk right (+ asleep), walk up, walk down, walk left
- * (+ asleep), then eat (facing the viewer). A walk is two poses, looped: from the side, legs spread
- * (hind back, front forward) then gathered under the body. Columns 2-3 repeat them.
+ * (+ asleep), then eat (facing the viewer). A walk is two poses, looped. From the side, the legs of
+ * one side are spread (hind back, front forward) while the other side's are gathered, then the same
+ * body with the sides swapped: each side opens and closes in turn. Columns 2-3 repeat them.
  */
 export const BREED_COLS = 5;
 export const BREEDS = 4;

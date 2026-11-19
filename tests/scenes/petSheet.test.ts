@@ -11,7 +11,7 @@ describe('pet sheet layout', () => {
     expect(petFrame(3, 4, 4)).toBe(4 * 20 + 15 + 4);
   });
 
-  it('a walk is two poses, legs spread then gathered, six a second', () => {
+  it('a walk is two poses (one side spread, then the other), six a second', () => {
     expect(walkCycle(1, 0)).toEqual([5, 6]);
     expect(walkCycle(2, 3)).toEqual([70, 71]);
     expect(WALK_FPS).toBe(6);
