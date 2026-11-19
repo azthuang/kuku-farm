@@ -9,7 +9,7 @@ export const BREED_COLS = 5;
 export const BREEDS = 4;
 export const SHEET_COLS = BREED_COLS * BREEDS;
 export const WALK_FRAMES = 2;
-export const WALK_FPS = 6;
+export const WALK_FPS = 3;
 /** Lying-down frames: the last column of the right and left walk rows. */
 export const SLEEP_COL = 4;
 
