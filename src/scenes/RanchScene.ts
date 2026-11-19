@@ -1834,11 +1834,17 @@ export class RanchScene extends Phaser.Scene {
   private tapAt(sx: number, sy: number): void {
     const w = this.cameras.main.getWorldPoint(sx, sy);
 
-    // Overview is look-only: a tap on the dog or the cat follows it, any other picks the page under it.
+    // Overview is look-only: a tap on the dog or the cat follows it, a special plays its trick,
+    // any other picks the page under it.
     if (this.isOverview) {
       const pet = this.pets?.hit(w.x, w.y, 90);
       if (pet) {
         this.handlers.onPet?.(pet);
+        return;
+      }
+      const big = this.decor?.hitSpecial(w.x, w.y);
+      if (big) {
+        this.handlers.onSpecial?.(big.id, big.slot);
         return;
       }
       const col = Math.floor(w.x / VIEW);

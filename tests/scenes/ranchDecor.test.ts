@@ -5,6 +5,7 @@ vi.mock('phaser', () => ({ default: { Textures: { FilterMode: { NEAREST: 1 } } }
 
 import { DecorLayer, FADED_ALPHA } from '../../src/scenes/ranchDecor';
 import { createDecor, type DecorState } from '../../src/core/decor';
+import { bigBox } from '../../src/scenes/decorLayout';
 
 /** A stand-in scene: records timers and tweens so a test can fire them, and images that throw once destroyed. */
 function fakeScene() {
@@ -114,5 +115,19 @@ describe('decoration layer: nothing hides behind a decoration', () => {
     expect(well.alpha).toBe(FADED_ALPHA);
     layer.fade([{ x: 50, y: 50 }]);
     expect(well.alpha).toBe(1);
+  });
+});
+
+describe('decoration layer: the overview finds a special', () => {
+  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, ySort: (y: number) => 10 + y / 10000 };
+
+  it('a tap on a shown special finds it (the overview plays it), and only a special', () => {
+    const { scene } = fakeScene();
+    const layer = new DecorLayer(scene as never, deps);
+    layer.sync({ ...createDecor(), placed: { '1-0': 'well' }, specials: ['balloon', 'ufo'], big: ['balloon', 'ufo'] }, () => true, true);
+    const mid = (slot: 0 | 1) => { const b = bigBox(slot); return [b.x + b.w / 2, b.y + b.h / 2] as const; };
+    expect(layer.hitSpecial(...mid(0))).toEqual({ slot: 0, id: 'balloon' });
+    expect(layer.hitSpecial(...mid(1))).toEqual({ slot: 1, id: 'ufo' });
+    expect(layer.hitSpecial(5, 5)).toBeNull(); // the well's fake bounds: a decoration, not a special
   });
 });

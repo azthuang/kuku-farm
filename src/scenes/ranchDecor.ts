@@ -286,9 +286,15 @@ export class DecorLayer {
       const box = r ? { x: r.x, y: r.y, w: r.width, h: r.height } : v.id || v.open ? spotFoot(s) : null;
       if (box && inside(box)) return { spot: s };
     }
+    return this.hitSpecial(x, y);
+  }
+
+  /** A shown special under a world point (the overview plays it; there nothing else answers a tap). */
+  hitSpecial(x: number, y: number): { slot: 0 | 1; id: SpecialId } | null {
     for (const slot of [0, 1] as const) {
       const id = this.bigs[slot].id;
-      if (id && inside(bigBox(slot))) return { slot, id };
+      const r = bigBox(slot);
+      if (id && x >= r.x - HIT_PAD && x <= r.x + r.w + HIT_PAD && y >= r.y - HIT_PAD && y <= r.y + r.h + HIT_PAD) return { slot, id };
     }
     return null;
   }
