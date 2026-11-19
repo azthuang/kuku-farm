@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 // Phaser needs a real canvas; the layer only uses one constant from it.
 vi.mock('phaser', () => ({ default: { Textures: { FilterMode: { NEAREST: 1 } } } }));
 
-import { DecorLayer, FADED_ALPHA } from '../../src/scenes/ranchDecor';
+import { DecorLayer, FADED_ALPHA, fitScale } from '../../src/scenes/ranchDecor';
 import { createDecor, type DecorState } from '../../src/core/decor';
 import { bigBox } from '../../src/scenes/decorLayout';
 
@@ -129,5 +129,15 @@ describe('decoration layer: the overview finds a special', () => {
     expect(layer.hitSpecial(...mid(0))).toEqual({ slot: 0, id: 'balloon' });
     expect(layer.hitSpecial(...mid(1))).toEqual({ slot: 1, id: 'ufo' });
     expect(layer.hitSpecial(5, 5)).toBeNull(); // the well's fake bounds: a decoration, not a special
+  });
+});
+
+describe('decoration size', () => {
+  it('a decoration grows in half steps (whole canvas pixels at zoom 2) as far as its spot allows', () => {
+    expect(fitScale(68, 38, 128, 150)).toBe(1.5); // the rose bed, just wider than two tiles: no longer 1
+    expect(fitScale(67, 42, 192, 180)).toBe(2.5); // the colourful bed on a three-tile spot: no longer 2
+    expect(fitScale(64, 35, 128, 150)).toBe(2); // the sunflowers fit two tiles exactly
+    expect(fitScale(43, 50, 128, 150)).toBe(2.5); // the tree: 125 high, under the height limit
+    expect(fitScale(300, 300, 128, 150)).toBe(0.5); // never vanishes
   });
 });
