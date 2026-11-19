@@ -20,6 +20,8 @@ export const TOAST_NEEDS_MEDICINE = '💊 要先吃藥';
 export const TOAST_PAT_AGAIN = '✋ 再摸摸牠';
 /** Said when a pet snack meets the wrong animal. */
 export const TOAST_SNACK_FOR = { bone: '🦴 是給狗狗的', fish: '🐟 是給貓咪的' } as const;
+/** A pet given a snack that is not its own (a 🍪, or the other pet's). */
+export const TOAST_PET_EATS = { dog: '狗狗只吃 🦴', cat: '貓咪只吃 🐟' } as const;
 
 /** The supply a tool uses on an animal of this species (feed is per species). */
 function supplyOf(tool: Tool, species: SpeciesId): ShopItemId | undefined {

@@ -317,20 +317,20 @@ describe('giveSnack', () => {
     return r;
   }
 
-  it('🦴 to the dog, 🐟 to the cat, 🍪 to either: each uses exactly what was given', () => {
+  it('🦴 to the dog, 🐟 to the cat: each uses exactly what was given', () => {
     const r = withPets();
     expect(giveSnack(r, 'p1', 'bone')).toEqual({ ok: true, used: 'bone' });
     expect(giveSnack(r, 'p2', 'fish')).toEqual({ ok: true, used: 'fish' });
-    expect(giveSnack(r, 'p1', 'treat')).toEqual({ ok: true, used: 'treat' });
-    expect(giveSnack(r, 'p2', 'treat')).toEqual({ ok: true, used: 'treat' });
-    expect([r.supplies.bone, r.supplies.fish, r.supplies.treat]).toEqual([0, 0, 0]);
+    expect([r.supplies.bone, r.supplies.fish]).toEqual([0, 0]);
   });
 
-  it('a 🦴 is not for the cat (nor a 🐟 for the dog): nothing is used', () => {
+  it('a 🦴 is not for the cat, a 🐟 not for the dog, a 🍪 for neither: nothing is used', () => {
     const r = withPets();
     expect(giveSnack(r, 'p2', 'bone')).toEqual({ ok: false, reason: 'wrong-pet' });
     expect(giveSnack(r, 'p1', 'fish')).toEqual({ ok: false, reason: 'wrong-pet' });
-    expect([r.supplies.bone, r.supplies.fish]).toEqual([1, 1]);
+    expect(giveSnack(r, 'p1', 'treat')).toEqual({ ok: false, reason: 'wrong-pet' });
+    expect(giveSnack(r, 'p2', 'treat')).toEqual({ ok: false, reason: 'wrong-pet' });
+    expect([r.supplies.bone, r.supplies.fish, r.supplies.treat]).toEqual([1, 1, 2]);
   });
 
   it('none left: nothing else is used in its place', () => {

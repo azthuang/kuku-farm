@@ -31,7 +31,7 @@ import {
   buySpecial, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
 } from './core/decor';
 import { createDecorUi, isSecondTap } from './ui/decorUi';
-import { careFeedback, TOAST_SNACK_FOR } from './ui/ranchFeedback';
+import { careFeedback, TOAST_PET_EATS } from './ui/ranchFeedback';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
 const CHANT_WAIT_MS = 3000;
@@ -607,12 +607,12 @@ export function startApp(root: HTMLElement): void {
         if (following !== id) startFollow(id);
         return;
       }
-      // 🍪 for either pet, 🦴 for the dog, 🐟 for the cat
+      // only 🦴 for the dog, only 🐟 for the cat (🍪 is for the farm animals)
       const res = giveSnack(game.state.ranch, id, snack);
       if (!res.ok) {
-        if (res.reason === 'wrong-pet' && snack !== 'treat') {
+        if (res.reason === 'wrong-pet') {
           sfx.play('nope');
-          layout.toast(TOAST_SNACK_FOR[snack]);
+          layout.toast(TOAST_PET_EATS[p.kind]);
           return;
         }
         sfx.play('collect'); // a gentle cue, then the shop at that snack
@@ -620,7 +620,7 @@ export function startApp(root: HTMLElement): void {
         return;
       }
       ranchChanged();
-      ranchScene.petFx(id, 'trick', res.used === 'treat' ? '🍪' : PET_SNACK_EMOJI[res.used]);
+      ranchScene.petFx(id, 'trick', PET_SNACK_EMOJI[res.used]);
       sfx.play(petVoice(p.kind));
     },
     onFollowLost: () => {
