@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Game, type AnswerResult, type Question } from './core/game';
+import { CHALLENGE_MULTIPLIER, Game, type AnswerResult, type Question } from './core/game';
 import { createNewState } from './core/state';
 import { CROP_BY_ROW, unlockedRows } from './core/levels';
 import { nextPracticeRow } from './core/practice';
@@ -40,7 +40,8 @@ const WRONG_CHANT_WAIT_MS = 3500;
 const WRONG_HOLD_MS = 1500;
 /** Exported blob URLs stay valid long enough for slow mobile download sheets. */
 const EXPORT_URL_TTL_MS = 40_000;
-const HINT: Record<Mode, string> = { basic: '點一列開始', challenge: '準備好了就開始！' };
+/** Challenge rounds harvest a × b × CHALLENGE_MULTIPLIER: the idle hint says so. */
+const HINT: Record<Mode, string> = { basic: '點一列開始', challenge: `🌾 收成 ×${CHALLENGE_MULTIPLIER}！` };
 /** The ranch is settled and redrawn this often while its tab is on screen. */
 const RANCH_TICK_MS = 1000;
 /** A special just shown: stars once the overview has zoomed out, then back to the page 2 s later. */
