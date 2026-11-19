@@ -1,11 +1,11 @@
 const DIGITS = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
 
-/** Chinese numeral for 1..81; 10 reads 一十 (chant style). */
+/** Chinese numeral for 1..81; 10 reads 十, so 2 × 5 is chanted 二五十. */
 export function toChineseNumber(n: number): string {
   if (n < 10) return DIGITS[n];
   const tens = Math.floor(n / 10);
   const ones = n % 10;
-  if (n < 20 && ones !== 0) return '十' + DIGITS[ones];
+  if (n < 20) return '十' + DIGITS[ones];
   return DIGITS[tens] + '十' + DIGITS[ones];
 }
 
