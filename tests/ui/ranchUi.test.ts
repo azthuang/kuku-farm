@@ -423,19 +423,38 @@ describe('ranch shop', () => {
     expect(buyBtn(root, 'bone').disabled).toBe(false);
   });
 
-  it('🍪 still picks up with no treats while a bone or fish is left (for the pets)', () => {
+  it('a 🦴 button once there is a dog and a 🐟 one once there is a cat, each counting its own', () => {
     const s = rich(st());
     const { root, ui } = setup(s);
     const picked: Tool[] = [];
     ui.onTool(t => picked.push(t));
+    expect(toolBtn(root, 'bone').hidden).toBe(true);
+    expect(toolBtn(root, 'fish').hidden).toBe(true);
+    buy(s, 'dog', T0, rng);
     s.ranch.supplies.bone = 2;
     ui.update(s);
-    expect(toolBtn(root, 'treat').classList.contains('empty')).toBe(false);
-    toolBtn(root, 'treat').click();
-    expect(picked).toEqual(['treat']);
+    expect(toolBtn(root, 'bone').hidden).toBe(false);
+    expect(toolBtn(root, 'bone').textContent).toBe('🦴2');
+    expect(toolBtn(root, 'fish').hidden).toBe(true);
+    toolBtn(root, 'bone').click();
+    expect(picked).toEqual(['bone']);
     expect(shopOpen(root)).toBe(false);
     s.ranch.supplies.bone = 0;
     ui.update(s);
+    expect(toolBtn(root, 'bone').classList.contains('empty')).toBe(true);
+    toolBtn(root, 'bone').click();
+    expect(shopOpen(root)).toBe(true);
+    expect(focused(root)).toBe('bone');
+  });
+
+  it('🍪 counts only treats: with none left it is empty and opens the shop, bones or not', () => {
+    const s = rich(st());
+    const { root, ui } = setup(s);
+    buy(s, 'dog', T0, rng);
+    s.ranch.supplies.bone = 2;
+    s.ranch.supplies.treat = 0;
+    ui.update(s);
+    expect(toolBtn(root, 'treat').classList.contains('empty')).toBe(true);
     toolBtn(root, 'treat').click();
     expect(shopOpen(root)).toBe(true);
     expect(focused(root)).toBe('treat');

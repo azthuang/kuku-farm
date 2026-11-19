@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { careFeedback, TOAST_NEEDS_MEDICINE, TOAST_PAT_AGAIN } from '../../src/ui/ranchFeedback';
+import { careFeedback, TOAST_NEEDS_MEDICINE, TOAST_PAT_AGAIN, TOAST_SNACK_FOR } from '../../src/ui/ranchFeedback';
 
 describe('careFeedback', () => {
   it('a pat on cooldown still jumps and clucks (the hand always works)', () => {
@@ -29,6 +29,12 @@ describe('careFeedback', () => {
     expect(careFeedback('treat', { ok: false, reason: 'sick' }, true, 'chicken')).toEqual(shake);
     expect(careFeedback('medicine', { ok: false, reason: 'not-sick' }, false, 'chicken')).toEqual(shake);
     expect(careFeedback('medicine', { ok: false, reason: 'nothing' }, true, 'chicken')).toEqual(shake);
+  });
+
+  it('a 🦴 or a 🐟 on a farm animal: a shake and whose snack it is', () => {
+    expect(TOAST_SNACK_FOR).toEqual({ bone: '🦴 是給狗狗的', fish: '🐟 是給貓咪的' });
+    expect(careFeedback('bone', { ok: false, reason: 'nothing' }, false, 'cow')).toEqual({ fx: 'shake', sound: 'nope', toast: '🦴 是給狗狗的' });
+    expect(careFeedback('fish', { ok: false, reason: 'nothing' }, false, 'chicken')).toEqual({ fx: 'shake', sound: 'nope', toast: '🐟 是給貓咪的' });
   });
 
   it('running out shakes and opens the shop at that supply', () => {

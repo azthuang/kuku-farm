@@ -313,29 +313,31 @@ describe('giveSnack', () => {
   function withPets(): RanchState {
     const r = createRanch(T0);
     r.pets = [{ id: 'p1', kind: 'dog', name: '旺財', color: '柴犬' }, { id: 'p2', kind: 'cat', name: '咪咪', color: '三花貓' }];
+    r.supplies.bone = 1; r.supplies.fish = 1; r.supplies.treat = 2;
     return r;
   }
 
-  it('the dog gets its bone and the cat its fish first', () => {
+  it('🦴 to the dog, 🐟 to the cat, 🍪 to either: each uses exactly what was given', () => {
     const r = withPets();
-    r.supplies.bone = 1; r.supplies.fish = 1; r.supplies.treat = 2;
-    expect(giveSnack(r, 'p1')).toEqual({ ok: true, used: 'bone' });
-    expect(giveSnack(r, 'p2')).toEqual({ ok: true, used: 'fish' });
-    expect([r.supplies.bone, r.supplies.fish, r.supplies.treat]).toEqual([0, 0, 2]);
+    expect(giveSnack(r, 'p1', 'bone')).toEqual({ ok: true, used: 'bone' });
+    expect(giveSnack(r, 'p2', 'fish')).toEqual({ ok: true, used: 'fish' });
+    expect(giveSnack(r, 'p1', 'treat')).toEqual({ ok: true, used: 'treat' });
+    expect(giveSnack(r, 'p2', 'treat')).toEqual({ ok: true, used: 'treat' });
+    expect([r.supplies.bone, r.supplies.fish, r.supplies.treat]).toEqual([0, 0, 0]);
   });
 
-  it('with no bone or fish left, a 🍪 treat does the trick too', () => {
+  it('a 🦴 is not for the cat (nor a 🐟 for the dog): nothing is used', () => {
     const r = withPets();
-    r.supplies.bone = 0; r.supplies.fish = 0; r.supplies.treat = 2;
-    expect(giveSnack(r, 'p1')).toEqual({ ok: true, used: 'treat' });
-    expect(giveSnack(r, 'p2')).toEqual({ ok: true, used: 'treat' });
-    expect(r.supplies.treat).toBe(0);
+    expect(giveSnack(r, 'p2', 'bone')).toEqual({ ok: false, reason: 'wrong-pet' });
+    expect(giveSnack(r, 'p1', 'fish')).toEqual({ ok: false, reason: 'wrong-pet' });
+    expect([r.supplies.bone, r.supplies.fish]).toEqual([1, 1]);
   });
 
-  it('nothing to give: none left, and nothing used', () => {
+  it('none left: nothing else is used in its place', () => {
     const r = withPets();
-    r.supplies.bone = 0; r.supplies.treat = 0;
-    expect(giveSnack(r, 'p1')).toEqual({ ok: false, reason: 'none-left' });
-    expect(giveSnack(r, 'nobody')).toEqual({ ok: false, reason: 'nothing' });
+    r.supplies.bone = 0;
+    expect(giveSnack(r, 'p1', 'bone')).toEqual({ ok: false, reason: 'none-left' });
+    expect(r.supplies.treat).toBe(2);
+    expect(giveSnack(r, 'nobody', 'treat')).toEqual({ ok: false, reason: 'nothing' });
   });
 });

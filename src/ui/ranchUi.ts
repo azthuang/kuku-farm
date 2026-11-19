@@ -9,11 +9,11 @@ import {
 import {
   FARM_LOT, LOT_COUNT, PETS, PET_KINDS, PET_SNACK_EMOJI, PRODUCT_EMOJI, SPECIES, SPECIES_EMOJI, SPECIES_ORDER,
   speciesOfHouse, speciesOfLot,
-  type HouseKind, type ProductId, type SpeciesId, type SupplyId,
+  type HouseKind, type PetKind, type PetSnackId, type ProductId, type SpeciesId, type SupplyId,
 } from '../core/species';
 import type { GameState } from '../core/state';
 
-export type Tool = 'hand' | 'feed' | 'brush' | 'treat' | 'medicine';
+export type Tool = 'hand' | 'feed' | 'brush' | 'treat' | 'medicine' | 'bone' | 'fish';
 
 export interface RanchUi {
   setTool(t: Tool): void;
@@ -63,12 +63,15 @@ const OVERVIEW_TITLE = '🗺️ 我的牧場';
 /** Called 農田 like the field tab (same 🌾), so the child sees one place in two views. */
 const GARDEN_TITLE = '🌾 我的農田';
 
-const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: 'treat' | 'medicine' }[] = [
+/** The 🦴 and 🐟 show up once their pet lives on the farm (`pet`). */
+const TOOLS: readonly { tool: Tool; icon: string; label: string; supply?: 'treat' | 'medicine' | PetSnackId; pet?: PetKind }[] = [
   { tool: 'hand', icon: '✋', label: '摸摸' },
   { tool: 'feed', icon: '', label: '飼料' },
   { tool: 'brush', icon: '🪮', label: '刷毛' },
   { tool: 'treat', icon: '🍪', label: '零食', supply: 'treat' },
   { tool: 'medicine', icon: '💊', label: '藥', supply: 'medicine' },
+  { tool: 'bone', icon: '🦴', label: '狗骨頭', supply: 'bone', pet: 'dog' },
+  { tool: 'fish', icon: '🐟', label: '小魚乾', supply: 'fish', pet: 'cat' },
 ];
 
 /** Pet names in the shop and on its buttons. */
@@ -193,16 +196,13 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
           return;
         }
       } else if (s && t.supply && s.ranch.supplies[t.supply] < 1) {
-        // 🍪 also hands out the dog's bones and the cat's fish: usable while any of them is left
-        const snacks = t.tool === 'treat' && PET_KINDS.some(k => s.ranch.supplies[PETS[k].snack] > 0);
-        if (!snacks) {
-          openShop(t.supply);
-          return;
-        }
+        openShop(t.supply);
+        return;
       }
       setTool(t.tool);
       toolCb(t.tool);
     });
+    if (t.pet) btn.hidden = true; // until that pet is bought
     toolBtns.set(t.tool, { btn, icon, count });
     bar.append(btn);
   }
@@ -334,9 +334,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
       } else if (t.supply) {
         const n = s.ranch.supplies[t.supply as SupplyId];
         count.textContent = String(n);
-        // 🍪 is not empty while a bone or a fish is left for the pets
-        const snacks = t.tool === 'treat' && PET_KINDS.some(k => s.ranch.supplies[PETS[k].snack] > 0);
-        btn.classList.toggle('empty', n < 1 && !snacks);
+        btn.classList.toggle('empty', n < 1);
+        if (t.pet) btn.hidden = !s.ranch.pets.some(p => p.kind === t.pet);
       }
     }
   }

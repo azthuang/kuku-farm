@@ -31,7 +31,7 @@ import {
   buySpecial, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
 } from './core/decor';
 import { createDecorUi, isSecondTap } from './ui/decorUi';
-import { careFeedback } from './ui/ranchFeedback';
+import { careFeedback, TOAST_SNACK_FOR } from './ui/ranchFeedback';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
 const CHANT_WAIT_MS = 3000;
@@ -518,6 +518,7 @@ export function startApp(root: HTMLElement): void {
       case 'brush': res = brush(r, id, now); break;
       case 'treat': res = giveTreat(r, id, now); break;
       case 'medicine': res = giveMedicine(r, id, now); break;
+      case 'bone': case 'fish': res = { ok: false, reason: 'nothing' }; break; // the dog's and the cat's
     }
     ranchChanged();
     const a = r.animals.find(x => x.id === id);
@@ -562,8 +563,7 @@ export function startApp(root: HTMLElement): void {
   /** The tool a purchase hands the child: any species' feed is the feed tool; treats and medicine are themselves. */
   function toolFor(item: ShopItemId): Tool | null {
     if ((FEED_IDS as readonly string[]).includes(item)) return 'feed';
-    if (item === 'bone' || item === 'fish') return 'treat'; // 🍪 hands the pets their snacks
-    return item === 'treat' || item === 'medicine' ? item : null;
+    return item === 'treat' || item === 'medicine' || item === 'bone' || item === 'fish' ? item : null;
   }
 
   ranchScene.setHandlers({
@@ -598,18 +598,24 @@ export function startApp(root: HTMLElement): void {
     onPet: id => {
       const p = game.state.ranch.pets.find(x => x.id === id);
       if (!p || ranchScene.petBusy(id)) return; // mid-trick: a fast second tap must not eat a snack
-      if (tool !== 'treat' || ranchOverview) {
+      const snack = tool === 'treat' || tool === 'bone' || tool === 'fish' ? tool : null;
+      if (!snack || ranchOverview) {
         ranchScene.petFx(id, 'jump');
         sfx.play(petVoice(p.kind));
         // see the farm through its eyes: zoom in and follow it on its rounds
         if (following !== id) startFollow(id);
         return;
       }
-      // 🍪 on the dog or the cat hands it its own snack (a bone, a fish), or a 🍪 when none is left
-      const res = giveSnack(game.state.ranch, id);
+      // 🍪 for either pet, 🦴 for the dog, 🐟 for the cat
+      const res = giveSnack(game.state.ranch, id, snack);
       if (!res.ok) {
+        if (res.reason === 'wrong-pet' && snack !== 'treat') {
+          sfx.play('nope');
+          layout.toast(TOAST_SNACK_FOR[snack]);
+          return;
+        }
         sfx.play('collect'); // a gentle cue, then the shop at that snack
-        ranchUi.openShop(PETS[p.kind].snack);
+        ranchUi.openShop(snack);
         return;
       }
       ranchChanged();

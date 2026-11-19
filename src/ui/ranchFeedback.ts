@@ -18,11 +18,13 @@ export interface CareFeedback {
 
 export const TOAST_NEEDS_MEDICINE = '💊 要先吃藥';
 export const TOAST_PAT_AGAIN = '✋ 再摸摸牠';
+/** Said when a pet snack meets the wrong animal. */
+export const TOAST_SNACK_FOR = { bone: '🦴 是給狗狗的', fish: '🐟 是給貓咪的' } as const;
 
 /** The supply a tool uses on an animal of this species (feed is per species). */
 function supplyOf(tool: Tool, species: SpeciesId): ShopItemId | undefined {
   if (tool === 'feed') return SPECIES[species].feed;
-  return tool === 'treat' || tool === 'medicine' ? tool : undefined;
+  return tool === 'treat' || tool === 'medicine' || tool === 'bone' || tool === 'fish' ? tool : undefined;
 }
 
 function pat(stillSick: boolean, voice: SfxName): CareFeedback {
@@ -40,6 +42,7 @@ function pat(stillSick: boolean, voice: SfxName): CareFeedback {
 export function careFeedback(tool: Tool, res: CareResult, stillSick: boolean, species: SpeciesId): CareFeedback {
   const voice = voiceOf(species);
   if (!res.ok) {
+    if ((tool === 'bone' || tool === 'fish') && res.reason === 'nothing') return { fx: 'shake', sound: 'nope', toast: TOAST_SNACK_FOR[tool] };
     if (res.reason === 'cooldown') {
       if (tool === 'hand') return pat(stillSick, voice);
       if (tool === 'brush') return { fx: 'brush', sound: 'sweep' };
@@ -51,7 +54,7 @@ export function careFeedback(tool: Tool, res: CareResult, stillSick: boolean, sp
     case 'hand': return res.healed ? { fx: 'heal', sound: 'heal' } : pat(stillSick, voice);
     case 'feed': return { fx: 'eat', sound: voice };
     case 'brush': return { fx: 'brush', sound: 'sweep' };
-    case 'treat': return { fx: 'treat', sound: voice };
+    case 'treat': case 'bone': case 'fish': return { fx: 'treat', sound: voice };
     case 'medicine': return { fx: 'weak', toast: TOAST_PAT_AGAIN, nextTool: 'hand' };
   }
 }

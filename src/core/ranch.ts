@@ -168,20 +168,19 @@ export function feed(r: RanchState, animalId: string, now: number): CareResult {
   });
 }
 
-export type SnackResult = { ok: true; used: PetSnackId | 'treat' } | { ok: false; reason: 'none-left' | 'nothing' };
+export type SnackResult = { ok: true; used: PetSnackId | 'treat' } | { ok: false; reason: 'none-left' | 'nothing' | 'wrong-pet' };
 
 /**
- * Gives the dog a bone or the cat a fish, or a 🍪 treat when none is left: it only uses the snack
- * (the scene plays the trick with whatever was used).
+ * Gives a pet the snack the child picked: a 🍪 treat to either, the bone only to the dog, the fish
+ * only to the cat. It only uses the snack (the scene plays the trick).
  */
-export function giveSnack(r: RanchState, petId: string): SnackResult {
+export function giveSnack(r: RanchState, petId: string, item: PetSnackId | 'treat'): SnackResult {
   const p = r.pets.find((x) => x.id === petId);
   if (!p) return { ok: false, reason: 'nothing' };
-  const snack = PETS[p.kind].snack;
-  const used = r.supplies[snack] > 0 ? snack : r.supplies.treat > 0 ? 'treat' : null;
-  if (!used) return { ok: false, reason: 'none-left' };
-  r.supplies[used] -= 1;
-  return { ok: true, used };
+  if (item !== 'treat' && item !== PETS[p.kind].snack) return { ok: false, reason: 'wrong-pet' };
+  if (r.supplies[item] < 1) return { ok: false, reason: 'none-left' };
+  r.supplies[item] -= 1;
+  return { ok: true, used: item };
 }
 
 export function pet(r: RanchState, animalId: string, now: number): CareResult {
