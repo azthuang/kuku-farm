@@ -133,11 +133,14 @@ describe('decoration layer: the overview finds a special', () => {
 });
 
 describe('decoration size', () => {
-  it('a decoration grows in half steps (whole canvas pixels at zoom 2) as far as its spot allows', () => {
-    expect(fitScale(68, 38, 128, 150)).toBe(1.5); // the rose bed, just wider than two tiles: no longer 1
-    expect(fitScale(67, 42, 192, 180)).toBe(2.5); // the colourful bed on a three-tile spot: no longer 2
-    expect(fitScale(64, 35, 128, 150)).toBe(2); // the sunflowers fit two tiles exactly
-    expect(fitScale(43, 50, 128, 150)).toBe(2.5); // the tree: 125 high, under the height limit
-    expect(fitScale(300, 300, 128, 150)).toBe(0.5); // never vanishes
+  it('the three small flower beds and the little tree grow in half steps; the rest in whole ones', () => {
+    expect(fitScale('roses', 68, 38, 128, 150)).toBe(1.5); // just wider than two tiles: no longer 1
+    expect(fitScale('flowers', 67, 42, 192, 180)).toBe(2.5); // on a three-tile spot: no longer 2
+    expect(fitScale('bluebells', 67, 40, 128, 150)).toBe(1.5);
+    expect(fitScale('tree', 43, 50, 128, 150)).toBe(2.5);
+    expect(fitScale('bench', 51, 48, 128, 150)).toBe(2); // the parent liked these as they were
+    expect(fitScale('pumpkins', 51, 44, 192, 180)).toBe(3);
+    expect(fitScale('well', 41, 60, 128, 150)).toBe(2);
+    expect(fitScale('roses', 300, 300, 128, 150)).toBe(0.5); // never vanishes
   });
 });

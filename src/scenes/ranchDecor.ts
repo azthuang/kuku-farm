@@ -11,13 +11,18 @@ export const DECOR_LPC_TEX = 'decor-lpc';
 export const DECOR_MADE_TEX = 'decor-made';
 type Frames = Partial<Record<string, readonly [number, number, number, number]>>;
 /**
- * A decoration fills its spot: the largest half-step scale that fits the spot's width (two or
- * three tiles) and height limit. A half world unit is one canvas pixel at the care view's zoom
- * (ASSET_RES 2), so its pixels stay square and crisp. Pigeons are drawn at PIGEON_SCALE.
+ * A decoration fills its spot: the largest whole-number scale that fits the spot's width (two or
+ * three tiles) and height limit, so its pixels stay crisp. The small flower beds (a few pixels
+ * wider than a tile, so whole steps left them at half their spot) and the little tree grow in
+ * half steps instead: half a world unit is one canvas pixel at the care view's zoom (ASSET_RES 2),
+ * so their pixels stay square too. Pigeons are drawn at PIGEON_SCALE.
  */
 const PIGEON_SCALE = 3;
-export const fitScale = (w: number, h: number, boxW: number, boxH: number): number =>
-  Math.max(0.5, Math.floor(Math.min(boxW / w, boxH / h) * 2) / 2);
+const HALF_STEPS: ReadonlySet<string> = new Set(['roses', 'flowers', 'bluebells', 'tree']);
+export function fitScale(id: string, w: number, h: number, boxW: number, boxH: number): number {
+  const steps = HALF_STEPS.has(id) ? 2 : 1;
+  return Math.max(1 / steps, Math.floor(Math.min(boxW / w, boxH / h) * steps) / steps);
+}
 
 type Img = Phaser.GameObjects.Image;
 type Fx = Phaser.Tweens.Tween | Phaser.Time.TimerEvent;
@@ -176,7 +181,7 @@ export class DecorLayer {
     if (id !== 'pigeons') {
       const a = this.art(id);
       if (a) {
-        v.img.setTexture(a.key, id).setScale(fitScale(a.w, a.h, p.w, p.h));
+        v.img.setTexture(a.key, id).setScale(fitScale(id, a.w, a.h, p.w, p.h));
       } else {
         this.tex(v.img, DECOR[id].emoji, Math.min(p.w, p.h) * 0.8);
       }
