@@ -133,14 +133,14 @@ describe('decoration layer: the overview finds a special', () => {
 });
 
 describe('decoration size', () => {
-  it('the three small flower beds and the little tree grow in half steps; the rest in whole ones', () => {
-    expect(fitScale('roses', 68, 38, 128, 150)).toBe(1.5); // just wider than two tiles: no longer 1
-    expect(fitScale('flowers', 67, 42, 192, 180)).toBe(2.5); // on a three-tile spot: no longer 2
-    expect(fitScale('bluebells', 67, 40, 128, 150)).toBe(1.5);
+  it('the three small flower beds span their spot exactly, the little tree grows in half steps, the rest in whole ones', () => {
+    expect(fitScale('roses', 68, 38, 128, 150) * 68).toBeCloseTo(128); // just wider than two tiles: no longer 1
+    expect(fitScale('flowers', 67, 42, 192, 180) * 67).toBeCloseTo(192); // on a three-tile spot: no longer 2
+    expect(fitScale('bluebells', 67, 40, 128, 150) * 67).toBeCloseTo(128);
     expect(fitScale('tree', 43, 50, 128, 150)).toBe(2.5);
     expect(fitScale('pond', 64, 38, 128, 150)).toBe(2); // the parent liked these as they were
     expect(fitScale('pumpkins', 51, 44, 192, 180)).toBe(3);
     expect(fitScale('well', 41, 60, 128, 150)).toBe(2);
-    expect(fitScale('roses', 300, 300, 128, 150)).toBe(0.5); // never vanishes
+    expect(fitScale('tree', 300, 300, 128, 150)).toBe(0.5); // never vanishes
   });
 });

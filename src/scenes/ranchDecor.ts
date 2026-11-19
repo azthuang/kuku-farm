@@ -12,16 +12,19 @@ export const DECOR_MADE_TEX = 'decor-made';
 type Frames = Partial<Record<string, readonly [number, number, number, number]>>;
 /**
  * A decoration fills its spot: the largest whole-number scale that fits the spot's width (two or
- * three tiles) and height limit, so its pixels stay crisp. The small flower beds (a few pixels
- * wider than a tile, so whole steps left them at half their spot) and the little tree grow in
- * half steps instead: half a world unit is one canvas pixel at the care view's zoom (ASSET_RES 2),
- * so their pixels stay square too. Pigeons are drawn at PIGEON_SCALE.
+ * three tiles) and height limit, so its pixels stay crisp. The small flower beds are a few pixels
+ * wider than a tile, so whole steps left them at half their spot: they stretch to fit it exactly.
+ * The little tree grows in half steps (half a world unit is one canvas pixel at the care view's
+ * zoom, ASSET_RES 2, so its pixels stay square). Pigeons are drawn at PIGEON_SCALE.
  */
 const PIGEON_SCALE = 3;
-const HALF_STEPS: ReadonlySet<string> = new Set(['roses', 'flowers', 'bluebells', 'tree']);
+const EXACT_FIT: ReadonlySet<string> = new Set(['roses', 'flowers', 'bluebells']);
+const HALF_STEPS: ReadonlySet<string> = new Set(['tree']);
 export function fitScale(id: string, w: number, h: number, boxW: number, boxH: number): number {
+  const fit = Math.min(boxW / w, boxH / h);
+  if (EXACT_FIT.has(id)) return fit;
   const steps = HALF_STEPS.has(id) ? 2 : 1;
-  return Math.max(1 / steps, Math.floor(Math.min(boxW / w, boxH / h) * steps) / steps);
+  return Math.max(1 / steps, Math.floor(fit * steps) / steps);
 }
 
 type Img = Phaser.GameObjects.Image;
