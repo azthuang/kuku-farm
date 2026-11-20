@@ -6,6 +6,8 @@ import { BIG_SPOTS, DECOR_SPOTS, bigBox, createBusy, spotFoot } from './decorLay
 import { DECOR_LPC_FRAMES } from './decorAtlas';
 import { DECOR_MADE_FRAMES, SPECIAL_FRAMES } from './decorMadeAtlas';
 import { FISH_PALETTE, FISH_ROWS, RABBIT_PALETTE, RABBIT_ROWS, pixelTexture } from './pixelArt';
+import { SCENERY_WORLD } from './ranchScenery';
+import { BALLOON_MS, DINO_MS, UFO_MS, balloonAt, dinoAt, ufoAt, ufoTarget } from './trickMoves';
 
 /** Texture keys of public/assets/decor/lpc.png and made.png (loaded by the scene). */
 export const DECOR_LPC_TEX = 'decor-lpc';
@@ -39,6 +41,8 @@ export interface DecorDeps {
   sparkle(x: number, y: number): void;
   /** Depth of the garden's decorations and the specials. */
   depth: number;
+  /** Depth of a special in the air (the balloon's round, the UFO, the rocket): above everything. */
+  flyDepth: number;
   /** Depth of something standing at world y inside a pen (sorted with the animals). */
   ySort(y: number): number;
 }
@@ -53,7 +57,9 @@ export const FADED_ALPHA = 0.45;
 /** A tap this far outside a spot's box still counts (small fingers, small targets). */
 const HIT_PAD = 10;
 /** How long each trick runs: a tap meanwhile starts nothing. */
-const SHOW_MS: Record<SpecialId, number> = { xmasTree: 900, balloon: 4200, rocket: 5200, ufo: 1600, dino: 1000 };
+const TREE_MS = 3000;
+const ROCKET_MS = 5200;
+const SHOW_MS: Record<SpecialId, number> = { xmasTree: TREE_MS, balloon: BALLOON_MS, rocket: ROCKET_MS, ufo: UFO_MS, dino: DINO_MS };
 export const PIGEON_FLY_MS = 1600;
 /** The pond's fish: out of the water, an arc, back in. The bush's rabbit: out, a look round, back in. */
 export const FISH_JUMP_MS = 1000;
@@ -72,7 +78,13 @@ interface SpotView {
   open: boolean;
   fx: Fx[];
 }
-interface BigView { img: Img; id: SpecialId | null; fx: Fx[] }
+interface BigView {
+  img: Img;
+  id: SpecialId | null;
+  fx: Fx[];
+  /** Drawn only for a trick (the UFO's beam, the tree's glow): gone when it ends or the special does. */
+  extras: Phaser.GameObjects.GameObject[];
+}
 
 /**
  * The decorations on the map: one image per spot (or a faint wooden ＋ sign on an open, empty
@@ -102,7 +114,7 @@ export class DecorLayer {
     const big = (i: 0 | 1): BigView => {
       const p = BIG_SPOTS[i];
       const img = scene.add.image(p.x, p.y, '__MISSING').setOrigin(0.5, 1).setDepth(deps.depth + 0.1).setVisible(false);
-      return { img, id: null, fx: [] };
+      return { img, id: null, fx: [], extras: [] };
     };
     this.bigs = [big(0), big(1)];
   }
@@ -231,9 +243,11 @@ export class DecorLayer {
   private setBig(slot: 0 | 1, b: BigView, id: SpecialId | null): void {
     this.stop(b.fx);
     this.scene.tweens.killTweensOf(b.img);
+    for (const e of b.extras) e.destroy();
+    b.extras = [];
     const p = BIG_SPOTS[slot];
     b.id = id;
-    b.img.setPosition(p.x, p.y).setAngle(0).setAlpha(1).clearTint().setVisible(!!id);
+    b.img.setPosition(p.x, p.y).setAngle(0).setAlpha(1).setFlipX(false).clearTint().setDepth(this.deps.depth + 0.1).setVisible(!!id);
     if (!id) return;
     const a = this.art(id);
     // as big as its spot allows (about the farmhouse oak's size in the west strip)
@@ -317,66 +331,143 @@ export class DecorLayer {
     return null;
   }
 
-  /** The special's trick (rocket launch, UFO beam …); false while the last one still runs. */
+  /**
+   * The special's trick; false while the last one still runs. The tree dances and glows, the
+   * balloon flies once round the farm, the rocket goes up out of sight and lands again, the UFO
+   * visits the cow pen and shines its beam down, the dinosaur hops left and right. Each ends by
+   * setting the special up afresh on its spot, idle moves and all.
+   */
   play(slot: 0 | 1): boolean {
     const b = this.bigs[slot];
-    if (!b.id || !this.busy.start(`big${slot}`, SHOW_MS[b.id], this.scene.time.now)) return false;
+    const id = b.id;
+    if (!id || !this.busy.start(`big${slot}`, SHOW_MS[id], this.scene.time.now)) return false;
     const p = BIG_SPOTS[slot];
     const img = b.img;
-    const tw = this.scene.tweens;
-    switch (b.id) {
-      case 'xmasTree':
-        this.deps.sparkle(p.x, p.y - img.displayHeight * 0.6);
-        this.deps.sparkle(p.x, p.y - img.displayHeight * 0.3);
-        tw.add({ targets: img, scaleX: img.scaleX * 1.06, scaleY: img.scaleY * 1.06, duration: 160, yoyo: true, repeat: 1 });
-        break;
-      case 'balloon':
-        this.puff(p.x, p.y - img.displayHeight * 0.3, 0xff8a30, 1);
-        tw.killTweensOf(img);
-        tw.chain({
-          targets: img,
-          tweens: [
-            { y: p.y - 150, x: p.x + 30, duration: 1500, ease: 'Sine.Out' },
-            { y: p.y - 150, duration: 1000 },
-            { y: p.y, x: p.x, duration: 1500, ease: 'Sine.InOut' },
-          ],
-          onComplete: () => { if (b.id === 'balloon') this.setBig(slot, b, 'balloon'); },
+    this.stop(b.fx); // the idle moves pause for the show
+    this.scene.tweens.killTweensOf(img);
+    img.clearTint();
+    const size = img.scaleX;
+    const h = img.displayHeight;
+    let step: (k: number) => void = () => {};
+    switch (id) {
+      case 'xmasTree': {
+        // a warm glow behind it, its lights flashing fast, and a wiggle from the trunk up
+        const glow = this.extra(b, this.scene.add.graphics().setDepth(this.deps.depth + 0.09).setPosition(p.x, p.y - h * 0.5));
+        for (let r = 6; r >= 1; r--) glow.fillStyle(0xfff3a0, 0.2).fillCircle(0, 0, (h * 0.75 * r) / 6);
+        glow.setAlpha(0);
+        const tints = [0xfff1a8, 0xffd0d0, 0xd8f4ff, 0xffffff];
+        let i = 0;
+        this.loop(b.fx, 120, () => img.setTint(tints[i++ % tints.length]));
+        for (const d of [0, 1000, 2000]) this.once(b.fx, d, () => {
+          this.deps.sparkle(p.x, p.y - h * 0.85);
+          this.deps.sparkle(p.x + (Math.random() - 0.5) * h * 0.4, p.y - h * 0.4);
         });
+        step = k => {
+          const env = Math.sin(Math.PI * k);
+          const bounce = env * Math.sin(2 * Math.PI * 10 * k);
+          img.setAngle(9 * env * Math.sin(2 * Math.PI * 5 * k));
+          img.setScale(size * (1 - 0.03 * bounce), size * (1 + 0.05 * bounce));
+          glow.setAlpha(env * (0.75 + 0.25 * Math.sin(2 * Math.PI * 6 * k)));
+        };
+        break;
+      }
+      case 'balloon':
+        this.puff(p.x, p.y - h * 0.3, 0xff8a30, 1);
+        img.setDepth(this.deps.flyDepth);
+        step = k => {
+          const q = balloonAt(p, k);
+          img.setPosition(q.x, q.y).setScale(size * q.scale);
+        };
         break;
       case 'rocket': {
-        // a little shake for the countdown, then up and away, and back down again
-        tw.chain({
-          targets: img,
-          tweens: [
-            { x: p.x - 3, duration: 50, yoyo: true, repeat: 8 },
-            { y: p.y - 1400, duration: 1100, ease: 'Quad.In' },
-            { y: p.y - 1400, duration: 1400 },
-            { y: p.y, duration: 1300, ease: 'Quad.Out' },
-          ],
+        // a little shake for the countdown, straight up and out of sight, a wait, and down again
+        const top = Math.min(this.scene.cameras?.main?.worldView?.y ?? SCENERY_WORLD.y, SCENERY_WORLD.y) - 60;
+        img.setDepth(this.deps.flyDepth);
+        let at = 0;
+        this.loop(b.fx, 100, () => {
+          const up = at > 0.15 && at < 0.4;
+          const landing = at > 0.8 && at < 0.97;
+          if (up || landing) this.puff(img.x, img.y + 4, 0xffd27a, landing ? 0.7 : 1, this.deps.flyDepth - 0.01);
         });
-        this.scene.time.delayedCall(950, () => {
-          for (let i = 0; i < 5; i++) this.scene.time.delayedCall(i * 120, () => this.puff(p.x, p.y - 6, 0xeeeeee, 1.1));
-        });
+        step = k => {
+          at = k;
+          let y = p.y;
+          let x = p.x;
+          if (k < 0.15) {
+            x += Math.floor(k * 120) % 2 ? 3 : -3;
+          } else {
+            if (k < 0.4) {
+              const u = (k - 0.15) / 0.25;
+              y = p.y + (top - p.y) * u * u; // speeding up
+            } else if (k < 0.62) {
+              y = top;
+            } else {
+              const u = Math.min(1, (k - 0.62) / 0.35);
+              y = top + (p.y - top) * (1 - (1 - u) * (1 - u)); // slowing down to land
+            }
+          }
+          img.setPosition(x, y);
+        };
         break;
       }
       case 'ufo': {
-        const beam = this.scene.add.graphics().setDepth(this.deps.depth + 0.05).setAlpha(0);
-        const y0 = img.y - img.displayHeight * 0.35;
-        beam.fillStyle(0xfff6a8, 0.55).fillTriangle(p.x - 18, y0, p.x + 18, y0, p.x + 56, p.y + 30)
-          .fillTriangle(p.x - 18, y0, p.x - 56, p.y + 30, p.x + 56, p.y + 30);
-        tw.add({ targets: beam, alpha: 1, duration: 220, yoyo: true, hold: 900, onComplete: () => beam.destroy() });
-        this.deps.sparkle(p.x, p.y + 10);
+        const t = ufoTarget();
+        const over = ufoAt(p, 0.5);
+        const beam = this.extra(b, this.scene.add.graphics().setDepth(this.deps.flyDepth - 0.01).setAlpha(0));
+        const y0 = over.y - h * 0.3;
+        const ground = t.y + 50;
+        beam.fillStyle(0xfff6a8, 0.5).fillTriangle(t.x - 26, y0, t.x + 26, y0, t.x + 110, ground)
+          .fillTriangle(t.x - 26, y0, t.x - 110, ground, t.x + 110, ground)
+          .fillStyle(0xffffff, 0.45).fillEllipse(t.x, ground, 240, 56);
+        img.setDepth(this.deps.flyDepth);
+        let lit = false;
+        step = k => {
+          const q = ufoAt(p, k);
+          img.setPosition(q.x, q.y);
+          beam.setAlpha(q.beam ? 0.7 + 0.3 * Math.sin(k * Math.PI * 24) : 0);
+          if (q.beam && !lit) {
+            lit = true;
+            this.deps.sparkle(t.x, ground - 30);
+          }
+          if (q.beam) img.setTint([0xffffff, 0xbff7ff, 0xfff0b0][Math.floor(k * 30) % 3]);
+          else img.clearTint();
+        };
         break;
       }
-      case 'dino':
-        tw.add({ targets: img, y: p.y - 26, duration: 160, yoyo: true, repeat: 1, ease: 'Quad.Out' });
-        for (const d of [300, 620]) this.scene.time.delayedCall(d, () => {
-          this.puff(p.x - 40, p.y - 4, 0xc8a878, 0.8);
-          this.puff(p.x + 40, p.y - 4, 0xc8a878, 0.8);
-        });
+      case 'dino': {
+        let airborne = false;
+        step = k => {
+          const q = dinoAt(k);
+          img.setPosition(p.x + q.dx, p.y + q.dy).setFlipX(q.left);
+          if (q.dy < 0) {
+            airborne = true;
+          } else if (airborne) { // a landing: dust on both sides
+            airborne = false;
+            this.puff(img.x - 40, p.y - 4, 0xc8a878, 0.7);
+            this.puff(img.x + 40, p.y - 4, 0xc8a878, 0.7);
+          }
+        };
         break;
+      }
     }
+    const t = { k: 0 };
+    const show = this.scene.tweens.add({
+      targets: t, k: 1, duration: SHOW_MS[id],
+      onUpdate: () => { if (img.active && b.id === id) step(t.k); },
+      onComplete: () => {
+        const i = b.fx.indexOf(show);
+        if (i >= 0) b.fx.splice(i, 1);
+        if (img.active && b.id === id) this.setBig(slot, b, id);
+      },
+    });
+    b.fx.push(show);
     return true;
+  }
+
+  /** Something drawn for a special's trick only. */
+  private extra<T extends Phaser.GameObjects.GameObject>(b: BigView, o: T): T {
+    b.extras.push(o);
+    return o;
   }
 
   /** A decoration's trick on a tap (pigeons, pond, bush); false for one without, or while it still runs. */
@@ -525,8 +616,8 @@ export class DecorLayer {
   }
 
   /** A soft round cloud: smoke, flame, dust. */
-  private puff(x: number, y: number, color: number, size: number): void {
-    const g = this.scene.add.graphics().setDepth(this.deps.depth + 0.2).setPosition(x, y);
+  private puff(x: number, y: number, color: number, size: number, depth = this.deps.depth + 0.2): void {
+    const g = this.scene.add.graphics().setDepth(depth).setPosition(x, y);
     g.fillStyle(color, 0.85).fillCircle(0, 0, 14 * size).fillCircle(-10 * size, 4, 10 * size).fillCircle(11 * size, 3, 11 * size);
     this.scene.tweens.add({
       targets: g, y: y - 26 * size, scaleX: 2, scaleY: 2, alpha: 0, duration: 750, onComplete: () => g.destroy(),

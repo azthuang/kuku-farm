@@ -5,7 +5,8 @@ vi.mock('phaser', () => ({ default: { Textures: { FilterMode: { NEAREST: 1 } } }
 
 import { DecorLayer, FADED_ALPHA, fitScale } from '../../src/scenes/ranchDecor';
 import { createDecor, type DecorState } from '../../src/core/decor';
-import { bigBox } from '../../src/scenes/decorLayout';
+import { BIG_SPOTS, bigBox } from '../../src/scenes/decorLayout';
+import { balloonAt, ufoAt } from '../../src/scenes/trickMoves';
 
 /** A stand-in scene: records timers and tweens so a test can fire them, and images that throw once destroyed. */
 function fakeScene() {
@@ -23,9 +24,9 @@ function fakeScene() {
       return img;
     };
     Object.assign(img, {
-      setOrigin: live(() => {}), setDepth: live(() => {}), setVisible: live(() => {}), setScale: live(() => {}),
+      setOrigin: live(() => {}), setDepth: live((d) => { img.depth = d; }), setVisible: live(() => {}), setScale: live((k) => { img.scaleX = k; }),
       setTexture: live((k, f) => { (img.texture as { key: unknown }).key = k; img.frameName = f; }), setFlipX: live((f) => { img.flipX = f; }),
-      setPosition: live(() => {}), setAngle: live(() => {}), setAlpha: live((a) => { img.alpha = a; }), setTint: live(() => {}), clearTint: live(() => {}),
+      setPosition: live((x, y) => { img.x = x; img.y = y; }), setAngle: live((a) => { img.angle = a; }), setAlpha: live((a) => { img.alpha = a; }), setTint: live(() => {}), clearTint: live(() => {}),
       getBounds: () => ({ x: 0, y: 0, width: 10, height: 10 }),
       destroy: () => { img.active = false; },
     });
@@ -70,7 +71,7 @@ function fakeScene() {
       (t.cfg.onComplete as (() => void) | undefined)?.();
     }
   };
-  return { scene, timers, flush, images };
+  return { scene, timers, tweens, flush, images };
 }
 
 function decor(placed: DecorState['placed']): DecorState {
@@ -80,7 +81,7 @@ function decor(placed: DecorState['placed']): DecorState {
 afterEach(() => vi.restoreAllMocks());
 
 describe('decoration layer: pigeons', () => {
-  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, ySort: (y: number) => 10 + y / 10000 };
+  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, flyDepth: 50, ySort: (y: number) => 10 + y / 10000 };
   const open = () => true;
 
   it('taking the pigeons away mid-peck leaves no callback on a destroyed bird', () => {
@@ -129,7 +130,7 @@ describe('decoration layer: pigeons', () => {
 });
 
 describe('decoration layer: nothing hides behind a decoration', () => {
-  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, ySort: (y: number) => 10 + y / 10000 };
+  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, flyDepth: 50, ySort: (y: number) => 10 + y / 10000 };
 
   it('fades a decoration while an animal or poop is behind it, and back when it is gone', () => {
     const { scene, images } = fakeScene();
@@ -144,7 +145,7 @@ describe('decoration layer: nothing hides behind a decoration', () => {
 });
 
 describe('decoration layer: the overview finds a special', () => {
-  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, ySort: (y: number) => 10 + y / 10000 };
+  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, flyDepth: 50, ySort: (y: number) => 10 + y / 10000 };
 
   it('a tap on a shown special finds it (the overview plays it), and only a special', () => {
     const { scene } = fakeScene();
@@ -167,5 +168,67 @@ describe('decoration size', () => {
     expect(fitScale('pumpkins', 51, 44, 192, 180)).toBe(3);
     expect(fitScale('well', 41, 60, 128, 150)).toBe(2);
     expect(fitScale('tree', 300, 300, 128, 150)).toBe(0.5); // never vanishes
+  });
+});
+
+describe('decoration layer: the tricks of the specials', () => {
+  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, flyDepth: 50, ySort: (y: number) => 10 + y / 10000 };
+  const show = (id: 'xmasTree' | 'balloon' | 'rocket' | 'ufo' | 'dino') => {
+    const f = fakeScene();
+    const layer = new DecorLayer(f.scene as never, deps);
+    layer.sync({ ...createDecor(), specials: [id], big: [id, null] }, () => true, true);
+    const img = f.images.find(i => i.frameName === id)!;
+    return { ...f, layer, img };
+  };
+  /** Moves every running trick to `k` of the way through, as the game loop would. */
+  const at = (tweens: { cfg: Record<string, unknown>; removed: boolean }[], k: number) => {
+    for (const t of tweens) {
+      const target = t.cfg.targets as { k?: number };
+      if (t.removed || typeof target?.k !== 'number') continue;
+      target.k = k;
+      (t.cfg.onUpdate as () => void)();
+    }
+  };
+
+  for (const id of ['xmasTree', 'balloon', 'rocket', 'ufo', 'dino'] as const) {
+    it(`${id}: one show at a time, and afterwards it is back on its spot, upright, at its own depth`, () => {
+      const { layer, img, flush } = show(id);
+      const size = img.scaleX;
+      expect(layer.play(0)).toBe(true);
+      expect(layer.play(0)).toBe(false);
+      flush();
+      expect([img.x, img.y]).toEqual([BIG_SPOTS[0].x, BIG_SPOTS[0].y]);
+      expect([img.angle, img.flipX, img.scaleX, img.depth]).toEqual([0, false, size, deps.depth + 0.1]);
+    });
+  }
+
+  it('the balloon flies its round above everything else', () => {
+    const { layer, img, tweens } = show('balloon');
+    const size = img.scaleX as number;
+    layer.play(0);
+    at(tweens, 0.5);
+    const want = balloonAt(BIG_SPOTS[0], 0.5);
+    expect(img.x).toBeCloseTo(want.x);
+    expect(img.y).toBeCloseTo(want.y);
+    expect(img.scaleX).toBeCloseTo(size * want.scale);
+    expect(img.depth).toBe(deps.flyDepth);
+  });
+
+  it('the UFO hovers over the cow pen, and storing it mid-flight puts it back', () => {
+    const { layer, img, tweens, flush } = show('ufo');
+    layer.play(0);
+    at(tweens, 0.5);
+    expect(img.x).toBeCloseTo(ufoAt(BIG_SPOTS[0], 0.5).x);
+    expect(img.depth).toBe(deps.flyDepth);
+    layer.sync({ ...createDecor(), specials: ['ufo'], big: [null, null] }, () => true, true);
+    expect([img.x, img.y, img.depth]).toEqual([BIG_SPOTS[0].x, BIG_SPOTS[0].y, deps.depth + 0.1]);
+    expect(flush).not.toThrow();
+  });
+
+  it('the rocket goes up out of sight before it lands again', () => {
+    const { layer, img, tweens } = show('rocket');
+    layer.play(0);
+    at(tweens, 0.5);
+    expect(img.y).toBeLessThan(0); // above the top of the map
   });
 });

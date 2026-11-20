@@ -3,6 +3,7 @@ import type { Pet } from '../core/ranch';
 import { PETS, type PetKind } from '../core/species';
 import { nearestNode, route, type RoamGraph } from './petRoam';
 import { SLEEP_COL, WALK_FPS, petFrame, walkCycle } from './petSheet';
+import { spinJump } from './trickMoves';
 
 /**
  * The dog and the cat: they walk the farm's paths, stop to sniff, and lie down to sleep at a
@@ -26,6 +27,9 @@ const HIT_R = 42;
 const SPEED: Record<PetKind, number> = { dog: 62, cat: 46 };
 const TAG_H = 30;
 const EMOJI_SIZE = 34;
+/** The cat's fish trick: a jump with a whole turn round its middle, this high above its feet. */
+const CAT_SPIN_MS = 900;
+const CAT_MID = 24;
 
 export const PET_TEX: Record<PetKind, string> = { dog: 'pet-dog', cat: 'pet-cat' };
 
@@ -370,13 +374,13 @@ export class RanchPets {
     this.pause(v, 1500, 3000);
   }
 
-  /** Eats a snack (its own bone or fish unless told), then the dog spins round and the cat stretches; hearts all round. */
+  /** Eats a snack (its own bone or fish unless told), then the dog spins round and the cat jumps with a whole turn in the air; hearts all round. */
   trick(id: string, snack?: string): void {
     const v = this.views.get(id);
     if (!v || v.mode === 'trick') return;
     if (v.mode === 'sleep') this.wake(v);
     v.mode = 'trick';
-    v.body.y = 0;
+    v.body.setPosition(0, 0).setAngle(0);
     this.scene.tweens.killTweensOf(v.body);
     v.body.play(`${PET_TEX[v.kind]}-${v.coat}-eat`);
     this.pop(v, snack ?? (PETS[v.kind].snack === 'bone' ? '🦴' : '🐟'));
@@ -395,9 +399,21 @@ export class RanchPets {
         }));
       } else {
         v.body.setFrame(this.frame(v, ROW.R, 1));
+        const t = { k: 0 };
         this.scene.tweens.add({
-          targets: v.body, scaleX: LOOK[v.kind].scale * 1.18, scaleY: LOOK[v.kind].scale * 0.9, duration: 420, yoyo: true, ease: 'Sine.InOut',
-          onComplete: () => this.views.has(v.id) && done(),
+          targets: t, k: 1, duration: CAT_SPIN_MS, ease: 'Linear',
+          onUpdate: () => {
+            if (!this.views.has(v.id)) return;
+            const q = spinJump(t.k, CAT_MID);
+            v.body.setPosition(q.x, q.y).setAngle(q.angle);
+            v.shadow.setScale(1 + q.y / 200); // smaller while it is up
+          },
+          onComplete: () => {
+            if (!this.views.has(v.id)) return;
+            v.body.setPosition(0, 0).setAngle(0);
+            v.shadow.setScale(1);
+            done();
+          },
         });
       }
     });

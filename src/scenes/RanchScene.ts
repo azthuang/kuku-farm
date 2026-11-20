@@ -495,6 +495,7 @@ export class RanchScene extends Phaser.Scene {
       emojiPx: EMOJI_PX,
       sparkle: (x, y) => this.sparkles.explode(24, x, y),
       depth: DEPTH.decor,
+      flyDepth: DEPTH.fly,
       ySort: y => DEPTH.animal + y / 10000,
     });
 
