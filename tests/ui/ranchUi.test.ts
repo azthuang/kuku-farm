@@ -122,19 +122,43 @@ describe('ranch toolbar', () => {
     expect(toolBtn(root, 'hand').classList.contains('selected')).toBe(true);
   });
 
-  it('in the overview the toolbar is off: no tool, no shop', () => {
+  it('in the overview the care tools are off but the shop still opens', () => {
     const { root, ui } = setup(rich(st()));
     const picked: Tool[] = [];
     ui.onTool(t => picked.push(t));
     ui.setOverview(true);
     expect(root.querySelector('.ranch-tools')!.classList.contains('off')).toBe(true);
     toolBtn(root, 'brush').click();
-    toolBtn(root, 'shop').click();
     expect(picked).toEqual([]);
+    expect(toolBtn(root, 'shop').disabled).toBe(false);
+    toolBtn(root, 'shop').click();
+    expect(shopOpen(root)).toBe(true);
+    ui.setOverview(false); // leaving the map closes it: the page's own shop is a different list
     expect(shopOpen(root)).toBe(false);
-    ui.setOverview(false);
     toolBtn(root, 'brush').click();
     expect(picked).toEqual(['brush']);
+  });
+
+  it('the shop on the map sells what needs no page: the next house, the dog and the cat, the specials', () => {
+    const s = rich(st());
+    buy(s, 'coop', T0, rng);
+    const { root, ui } = setup(s, 1);
+    ui.setOverview(true);
+    toolBtn(root, 'shop').click();
+    // no feed, medicine, treats or snacks: those are used on a page, so they are bought there
+    expect(rowOrder(root)).toEqual(['barn', 'dog', 'cat', 'specials-locked']);
+    ui.setOverview(false);
+    toolBtn(root, 'shop').click();
+    expect(rowOrder(root)).toContain('feed'); // back on the coop page: its own list again
+  });
+
+  it('with every house built the map shop is the pets and all five specials', () => {
+    const s = rich(st());
+    for (const sp of SPECIES_ORDER) buy(s, SPECIES[sp].house, T0, rng);
+    const { root, ui } = setup(s, 1);
+    ui.setOverview(true);
+    toolBtn(root, 'shop').click();
+    expect(rowOrder(root)).toEqual(['dog', 'cat', 'special:xmasTree', 'special:balloon', 'special:rocket', 'special:ufo', 'special:dino']);
   });
 });
 

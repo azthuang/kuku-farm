@@ -149,8 +149,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   background: var(--sun); box-shadow: 0 4px 0 var(--sun-deep);
 }
 .go-field-text { font-size: clamp(20px, 3.5vmin, 26px); font-weight: 800; }
-.ranch-tools.off { opacity: 0.4; }
-.ranch-tools.off .tool { box-shadow: none; }
+/* on the map the care tools rest; the shop stays lit */
+.ranch-tools.off > :not(.tool-shop) { opacity: 0.4; }
+.ranch-tools.off .tool:not(.tool-shop) { box-shadow: none; }
 
 /* Ranch page navigation over the stage: title + 🗺️ on top, ◀ ▶ at the sides, dots at the bottom. */
 .ranch-nav { position: absolute; inset: 0; pointer-events: none; z-index: 3; }

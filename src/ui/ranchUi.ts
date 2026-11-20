@@ -89,6 +89,7 @@ const SHARED: readonly { item: ShopItemId; icon: string | HTMLElement; name: str
   ]),
 ];
 
+const isPetItem = (item: string): boolean => (PET_KINDS as readonly string[]).includes(item);
 const houseItem = (sp: SpeciesId) => ({ item: SPECIES[sp].house as ShopItemId, icon: '🏠', name: SPECIES_UI[sp].house });
 
 function speciesItems(sp: SpeciesId): { item: ShopItemId; icon: string | HTMLElement; name: string }[] {
@@ -209,9 +210,8 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   const shopBtn = button('tool tool-shop', '', '商店');
   shopBtn.dataset.tool = 'shop';
   shopBtn.append(el('span', 'tool-icon', '🛒'));
-  shopBtn.addEventListener('click', () => {
-    if (!overview) openShop();
-  });
+  // the shop works on the map too, with the things that need no page (see renderShop)
+  shopBtn.addEventListener('click', () => openShop());
   // On the garden page the care tools give way to one big way back to the field.
   const goField = button('tool go-field', '', '去農田種菜');
   goField.append(el('span', 'tool-icon', '🌾'), el('span', 'go-field-text', '去農田種菜'));
@@ -439,8 +439,11 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   /** Puts the shown species' rows, then the shared ones, then the specials into the list and refreshes them. */
   function renderShop(s: GameState): void {
     const next = nextHouse(s);
-    const lead = shopSpecies ? speciesItems(shopSpecies) : next ? [houseItem(speciesOfHouse(next))] : [];
-    const items = [...lead, ...SHARED];
+    const house = next ? [houseItem(speciesOfHouse(next))] : [];
+    // On the map: no feed, medicine, treats or snacks (they are used on a page, so bought there);
+    // the next house, the dog and the cat, the specials.
+    const items = overview ? [...house, ...SHARED.filter(it => isPetItem(it.item))]
+      : [...(shopSpecies ? speciesItems(shopSpecies) : house), ...SHARED];
     const open = specialsOpen(s);
     const tail = open ? SPECIAL_ORDER.map(specialRow) : [lockedSpecials()];
     const wanted = [...items.map(it => rowOf(it).row), ...tail.map(r => r.row)];
@@ -515,12 +518,11 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   }
 
   function setOverview(on: boolean): void {
+    if (on !== overview) closeShop(); // the map's shop and a page's are different lists
     overview = on;
     bar.classList.toggle('off', on);
     for (const { btn } of toolBtns.values()) btn.disabled = on;
-    shopBtn.disabled = on;
     goField.disabled = on;
-    if (on) closeShop();
     renderNav();
   }
 

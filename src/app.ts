@@ -740,13 +740,15 @@ export function startApp(root: HTMLElement): void {
     if (!res.ok) return;
     ranchChanged();
     ranchUi.closeShop();
-    // the big spots are at the map's corner: show it appearing there, then go back
+    // the big spots are at the map's corner: show it appearing there, then go back to the page
+    // the shop was opened on (bought on the map itself: stay there)
     const back = ranchPage;
-    if (!ranchOverview) toggleOverview();
+    const fromMap = ranchOverview;
+    if (!fromMap) toggleOverview();
     const token = ++backToken;
     const slot = res.slot;
     window.setTimeout(() => ranchScene.decorSparkle({ slot }), SHOW_SPARKLE_MS);
-    window.setTimeout(() => {
+    if (!fromMap) window.setTimeout(() => {
       if (token === backToken && ranchOverview && tab === 'ranch') goPage(back);
     }, SHOW_SPARKLE_MS + SHOW_BACK_MS);
   }
