@@ -407,11 +407,13 @@ export class RanchPets {
             const q = spinJump(t.k, CAT_MID);
             v.body.setPosition(q.x, q.y).setAngle(q.angle);
             v.shadow.setScale(1 + q.y / 200); // smaller while it is up
+            v.tag.setY(v.box.y - LOOK[v.kind].tagY + q.lift); // the name rises with it, never over it
           },
           onComplete: () => {
             if (!this.views.has(v.id)) return;
             v.body.setPosition(0, 0).setAngle(0);
             v.shadow.setScale(1);
+            this.place(v); // the name back in its place
             done();
           },
         });

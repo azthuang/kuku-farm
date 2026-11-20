@@ -104,7 +104,7 @@ describe('the dinosaur hops left and right', () => {
 
 describe('the cat jumps and spins', () => {
   it('takes off from and lands on its feet, upright', () => {
-    expect(spinJump(0, 20)).toEqual({ x: 0, y: 0, angle: 0 });
+    expect(spinJump(0, 20)).toEqual({ x: 0, y: 0, angle: 0, lift: 0 });
     const end = spinJump(1, 20);
     expect(end.x).toBeCloseTo(0);
     expect(end.y).toBeCloseTo(0);
@@ -117,5 +117,10 @@ describe('the cat jumps and spins', () => {
     // upside down at the top: the feet are where the middle was, plus the middle's height again
     expect(mid.y).toBeLessThan(-60);
     expect(mid.x).toBeCloseTo(0);
+  });
+
+  it('says how high the jump itself is, so the name tag can rise with the cat', () => {
+    expect(spinJump(0.5, 20).lift).toBeCloseTo(-70);
+    expect(spinJump(1, 20).lift).toBeCloseTo(0);
   });
 });

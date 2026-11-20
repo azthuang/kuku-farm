@@ -98,10 +98,11 @@ const SPIN_H = 70;
 /**
  * The cat's jump with a whole turn in the air. The sprite's origin is at its feet, so to turn
  * round its middle (`mid` units above the feet) the feet swing round that point.
+ * `lift` is the jump alone: how far up it is from where it stood.
  */
-export function spinJump(k: number, mid: number): { x: number; y: number; angle: number } {
+export function spinJump(k: number, mid: number): { x: number; y: number; angle: number; lift: number } {
   const angle = 360 * ease(k);
   const a = (angle * Math.PI) / 180;
   const up = -4 * SPIN_H * k * (1 - k);
-  return { x: z(-mid * Math.sin(a)), y: z(up - mid + mid * Math.cos(a)), angle };
+  return { x: z(-mid * Math.sin(a)), y: z(up - mid + mid * Math.cos(a)), angle, lift: z(up) };
 }
