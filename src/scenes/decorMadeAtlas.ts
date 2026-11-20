@@ -13,6 +13,10 @@ export const DECOR_MADE_FRAMES = {
   // the rocket in two parts, each the whole rocket's size: it lifts off and leaves its pad behind
   rocketBody: [805, 2, 77, 150],
   rocketPad: [884, 2, 77, 150],
+  // the pond's fish (a koi mid-leap) and the bush's rabbit, sitting and mid-hop; all face right
+  fish: [965, 2, 26, 30],
+  rabbit: [993, 2, 25, 27],
+  rabbitHop: [1020, 2, 32, 24],
 } as const satisfies Record<string, readonly [number, number, number, number]>;
 
 export const SPECIAL_FRAMES = {
@@ -23,4 +27,4 @@ export const SPECIAL_FRAMES = {
   dino: [623, 2, 125, 138],
 } as const satisfies Record<string, readonly [number, number, number, number]>;
 
-export const DECOR_MADE_SIZE = { w: 963, h: 154 } as const;
+export const DECOR_MADE_SIZE = { w: 1054, h: 154 } as const;

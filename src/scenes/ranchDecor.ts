@@ -64,6 +64,8 @@ export const PIGEON_FLY_MS = 1600;
 /** The pond's fish: out of the water, an arc, back in. The bush's rabbit: out, a look round, back in. */
 export const FISH_JUMP_MS = 1000;
 export const RABBIT_MS = 2200;
+/** The drawn fish and rabbit: two world units to an art pixel (crisp at the care view's zoom). */
+const CRITTER_SCALE = 2;
 /** Where the three pigeons stand, around the spot's foot. */
 /** Where the three pigeons stand, as fractions of the spot's width and px up from its front. */
 const PIGEON_AT = [{ x: -0.3, y: 6 }, { x: 0.02, y: 26 }, { x: 0.3, y: 2 }];
@@ -485,12 +487,26 @@ export class DecorLayer {
     return false;
   }
 
-  /** A sprite owned by a spot's trick: it goes when the trick ends or the decoration does. */
-  private actor(v: SpotView, key: string, depth: number): Img {
-    const a = this.scene.add.image(0, 0, key).setOrigin(0.5, 1).setDepth(depth);
-    a.setScale(Math.max(3, Math.round(v.img.scaleX) + 1));
+  /**
+   * A sprite owned by a spot's trick: it goes when the trick ends or the decoration does. It is
+   * the drawn frame `name` from the decorations sheet (at CRITTER_SCALE) or, until that sheet is
+   * loaded, the small pixel picture drawn in code.
+   */
+  private actor(v: SpotView, name: string, fallback: () => string, depth: number): Img {
+    const art = this.art(name);
+    const a = art
+      ? this.scene.add.image(0, 0, art.key, name).setScale(CRITTER_SCALE)
+      : this.scene.add.image(0, 0, fallback()).setScale(Math.max(3, Math.round(v.img.scaleX) + 1));
+    a.setOrigin(0.5, 1).setDepth(depth);
     v.actors.push(a);
     return a;
+  }
+
+  /** The rabbit's pose: sitting, or stretched out in a hop (code-drawn rabbit: one pose). */
+  private rabbitPose(r: Img, hop: boolean): void {
+    const name = hop ? 'rabbitHop' : 'rabbit';
+    const art = this.art(name);
+    if (art && r.frame?.name !== name) r.setTexture(art.key, name);
   }
 
   private dropActor(v: SpotView, a: Img): void {
@@ -508,7 +524,9 @@ export class DecorLayer {
     const cy = r.y + r.height * 0.6;
     const dir = Math.random() < 0.5 ? 1 : -1;
     const span = Math.min(34, r.width * 0.25);
-    const fish = this.actor(v, pixelTexture(this.scene, 'px-fish', FISH_ROWS, FISH_PALETTE), (v.img.depth ?? 0) + 0.01);
+    const fish = this.actor(v, 'fish', () => pixelTexture(this.scene, 'px-fish', FISH_ROWS, FISH_PALETTE), (v.img.depth ?? 0) + 0.01);
+    // the drawn koi already leaps nose-up: it turns from there to nose-down; the code fish lies flat
+    const [a0, a1] = this.art('fish') ? [-15, 95] : [-60, 60];
     fish.setOrigin(0.5, 0.5).setFlipX(dir < 0).setPosition(cx - dir * span, cy).setAlpha(0);
     this.splash(cx - dir * span, cy);
     const t = { a: 0 };
@@ -518,7 +536,7 @@ export class DecorLayer {
         if (!fish.active) return;
         const k = t.a;
         fish.setPosition(cx - dir * span + 2 * dir * span * k, cy - 4 * 120 * k * (1 - k));
-        fish.setAngle(dir * (-60 + 120 * k)); // nose up on the way out, nose down on the way in
+        fish.setAngle(dir * (a0 + (a1 - a0) * k)); // nose up on the way out, nose down on the way in
         fish.setAlpha(Math.min(1, k * 10, (1 - k) * 10));
       },
       onComplete: () => {
@@ -543,7 +561,7 @@ export class DecorLayer {
     const x1 = p.x + dir * (r.width / 2 + 34);
     const ground = p.y - 4;
     // just behind the bush: it shows once it is out to the side
-    const rabbit = this.actor(v, pixelTexture(this.scene, 'px-rabbit', RABBIT_ROWS, RABBIT_PALETTE), (v.img.depth ?? 0) - 0.001);
+    const rabbit = this.actor(v, 'rabbit', () => pixelTexture(this.scene, 'px-rabbit', RABBIT_ROWS, RABBIT_PALETTE), (v.img.depth ?? 0) - 0.001);
     rabbit.setFlipX(dir < 0).setPosition(x0, ground);
     let turned = false;
     const t = { a: 0 };
@@ -556,12 +574,15 @@ export class DecorLayer {
         if (k < 0.3) {
           const u = k / 0.3;
           rabbit.setPosition(x0 + (x1 - x0) * u, ground - hops(u));
+          this.rabbitPose(rabbit, hops(u) > 3);
         } else if (k < 0.65) {
           rabbit.setPosition(x1, ground);
+          this.rabbitPose(rabbit, false);
           if (!turned && k > 0.5) { turned = true; rabbit.setFlipX(dir > 0); } // looks round: back the way it came
         } else {
           const u = (k - 0.65) / 0.35;
           rabbit.setPosition(x1 + (x0 - x1) * u, ground - hops(u));
+          this.rabbitPose(rabbit, hops(u) > 3);
         }
       },
       onComplete: () => {

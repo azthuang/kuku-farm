@@ -129,6 +129,43 @@ describe('decoration layer: pigeons', () => {
   });
 });
 
+describe('decoration layer: the fish and the rabbit', () => {
+  const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, flyDepth: 50, ySort: (y: number) => 10 + y / 10000 };
+  const move = (tweens: { cfg: Record<string, unknown>; removed: boolean }[], k: number) => {
+    for (const t of tweens) {
+      const target = t.cfg.targets as { a?: number };
+      if (t.removed || typeof target?.a !== 'number') continue;
+      target.a = k;
+      (t.cfg.onUpdate as () => void)();
+    }
+  };
+
+  it('the fish is the drawn koi, at twice its pixel size', () => {
+    const { scene, images } = fakeScene();
+    const layer = new DecorLayer(scene as never, deps);
+    layer.sync(decor({ '1-0': 'pond' }), () => true, false);
+    const before = images.length;
+    layer.trick('1-0');
+    const fish = images.slice(before).find(i => i.frameName === 'fish')!;
+    expect(fish).toBeDefined();
+    expect(fish.scaleX).toBe(2);
+  });
+
+  it('the rabbit sits in its sitting pose and hops in its hopping one', () => {
+    const { scene, images, tweens } = fakeScene();
+    const layer = new DecorLayer(scene as never, deps);
+    layer.sync(decor({ '1-1': 'bush' }), () => true, false);
+    const before = images.length;
+    layer.trick('1-1');
+    const rabbit = images[before];
+    move(tweens, 0.075); // in the air on its first hop
+    expect(rabbit.frameName).toBe('rabbitHop');
+    move(tweens, 0.45); // sitting, looking round
+    expect(rabbit.frameName).toBe('rabbit');
+    expect(rabbit.scaleX).toBe(2);
+  });
+});
+
 describe('decoration layer: nothing hides behind a decoration', () => {
   const deps = { emojiTex: () => 'e', emojiPx: 80, sparkle: () => {}, depth: 3, flyDepth: 50, ySort: (y: number) => 10 + y / 10000 };
 
