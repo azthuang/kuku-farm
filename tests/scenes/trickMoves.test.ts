@@ -10,9 +10,30 @@ const near = (a: { x: number; y: number }, b: { x: number; y: number }) => {
 };
 
 describe('the hot-air balloon flies once round the farm', () => {
-  it('takes about ten seconds', () => {
-    expect(BALLOON_MS).toBeGreaterThanOrEqual(9000);
-    expect(BALLOON_MS).toBeLessThanOrEqual(11000);
+  it('floats slowly: the whole show takes about 18 seconds, at least 14 of them on the round', () => {
+    expect(BALLOON_MS).toBeGreaterThanOrEqual(16000);
+    expect(BALLOON_MS).toBeLessThanOrEqual(20000);
+    const home = BIG_SPOTS[0];
+    const N = 400;
+    let still = 0; // steps spent near home (taking off and landing)
+    for (let i = 0; i <= N; i++) if (Math.hypot(balloonAt(home, i / N).x - home.x, balloonAt(home, i / N).y - home.y) < 450) still++;
+    expect(BALLOON_MS * (1 - still / N)).toBeGreaterThanOrEqual(14000 * 0.8);
+  });
+
+  /** Positive: clockwise as seen on the screen (y grows downwards). */
+  const turning = (slot: 0 | 1): number => {
+    const home = BIG_SPOTS[slot];
+    let sum = 0;
+    for (let i = 0; i < 200; i++) {
+      const a = balloonAt(home, i / 200), b = balloonAt(home, (i + 1) / 200);
+      sum += (a.x - 600) * (b.y - a.y) - (a.y - 1000) * (b.x - a.x);
+    }
+    return sum;
+  };
+  it('from the left spot it goes round clockwise, from the right spot anticlockwise', () => {
+    expect(BIG_SPOTS[0].x).toBeLessThan(BIG_SPOTS[1].x);
+    expect(turning(0)).toBeGreaterThan(0);
+    expect(turning(1)).toBeLessThan(0);
   });
 
   for (const slot of [0, 1] as const) {

@@ -16,14 +16,15 @@ const z = (n: number): number => n || 0;
 
 // ---------------------------------------------------------------- the hot-air balloon
 
-export const BALLOON_MS = 10_000;
+/** A slow float: about 1.8 s up, 14.4 s round the farm, 1.8 s down. */
+export const BALLOON_MS = 18_000;
 /**
  * The loop round the farm: its middle and its size. The map is seen from straight above, so the
  * balloon keeps its size up there; the loop keeps its top (330 units over its foot) on the map.
  */
 const LOOP = { cx: 600, cy: 1000, rx: 700, ry: 620 };
 /** The take-off and the landing, each a share of the trick; the loop is the rest. */
-const RISE = 0.15;
+const RISE = 0.1;
 
 /** Where the balloon is: up from its spot, once round the farm, back down. */
 export function balloonAt(home: Pt, k: number): Pt {
@@ -34,7 +35,9 @@ export function balloonAt(home: Pt, k: number): Pt {
     const t = ease(k <= RISE ? k / RISE : (1 - k) / RISE); // 0 at home, 1 on the loop
     return { x: lerp(home.x, start.x, t), y: lerp(home.y, start.y, t) };
   }
-  return on(a0 + 2 * Math.PI * ease((k - RISE) / (1 - 2 * RISE)));
+  // from the left spot clockwise, from the right one anticlockwise: either way up its own side first
+  const dir = home.x < LOOP.cx ? 1 : -1;
+  return on(a0 + dir * 2 * Math.PI * ease((k - RISE) / (1 - 2 * RISE)));
 }
 
 // ---------------------------------------------------------------- the UFO
