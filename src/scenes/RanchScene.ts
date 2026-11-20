@@ -17,6 +17,7 @@ import { PALETTES, recolor } from './recolor';
 import { DECOR_LPC_TEX, DECOR_MADE_TEX, DecorLayer } from './ranchDecor';
 import { PEN_DECOR_ROW } from './decorLayout';
 import type { SpecialId, SpotId } from '../core/decor';
+import { assetUrl } from '../core/assetUrl';
 
 /** World units per scenery pixel: 5 canvas pixels at camera zoom ASSET_RES, so every pixel stays square. */
 const PX = 2.5;
@@ -432,24 +433,21 @@ export class RanchScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const base = `${import.meta.env.BASE_URL}assets/ranch/`;
     for (const sp of SPECIES_ORDER) {
       for (const kind of ['walk', 'eat'] as const) {
         const key = TEX.src(sp, kind);
-        if (!this.textures.exists(key)) this.load.image(key, `${base}${sp}_${kind}.png`);
+        if (!this.textures.exists(key)) this.load.image(key, assetUrl(`ranch/${sp}_${kind}.png`));
       }
     }
     for (const [key, file] of Object.entries(SHADOW_FILE)) {
       const f = key === 'ck-shadow' ? 32 : 128;
-      if (!this.textures.exists(key)) this.load.spritesheet(key, `${base}${file}`, { frameWidth: f, frameHeight: f });
+      if (!this.textures.exists(key)) this.load.spritesheet(key, assetUrl(`ranch/${file}`), { frameWidth: f, frameHeight: f });
     }
-    const scenery = `${import.meta.env.BASE_URL}assets/scenery/`;
-    if (!this.textures.exists(TEX.atlas)) this.load.image(TEX.atlas, `${scenery}scenery.png`);
-    if (!this.textures.exists(TEX.farmhouse)) this.load.image(TEX.farmhouse, `${scenery}farmhouse.png`);
-    const decor = `${import.meta.env.BASE_URL}assets/decor/`;
-    if (!this.textures.exists(DECOR_LPC_TEX)) this.load.image(DECOR_LPC_TEX, `${decor}lpc.png`);
-    if (!this.textures.exists(DECOR_MADE_TEX)) this.load.image(DECOR_MADE_TEX, `${decor}made.png`);
-    RanchPets.preload(this, base);
+    if (!this.textures.exists(TEX.atlas)) this.load.image(TEX.atlas, assetUrl('scenery/scenery.png'));
+    if (!this.textures.exists(TEX.farmhouse)) this.load.image(TEX.farmhouse, assetUrl('scenery/farmhouse.png'));
+    if (!this.textures.exists(DECOR_LPC_TEX)) this.load.image(DECOR_LPC_TEX, assetUrl('decor/lpc.png'));
+    if (!this.textures.exists(DECOR_MADE_TEX)) this.load.image(DECOR_MADE_TEX, assetUrl('decor/made.png'));
+    RanchPets.preload(this);
   }
 
   create(): void {

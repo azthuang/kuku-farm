@@ -4,6 +4,7 @@ import { PETS, type PetKind } from '../core/species';
 import { nearestNode, route, type RoamGraph } from './petRoam';
 import { SLEEP_COL, WALK_FPS, petFrame, walkCycle } from './petSheet';
 import { spinJump } from './trickMoves';
+import { assetUrl } from '../core/assetUrl';
 
 /**
  * The dog and the cat: they walk the farm's paths, stop to sniff, and lie down to sleep at a
@@ -83,10 +84,10 @@ export class RanchPets {
 
   constructor(private scene: Phaser.Scene, private graph: RoamGraph, private deps: PetDeps) {}
 
-  static preload(scene: Phaser.Scene, base: string): void {
+  static preload(scene: Phaser.Scene): void {
     for (const kind of ['dog', 'cat'] as const) {
       if (!scene.textures.exists(PET_TEX[kind])) {
-        scene.load.spritesheet(PET_TEX[kind], `${base}${kind}.png`, { frameWidth: LOOK[kind].frame, frameHeight: LOOK[kind].frame });
+        scene.load.spritesheet(PET_TEX[kind], assetUrl(`ranch/${kind}.png`), { frameWidth: LOOK[kind].frame, frameHeight: LOOK[kind].frame });
       }
     }
   }
