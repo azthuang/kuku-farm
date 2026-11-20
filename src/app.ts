@@ -645,6 +645,7 @@ export function startApp(root: HTMLElement): void {
       decorUi.open(spot, game.state);
     },
     onSpecial: (id, slot) => {
+      backToken++; // watching its show: stay on the map, no automatic return from a just-placed special
       if (ranchScene.playSpecial(slot)) sfx.play(SPECIAL_SFX[id]);
     },
     onIdleVoice: id => {
