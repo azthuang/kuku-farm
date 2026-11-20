@@ -12,7 +12,7 @@
 | public/assets/scenery/scenery.png、farmhouse.png（由下方「牧場景觀」各素材包裁切、拼合） | 見下方「牧場景觀」 | 見下方「牧場景觀」 | CC-BY-SA 3.0 |
 | public/assets/ranch/dog.png、cat.png（狗：柴犬、大麥町、柯基、邊境牧羊犬；貓：橘虎斑、三花貓、賓士貓、暹羅貓） | 本專案以 Google Antigravity CLI 的圖像模型（gemini-3.1-flash-image）生成，再去背、縮小、量化成 40 px 像素圖 | Azt（AI 生成） | 本專案自製，不含第三方素材 |
 | public/assets/decor/lpc.png（裝飾：彩色、向日葵、玫瑰、藍色花圃、樹叢、小樹、大香菇、池塘；由「牧場景觀」的 LPC Flowers / Plants / Fungi / Wood、Trees 與 Terrains（池塘的水岸）素材包裁切、拼合） | 見下方「牧場景觀」 | 見下方「牧場景觀」 | CC-BY-SA 3.0 |
-| public/assets/decor/made.png（裝飾：稻草人、水井、南瓜堆、白鴿；驚喜物件：聖誕樹、熱氣球、火箭、飛碟、恐龍） | 本專案以 Google Antigravity CLI 的圖像模型（gemini-3.1-flash-image）生成，再去背、縮小、量化成像素圖（恐龍、白鴿另外換色） | Azt（AI 生成） | 本專案自製，不含第三方素材 |
+| public/assets/decor/made.png（裝飾：稻草人、水井、南瓜堆、白鴿；驚喜物件：聖誕樹、熱氣球、火箭、飛碟、恐龍） | 本專案以 Google Antigravity CLI 的圖像模型（gemini-3.1-flash-image）生成，再去背、縮小、量化成像素圖（恐龍、白鴿另外換色；火箭另拆成火箭本體與發射台兩張，讓火箭能單獨升空） | Azt（AI 生成） | 本專案自製，不含第三方素材 |
 
 ## 牧場景觀（LPC）
 

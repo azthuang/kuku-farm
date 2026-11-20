@@ -17,22 +17,24 @@ const z = (n: number): number => n || 0;
 // ---------------------------------------------------------------- the hot-air balloon
 
 export const BALLOON_MS = 10_000;
-/** The loop round the farm: its middle, its size, and how small the balloon looks up there. */
-const LOOP = { cx: 600, cy: 920, rx: 700, ry: 700, scale: 0.6 };
+/**
+ * The loop round the farm: its middle and its size. The map is seen from straight above, so the
+ * balloon keeps its size up there; the loop keeps its top (330 units over its foot) on the map.
+ */
+const LOOP = { cx: 600, cy: 1000, rx: 700, ry: 620 };
 /** The take-off and the landing, each a share of the trick; the loop is the rest. */
 const RISE = 0.15;
 
 /** Where the balloon is: up from its spot, once round the farm, back down. */
-export function balloonAt(home: Pt, k: number): Pt & { scale: number } {
+export function balloonAt(home: Pt, k: number): Pt {
   const a0 = Math.atan2((home.y - LOOP.cy) / LOOP.ry, (home.x - LOOP.cx) / LOOP.rx);
   const on = (a: number): Pt => ({ x: LOOP.cx + LOOP.rx * Math.cos(a), y: LOOP.cy + LOOP.ry * Math.sin(a) });
   const start = on(a0);
   if (k <= RISE || k >= 1 - RISE) {
     const t = ease(k <= RISE ? k / RISE : (1 - k) / RISE); // 0 at home, 1 on the loop
-    return { x: lerp(home.x, start.x, t), y: lerp(home.y, start.y, t), scale: lerp(1, LOOP.scale, t) };
+    return { x: lerp(home.x, start.x, t), y: lerp(home.y, start.y, t) };
   }
-  const p = on(a0 + 2 * Math.PI * ease((k - RISE) / (1 - 2 * RISE)));
-  return { ...p, scale: LOOP.scale };
+  return on(a0 + 2 * Math.PI * ease((k - RISE) / (1 - 2 * RISE)));
 }
 
 // ---------------------------------------------------------------- the UFO

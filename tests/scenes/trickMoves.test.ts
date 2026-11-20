@@ -17,11 +17,9 @@ describe('the hot-air balloon flies once round the farm', () => {
 
   for (const slot of [0, 1] as const) {
     const home = BIG_SPOTS[slot];
-    it(`leaves from and lands on its own spot (slot ${slot}), smaller while high up`, () => {
+    it(`leaves from and lands on its own spot (slot ${slot})`, () => {
       near(balloonAt(home, 0), home);
       near(balloonAt(home, 1), home);
-      expect(balloonAt(home, 0).scale).toBe(1);
-      expect(balloonAt(home, 0.5).scale).toBeLessThan(1);
     });
 
     it(`goes all the way round the middle of the farm and stays over the map (slot ${slot})`, () => {
@@ -31,7 +29,7 @@ describe('the hot-air balloon flies once round the farm', () => {
         const p = balloonAt(home, i / 200);
         expect(p.x).toBeGreaterThan(W.x);
         expect(p.x).toBeLessThan(W.x + W.w);
-        expect(p.y - 330 * p.scale).toBeGreaterThan(W.y - 1); // its top stays on the map
+        expect(p.y - 330).toBeGreaterThan(W.y - 1); // its top stays on the map (seen from above: no smaller up high)
         expect(p.y).toBeLessThanOrEqual(W.y + W.h);
         if (p.x < 100) left = true;
         if (p.x > 1100) right = true;

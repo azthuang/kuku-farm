@@ -23,6 +23,11 @@ describe('decoration atlas (generated)', () => {
     expect(Object.keys(SPECIAL_FRAMES).sort()).toEqual([...SPECIAL_ORDER].sort());
   });
 
+  it('also has the rocket and its launch pad apart, each the size of the whole, so the rocket can lift off', () => {
+    expect(DECOR_MADE_FRAMES.rocketBody.slice(2)).toEqual(SPECIAL_FRAMES.rocket.slice(2));
+    expect(DECOR_MADE_FRAMES.rocketPad.slice(2)).toEqual(SPECIAL_FRAMES.rocket.slice(2));
+  });
+
   it('keeps every frame inside the image', () => {
     for (const [id, [x, y, w, h]] of Object.entries({ ...DECOR_MADE_FRAMES, ...SPECIAL_FRAMES })) {
       expect(x >= 0 && y >= 0 && w > 0 && h > 0, id).toBe(true);

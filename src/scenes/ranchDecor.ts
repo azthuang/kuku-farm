@@ -376,12 +376,18 @@ export class DecorLayer {
         img.setDepth(this.deps.flyDepth);
         step = k => {
           const q = balloonAt(p, k);
-          img.setPosition(q.x, q.y).setScale(size * q.scale);
+          img.setPosition(q.x, q.y);
         };
         break;
       case 'rocket': {
         // a little shake for the countdown, straight up and out of sight, a wait, and down again
         const top = Math.min(this.scene.cameras?.main?.worldView?.y ?? SCENERY_WORLD.y, SCENERY_WORLD.y) - 60;
+        const body = this.art('rocketBody');
+        const pad = this.art('rocketPad');
+        if (body && pad) { // the launch pad stays on the ground
+          img.setTexture(body.key, 'rocketBody');
+          this.extra(b, this.scene.add.image(p.x, p.y, pad.key, 'rocketPad').setOrigin(0.5, 1).setScale(size).setDepth(this.deps.depth + 0.1));
+        }
         img.setDepth(this.deps.flyDepth);
         let at = 0;
         this.loop(b.fx, 100, () => {

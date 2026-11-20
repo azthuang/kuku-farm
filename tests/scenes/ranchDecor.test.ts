@@ -14,9 +14,9 @@ function fakeScene() {
   const tweens: { cfg: Record<string, unknown>; removed: boolean }[] = [];
   const chain = (): Record<string, unknown> => new Proxy({}, { get: (_t, k) => (k === 'destroy' ? () => {} : () => chain()) });
   const images: Record<string, unknown>[] = [];
-  const image = () => {
+  const image = (x = 0, y = 0, key = '', frame?: string) => {
     const img: Record<string, unknown> = {
-      active: true, x: 0, y: 0, flipX: false, scaleX: 1, displayHeight: 60, texture: { key: '' },
+      active: true, x, y, flipX: false, scaleX: 1, displayHeight: 60, texture: { key }, frameName: frame,
     };
     const live = (fn: (...a: unknown[]) => void) => (...a: unknown[]) => {
       if (!img.active) throw new TypeError("Cannot read properties of undefined (reading 'sys')");
@@ -202,7 +202,7 @@ describe('decoration layer: the tricks of the specials', () => {
     });
   }
 
-  it('the balloon flies its round above everything else', () => {
+  it('the balloon flies its round above everything else, the same size all the way (the map is seen from above)', () => {
     const { layer, img, tweens } = show('balloon');
     const size = img.scaleX as number;
     layer.play(0);
@@ -210,7 +210,7 @@ describe('decoration layer: the tricks of the specials', () => {
     const want = balloonAt(BIG_SPOTS[0], 0.5);
     expect(img.x).toBeCloseTo(want.x);
     expect(img.y).toBeCloseTo(want.y);
-    expect(img.scaleX).toBeCloseTo(size * want.scale);
+    expect(img.scaleX).toBe(size);
     expect(img.depth).toBe(deps.flyDepth);
   });
 
@@ -225,10 +225,16 @@ describe('decoration layer: the tricks of the specials', () => {
     expect(flush).not.toThrow();
   });
 
-  it('the rocket goes up out of sight before it lands again', () => {
-    const { layer, img, tweens } = show('rocket');
+  it('the rocket goes up out of sight before it lands again, leaving its launch pad on the ground', () => {
+    const { layer, img, tweens, images, flush } = show('rocket');
     layer.play(0);
     at(tweens, 0.5);
     expect(img.y).toBeLessThan(0); // above the top of the map
+    expect(img.frameName).toBe('rocketBody');
+    const pad = images.find(i => i.frameName === 'rocketPad')!;
+    expect([pad.x, pad.y, pad.active]).toEqual([BIG_SPOTS[0].x, BIG_SPOTS[0].y, true]);
+    flush(); // landed: one picture again
+    expect(img.frameName).toBe('rocket');
+    expect(pad.active).toBe(false);
   });
 });
