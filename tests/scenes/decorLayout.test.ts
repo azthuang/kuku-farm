@@ -32,7 +32,8 @@ describe('decoration spots', () => {
       const lot = spotLot(s);
       const b = spotBox(s);
       const foot = spotFoot(s);
-      expect(b.w, s).toBe(s.endsWith('-0') ? 192 : 128);
+      expect(b.w, s).toBe(192);
+      expect(b.h, s).toBe(180);
       expect(lot, s).not.toBe(0); // the garden has none
       const r = LOTS[lot];
       // inside the plot, its ground right against the front fence's inner side
@@ -41,6 +42,14 @@ describe('decoration spots', () => {
       // clear of the gate in the middle of the front fence
       const gateX = r.x + r.w / 2;
       expect(foot.x + foot.w < gateX - 30 || foot.x > gateX + 30, s).toBe(true);
+    }
+    // the pen's two spots mirror each other around the gate, so a decoration is the same size on either side
+    for (const s of SPOT_IDS.filter((x) => x.endsWith('-0'))) {
+      const l = spotFoot(s);
+      const r = spotFoot(`${spotLot(s)}-1`);
+      const gateX = LOTS[spotLot(s)].x + LOTS[spotLot(s)].w / 2;
+      expect(r.w, s).toBe(l.w);
+      expect(r.x - gateX, s).toBeCloseTo(gateX - (l.x + l.w));
     }
     for (const a of SPOT_IDS) for (const b of SPOT_IDS) {
       if (a < b) expect(overlaps(spotFoot(a), spotFoot(b)), `${a} ${b}`).toBe(false);

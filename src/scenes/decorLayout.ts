@@ -6,7 +6,8 @@ import type { Rect } from './ranchScenery';
  * draws into these boxes and keeps the animals out of the pens' decoration row.
  *
  * In each pen the two spots run along the inside of the front fence, either side of the gate:
- * `-0` three tiles wide on the left, `-1` two tiles on the right, one tile deep. The animals
+ * `-0` on the left, `-1` on the right, each three tiles wide and one tile deep, mirrored around
+ * the gate so a decoration is the same size on either side. The animals
  * roam above that row, so a decoration never stands where they walk. The garden (all vegetable
  * beds) has none.
  *
@@ -34,8 +35,9 @@ function spot(s: SpotId): Spot {
   const x0 = (lot % COLS) * CELL;
   const y0 = Math.floor(lot / COLS) * CELL;
   const w = span * TILE;
-  // either side of the gate in the middle of the front fence
-  return { x: x0 + (span === 3 ? LOT.x + 20 + w / 2 : LOT.x + LOT.w - 42 - w / 2), y: y0 + FRONT, w, h: MAX_H[span] };
+  // either side of the gate in the middle of the front fence, the same gap from the side fences
+  const left = s.endsWith('-0');
+  return { x: x0 + (left ? LOT.x + 20 + w / 2 : LOT.x + LOT.w - 20 - w / 2), y: y0 + FRONT, w, h: MAX_H[span] };
 }
 
 export const DECOR_SPOTS: Readonly<Record<SpotId, Spot>> = Object.fromEntries(SPOT_IDS.map((s) => [s, spot(s)])) as Record<SpotId, Spot>;

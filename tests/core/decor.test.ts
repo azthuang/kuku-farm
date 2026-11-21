@@ -24,12 +24,12 @@ function allHouses(s: GameState): GameState {
 }
 
 describe('decorations', () => {
-  it('10 spots, 2 per pen (one 1×3, one 1×2); the garden page has none', () => {
+  it('10 spots, 2 per pen, both 1×3; the garden page has none', () => {
     expect(SPOT_IDS).toHaveLength(10);
     expect(SPOT_IDS.some((s) => spotLot(s) === 0)).toBe(false);
     expect(SPOT_IDS.filter((s) => spotLot(s) === 2)).toEqual(['2-0', '2-1']);
     expect(spotSpan('3-0')).toBe(3);
-    expect(spotSpan('3-1')).toBe(2);
+    expect(spotSpan('3-1')).toBe(3); // the same size either side of the gate (parent, 2026-11-21)
   });
 
   it('the twelve decorations: flower beds and a big mushroom instead of the mailbox, haystack and beehive', () => {

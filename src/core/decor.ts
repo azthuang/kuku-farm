@@ -50,7 +50,7 @@ export function hasTrick(id: DecorId): boolean {
 /** Decorations that were replaced, by what stands in their place now. */
 export const LEGACY_DECOR: Readonly<Record<string, DecorId>> = { bench: 'pond' };
 
-/** Two spots in each pen: `<lot>-0` is three tiles wide, `<lot>-1` two. The garden has none. */
+/** Two spots in each pen, `<lot>-0` left of the gate and `<lot>-1` right of it, both three tiles wide. The garden has none. */
 export type SpotId = `${number}-${0 | 1}`;
 export const SPOTS_PER_LOT = 2;
 export const SPOT_IDS: readonly SpotId[] = Array.from({ length: LOT_COUNT * SPOTS_PER_LOT },
@@ -60,9 +60,12 @@ export function spotLot(s: SpotId): number {
   return Number(s.split('-')[0]);
 }
 
-/** How many tiles wide a spot is: 3 or 2 (one tile deep either way). */
-export function spotSpan(s: SpotId): 2 | 3 {
-  return s.endsWith('-0') ? 3 : 2;
+/**
+ * How many tiles wide a spot is (one tile deep). Both sides are three tiles, so a decoration is
+ * the same size whichever side of the gate it stands (the right one was two tiles until 2026-11-21).
+ */
+export function spotSpan(_s: SpotId): 2 | 3 {
+  return 3;
 }
 
 export interface DecorState {

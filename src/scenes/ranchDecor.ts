@@ -14,8 +14,8 @@ export const DECOR_LPC_TEX = 'decor-lpc';
 export const DECOR_MADE_TEX = 'decor-made';
 type Frames = Partial<Record<string, readonly [number, number, number, number]>>;
 /**
- * A decoration fills its spot: the largest whole-number scale that fits the spot's width (two or
- * three tiles) and height limit, so its pixels stay crisp. The small flower beds are a few pixels
+ * A decoration fills its spot: the largest whole-number scale that fits the spot's width (three
+ * tiles) and height limit, so its pixels stay crisp. The small flower beds are a few pixels
  * wider than a tile, so whole steps left them at half their spot: they stretch to fit it exactly.
  * The little tree grows in half steps (half a world unit is one canvas pixel at the care view's
  * zoom, ASSET_RES 2, so its pixels stay square). Pigeons are drawn at PIGEON_SCALE.
