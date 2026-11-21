@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoamGraph, nearestNode, route } from '../../src/scenes/petRoam';
+import { buildRoamGraph, nearestNode, rejoin, route } from '../../src/scenes/petRoam';
 import { SCENERY_WORLD, overlaps, propBox, sceneryLayout, type Rect } from '../../src/scenes/ranchScenery';
 
 // Same geometry as RanchScene: the six plots in page order on a 2 × 3 grid.
@@ -51,5 +51,29 @@ describe('pet roaming network', () => {
       for (let i = 1; i < path.length; i++) expect(g.adj[path[i - 1]]).toContain(path[i]);
     }
     expect(nearestNode(g, g.nodes[5].x + 3, g.nodes[5].y - 2)).toBe(5);
+  });
+});
+
+describe('a pet stopped between two corners goes back onto the path', () => {
+  // a crossing with at least three ways out, and the pet halfway along one of them
+  const a = g.adj.findIndex(ns => ns.length >= 3);
+  const [b, c] = g.adj[a];
+  const mid = { x: (g.nodes[a].x + g.nodes[b].x) / 2, y: (g.nodes[a].y + g.nodes[b].y) / 2 };
+
+  it('heading somewhere else, it first walks back to the corner it came from', () => {
+    expect(rejoin(g, mid, a, b, [c])).toEqual([a, c]);
+  });
+
+  it('carrying on the way it was going, it just goes on', () => {
+    expect(rejoin(g, mid, a, b, [b, a])).toEqual([b, a]);
+  });
+
+  it('with nowhere to go, it goes back to the corner', () => {
+    expect(rejoin(g, mid, a, b, [])).toEqual([a]);
+  });
+
+  it('standing on the corner itself, nothing changes', () => {
+    expect(rejoin(g, g.nodes[a], a, b, [c])).toEqual([c]);
+    expect(rejoin(g, g.nodes[a], a, undefined, [])).toEqual([]);
   });
 });

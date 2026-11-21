@@ -123,3 +123,16 @@ export function nearestNode(g: RoamGraph, x: number, y: number, ok: (i: number) 
   });
   return best;
 }
+
+/**
+ * The path a pet stopped at `at` should walk next, given the path it has chosen from `node` (the
+ * corner it last passed) and `heading` (the corner it was walking to then). If it stopped between
+ * the two (a trick or a tap mid-walk) and is not carrying on to `heading`, it first walks back to
+ * `node`, so it never cuts across from the middle of a path to somewhere else.
+ */
+export function rejoin(g: RoamGraph, at: Pt, node: number, heading: number | undefined, path: number[]): number[] {
+  const n = g.nodes[node];
+  if (Math.hypot(at.x - n.x, at.y - n.y) < 1) return path;
+  if (path.length > 0 && path[0] === heading) return path;
+  return [node, ...path];
+}

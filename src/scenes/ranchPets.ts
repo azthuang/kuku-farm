@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { Pet } from '../core/ranch';
 import { PETS, type PetKind } from '../core/species';
-import { nearestNode, route, type RoamGraph } from './petRoam';
+import { nearestNode, rejoin, route, type RoamGraph } from './petRoam';
 import { SLEEP_COL, WALK_FPS, petFrame, walkCycle } from './petSheet';
 import { spinJump } from './trickMoves';
 import { assetUrl } from '../core/assetUrl';
@@ -249,17 +249,21 @@ export class RanchPets {
   /** Picks where to go next: now and then a resting spot, otherwise the next stretch of path. */
   private walkOn(v: PetView, time: number): void {
     const g = this.graph;
+    // stopped mid-path (a trick, a tap): back to the corner first unless it carries straight on
+    const at = { x: v.box.x, y: v.box.y };
+    const heading = v.path[0];
+    const back = (path: number[]): number[] => rejoin(g, at, v.node, heading, path);
     const pt = this.patrol?.id === v.id ? this.patrol : null;
     if (pt && pt.stops.length > 0) {
       const stop = pt.stops[pt.next % pt.stops.length];
-      v.path = route(g, v.node, stop.node).slice(1);
+      v.path = back(route(g, v.node, stop.node).slice(1));
       if (v.path.length === 0) v.path = [stop.node];
       v.mode = 'walk';
       return;
     }
     if (time >= v.restAt && g.rest.length > 0) {
       const spot = g.rest[Math.floor(Math.random() * g.rest.length)];
-      v.path = route(g, v.node, spot).slice(1);
+      v.path = back(route(g, v.node, spot).slice(1));
       if (v.path.length === 0) {
         v.restAt = time + rand(60_000, 120_000);
         this.sleep(v);
@@ -272,7 +276,7 @@ export class RanchPets {
         this.pause(v, 2000, 4000);
         return;
       }
-      v.path = [choices[Math.floor(Math.random() * choices.length)]];
+      v.path = back([choices[Math.floor(Math.random() * choices.length)]]);
     }
     v.mode = 'walk';
   }
@@ -352,10 +356,7 @@ export class RanchPets {
     });
     this.patrol = { id: v.id, stops: [...stops], next: first };
     if (v.mode === 'sleep') this.wake(v);
-    if (v.mode !== 'trick') {
-      v.path = [];
-      this.walkOn(v, this.scene.time.now);
-    }
+    if (v.mode !== 'trick') this.walkOn(v, this.scene.time.now);
   }
 
   busy(id: string): boolean {
