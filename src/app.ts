@@ -30,7 +30,7 @@ import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
 import {
   buySpecial, hasTrick, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
 } from './core/decor';
-import { createDecorUi, isSecondTap } from './ui/decorUi';
+import { createDecorUi, decorTapOpens } from './ui/decorUi';
 import { careFeedback, TOAST_PET_EATS } from './ui/ranchFeedback';
 
 /** Caps on waiting for speech before moving on (zh-TW chants measure about 1.9-2.3 s). */
@@ -630,19 +630,20 @@ export function startApp(root: HTMLElement): void {
     },
     onDecorSpot: spot => {
       const id = game.state.ranch.decor.placed[spot];
-      // pigeons, pond, bush: a tap plays, a quick second tap opens 換成什麼？
-      if (id && hasTrick(id)) {
-        const now = Date.now();
-        if (isSecondTap(lastTrickTap, spot, now)) {
-          lastTrickTap = null;
-          decorUi.open(spot, game.state);
-          return;
-        }
-        lastTrickTap = { spot, at: now };
-        if (ranchScene.playDecor(spot)) sfx.play(id === 'pond' ? 'splash' : id === 'bush' ? 'hop' : 'flap');
+      // An empty spot opens 放什麼？ at once. A decoration plays on the first tap (pigeons, pond and
+      // bush do their trick, the others wiggle); a quick second tap on it opens 換成什麼？.
+      const now = Date.now();
+      if (decorTapOpens(!!id, lastTrickTap, spot, now)) {
+        lastTrickTap = null;
+        decorUi.open(spot, game.state);
         return;
       }
-      decorUi.open(spot, game.state);
+      lastTrickTap = { spot, at: now };
+      if (id && hasTrick(id)) {
+        if (ranchScene.playDecor(spot)) sfx.play(id === 'pond' ? 'splash' : id === 'bush' ? 'hop' : 'flap');
+      } else {
+        ranchScene.wiggleDecor(spot);
+      }
     },
     onSpecial: (id, slot) => {
       backToken++; // watching its show: stay on the map, no automatic return from a just-placed special

@@ -623,6 +623,11 @@ export class RanchScene extends Phaser.Scene {
     return this.decor?.trick(spot) ?? false;
   }
 
+  /** A first tap on a decoration without a trick: it wiggles. */
+  wiggleDecor(spot: SpotId): void {
+    this.decor?.wiggle(spot);
+  }
+
   /** Stars over a decoration spot or a special's big spot (just placed or shown). */
   decorSparkle(target: { spot: SpotId } | { slot: 0 | 1 }): void {
     if ('spot' in target) this.decor?.sparkleSpot(target.spot);

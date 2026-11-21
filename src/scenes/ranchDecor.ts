@@ -478,6 +478,17 @@ export class DecorLayer {
     return o;
   }
 
+  /** A first tap on a decoration without a trick: a quick squash, so the child sees it was touched. */
+  wiggle(spot: SpotId): boolean {
+    const v = this.spots.get(spot);
+    if (!v?.id || v.id === 'pigeons') return false; // the flock has no picture of its own to squash
+    const base = v.img.scaleX;
+    this.scene.tweens.killTweensOf(v.img);
+    v.img.setScale(base);
+    this.scene.tweens.add({ targets: v.img, scaleY: base * 0.9, duration: 90, yoyo: true });
+    return true;
+  }
+
   /** A decoration's trick on a tap (pigeons, pond, bush); false for one without, or while it still runs. */
   trick(spot: SpotId): boolean {
     const id = this.spots.get(spot)?.id;

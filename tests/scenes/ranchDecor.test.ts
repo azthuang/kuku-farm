@@ -114,6 +114,14 @@ describe('decoration layer: pigeons', () => {
     expect(layer.trick('2-1')).toBe(false); // flower beds have no trick
   });
 
+  it('a first tap on a decoration without a trick wiggles it; an empty spot has nothing to wiggle', () => {
+    const { scene } = fakeScene();
+    const layer = new DecorLayer(scene as never, deps);
+    layer.sync(decor({ '2-1': 'flowers' }), open, false);
+    expect(layer.wiggle('2-1')).toBe(true);
+    expect(layer.wiggle('2-0')).toBe(false);
+  });
+
   it('storing the pond or the bush mid-trick takes the fish and the rabbit with it', () => {
     const { scene, flush, images } = fakeScene();
     const layer = new DecorLayer(scene as never, deps);

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PIGEON_DOUBLE_MS, createDecorUi, isSecondTap } from '../../src/ui/decorUi';
+import { PIGEON_DOUBLE_MS, createDecorUi, decorTapOpens, isSecondTap } from '../../src/ui/decorUi';
 import { createNewState, type GameState } from '../../src/core/state';
 import { DECOR_ORDER, placeDecor } from '../../src/core/decor';
 
@@ -135,5 +135,15 @@ describe('pigeons: a second tap opens the list', () => {
     expect(isSecondTap({ spot: '1-1', at: 1000 }, '1-1', 2500)).toBe(true);
     expect(isSecondTap({ spot: '1-1', at: 1000 }, '1-1', 2600)).toBe(false);
     expect(isSecondTap({ spot: '1-1', at: 1000 }, '1-0', 1200)).toBe(false);
+  });
+});
+
+describe('a decoration opens 換成什麼？ on the second tap', () => {
+  it('an empty spot opens at once; a placed decoration only on a quick second tap on it', () => {
+    expect(decorTapOpens(false, null, '1-1', 0)).toBe(true); // 放什麼？ on an empty spot: one tap
+    expect(decorTapOpens(true, null, '1-1', 0)).toBe(false); // the first tap only wiggles or plays
+    expect(decorTapOpens(true, { spot: '1-1', at: 1000 }, '1-1', 1400)).toBe(true);
+    expect(decorTapOpens(true, { spot: '1-1', at: 1000 }, '1-1', 2700)).toBe(false); // too late: a new first tap
+    expect(decorTapOpens(true, { spot: '1-0', at: 1000 }, '1-1', 1200)).toBe(false); // another spot
   });
 });

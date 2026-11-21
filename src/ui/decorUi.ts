@@ -13,11 +13,19 @@ const CROP_EMOJI = Object.fromEntries(
   Object.values(CROP_BY_ROW).map(c => [c.id, c.emoji]),
 ) as Record<CropId, string>;
 
-/** A tap plays the pigeons, pond or bush; a second tap on them within this long opens 「換成什麼？」. */
+/**
+ * A first tap on a decoration plays it (the pigeons, pond or bush do their trick, the others
+ * wiggle); a second tap on it within this long opens 「換成什麼？」.
+ */
 export const PIGEON_DOUBLE_MS = 1600;
 
 export function isSecondTap(last: { spot: SpotId; at: number } | null, spot: SpotId, now: number): boolean {
   return last !== null && last.spot === spot && now - last.at < PIGEON_DOUBLE_MS;
+}
+
+/** Whether a tap on `spot` opens its list: at once on an empty spot, on the second tap on a decoration. */
+export function decorTapOpens(placed: boolean, last: { spot: SpotId; at: number } | null, spot: SpotId, now: number): boolean {
+  return !placed || isSecondTap(last, spot, now);
 }
 
 export interface DecorUi {
