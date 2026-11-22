@@ -41,6 +41,19 @@ export function showAudioDiag(): void {
     log.textContent = `${t} ${msg}\n${log.textContent ?? ''}`;
   };
 
+  // Log when the game's sound-effect engine is created and every state change it goes through
+  // (the game creates it lazily on the first tap, after this has run).
+  if (w.AudioContext) {
+    const Base = w.AudioContext;
+    w.AudioContext = class extends Base {
+      constructor(opts?: AudioContextOptions) {
+        super(opts);
+        add(`♪ 遊戲建立音效引擎（${this.state}）`);
+        this.addEventListener('statechange', () => add(`♪ 音效引擎 → ${this.state}`));
+      }
+    };
+  }
+
   // Log every speak / cancel the game itself makes, with what the browser then reports.
   if (synth) {
     const s = synth;
