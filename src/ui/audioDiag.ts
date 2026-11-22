@@ -41,6 +41,27 @@ export function showAudioDiag(): void {
     log.textContent = `${t} ${msg}\n${log.textContent ?? ''}`;
   };
 
+  // Log every speak / cancel the game itself makes, with what the browser then reports.
+  if (synth) {
+    const s = synth;
+    const speak0 = s.speak.bind(s);
+    const cancel0 = s.cancel.bind(s);
+    let n = 0;
+    s.speak = (u: SpeechSynthesisUtterance) => {
+      const id = ++n;
+      const what = `#${id}「${u.text.slice(0, 12)}」${u.volume === 0 ? '(無聲)' : ''}`;
+      add(`→ speak ${what}${s.speaking ? '，正在講' : ''}${s.pending ? '，有排隊' : ''}`);
+      u.addEventListener('start', () => add(`  ${what} 開始`));
+      u.addEventListener('end', () => add(`  ${what} 結束`));
+      u.addEventListener('error', e => add(`  ${what} 錯誤 ${(e as SpeechSynthesisErrorEvent).error}`));
+      speak0(u);
+    };
+    s.cancel = () => {
+      add(`→ cancel${s.speaking ? '（正在講）' : ''}${s.pending ? '（有排隊）' : ''}`);
+      cancel0();
+    };
+  }
+
   const render = (): void => {
     let voices: SpeechSynthesisVoice[] = [];
     try { voices = synth ? synth.getVoices() : []; } catch { /* ignore */ }
@@ -109,6 +130,14 @@ export function showAudioDiag(): void {
   button('🗣️ 測試語音（只指定 zh-TW）', () => speak(false));
   button('🔈 測試音效', beep);
   button('🔄 重新整理', render);
+  let small = false;
+  button('↕️ 縮小／放大', () => {
+    small = !small;
+    info.hidden = small;
+    box.style.inset = small ? 'auto 8px 8px 8px' : '8px';
+    box.style.maxHeight = small ? '30vh' : '';
+    box.style.opacity = small ? '0.92' : '1';
+  });
   button('✖️ 關閉', () => box.remove());
 
   try { synth?.addEventListener?.('voiceschanged', render); } catch { /* ignore */ }
