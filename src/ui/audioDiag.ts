@@ -97,6 +97,34 @@ export function showAudioDiag(): void {
     }, 3000);
   };
 
+  /** Speaks once per way of choosing the voice, one after another, and logs how each went. */
+  const tryAll = async (): Promise<void> => {
+    if (!synth) { add('沒有語音引擎'); return; }
+    const voices = synth.getVoices();
+    const v = voices[pickVoice(voices)] as SpeechSynthesisVoice | undefined;
+    const ways: [string, (u: SpeechSynthesisUtterance) => void][] = [
+      ['A 聲音+它的語言碼', u => { if (v) { u.voice = v; u.lang = v.lang; } }],
+      ['B 只設聲音', u => { if (v) u.voice = v; }],
+      ['C 聲音+zh-TW', u => { if (v) u.voice = v; u.lang = 'zh-TW'; }],
+      ['D 只設 zh-TW', u => { u.lang = 'zh-TW'; }],
+      ['E 什麼都不設', () => undefined],
+    ];
+    for (const [name, set] of ways) {
+      const outcome = await new Promise<string>(resolve => {
+        const u = new SpeechSynthesisUtterance('三乘七');
+        set(u);
+        live.add(u);
+        const done = (r: string) => { live.delete(u); resolve(r); };
+        const timer = window.setTimeout(() => done('4 秒沒反應'), 4000);
+        u.onstart = () => { clearTimeout(timer); u.onend = () => done('✅ 有唸完'); u.onerror = e => done(`開始後錯誤 ${(e as SpeechSynthesisErrorEvent).error}`); };
+        u.onerror = e => { clearTimeout(timer); done(`❌ ${(e as SpeechSynthesisErrorEvent).error}`); };
+        try { synth.speak(u); } catch (err) { clearTimeout(timer); done(`例外 ${String(err)}`); }
+      });
+      add(`【${name}】${outcome}`);
+    }
+    add(`（聲音：${v ? `${v.lang} ${v.name} local=${v.localService}` : '沒有'}）`);
+  };
+
   const beep = (): void => {
     if (!Ctor) { add('沒有音效引擎'); return; }
     try {
@@ -128,6 +156,7 @@ export function showAudioDiag(): void {
   };
   button('🗣️ 測試語音（遊戲的聲音）', () => speak(true));
   button('🗣️ 測試語音（只指定 zh-TW）', () => speak(false));
+  button('🧪 語音 5 種方式', () => { void tryAll(); });
   button('🔈 測試音效', beep);
   button('🔄 重新整理', render);
   let small = false;
