@@ -85,6 +85,27 @@ describe('save', () => {
     expect(g.state.unlocked).toBe(1);
   });
 
+  it('loadFrom / saveTo use the given key and back up to <key>-corrupt', () => {
+    const mem = memoryStorage();
+    const s = createNewState(5);
+    saveTo(mem, s, 'kuku-farm-save-p2');
+    expect(mem.getItem(SAVE_KEY)).toBeNull();
+    expect(loadFrom(mem, 'kuku-farm-save-p2')).toEqual({ kind: 'ok', state: s });
+    mem.setItem('kuku-farm-save-p2', '{bad');
+    expect(loadFrom(mem, 'kuku-farm-save-p2')).toEqual({ kind: 'corrupt' });
+    expect(mem.getItem('kuku-farm-save-p2-corrupt')).toBe('{bad');
+    expect(mem.getItem(CORRUPT_KEY)).toBeNull();
+  });
+
+  it('export file names carry the player name, minus characters files cannot hold', () => {
+    const d = new Date(2026, 10, 22);
+    expect(exportFileName(d)).toBe('kuku-farm-save-20261122.json');
+    expect(exportFileName(d, '小明')).toBe('kuku-farm-save-小明-20261122.json');
+    expect(exportFileName(d, 'a/b:c?')).toBe('kuku-farm-save-abc-20261122.json');
+    expect(exportFileName(d, 'a\\b"c|')).toBe('kuku-farm-save-abc-20261122.json');
+    expect(exportFileName(d, '/?')).toBe('kuku-farm-save-20261122.json');
+  });
+
   it('loadFrom never throws', () => {
     const throwing = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('y'); } };
     expect(loadFrom(throwing)).toEqual({ kind: 'empty' });

@@ -290,33 +290,36 @@ export function parseSave(raw: string): ParseResult {
   }
 }
 
-/** `ranchReset` as in ParseResult; the raw save was then copied to CORRUPT_KEY first. */
+/** `ranchReset` as in ParseResult; the raw save was then copied to `<key>-corrupt` first. */
 export type LoadResult =
   | { kind: 'ok'; state: GameState; ranchReset?: true }
   | { kind: 'empty' }
   | { kind: 'corrupt' }
   | { kind: 'newer' };
 
-export function loadFrom(storage: Pick<Storage, 'getItem' | 'setItem'>): LoadResult {
+/** Each player's save lives under its own key; the first player keeps SAVE_KEY. */
+export function loadFrom(storage: Pick<Storage, 'getItem' | 'setItem'>, key: string = SAVE_KEY): LoadResult {
   try {
-    const raw = storage.getItem(SAVE_KEY);
+    const raw = storage.getItem(key);
     if (raw === null) return { kind: 'empty' };
     const r = parseSave(raw);
     if (r.ok && !r.ranchReset) return { kind: 'ok', state: r.state };
     if (!r.ok && r.error === 'newer-version') return { kind: 'newer' }; // never touch storage
     // Keep the raw save so a broken ranch (or a broken save) can still be recovered by hand.
-    try { storage.setItem(CORRUPT_KEY, raw); } catch { /* backup is best-effort */ }
+    try { storage.setItem(`${key}-corrupt`, raw); } catch { /* backup is best-effort */ }
     return r.ok ? { kind: 'ok', state: r.state, ranchReset: true } : { kind: 'corrupt' };
   } catch {
     return { kind: 'empty' };
   }
 }
 
-export function saveTo(storage: Pick<Storage, 'setItem'>, s: GameState): void {
-  storage.setItem(SAVE_KEY, serialize(s));
+export function saveTo(storage: Pick<Storage, 'setItem'>, s: GameState, key: string = SAVE_KEY): void {
+  storage.setItem(key, serialize(s));
 }
 
-export function exportFileName(d: Date): string {
+/** The player's name (when given) goes in too, without the characters a file name cannot hold. */
+export function exportFileName(d: Date, name?: string): string {
   const p = (n: number) => String(n).padStart(2, '0');
-  return `kuku-farm-save-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
+  const who = (name ?? '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '');
+  return `kuku-farm-save-${who ? `${who}-` : ''}${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
 }
