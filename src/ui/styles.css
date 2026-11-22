@@ -516,6 +516,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 .set-note { margin-top: 8px !important; font-size: 13px; opacity: 0.85; }
 .set-author { margin: 0; text-align: center; font-size: 13px; font-weight: 700; opacity: 0.6; }
 .set-credits[hidden] { display: none; }
+/* .set-btn sets display, which beats the hidden attribute (the undo button is hidden until an import) */
+.set-btn[hidden] { display: none; }
 
 @media (min-width: 600px) {
   .app { max-width: 600px; margin: 0 auto; }
