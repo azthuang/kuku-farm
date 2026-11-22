@@ -43,8 +43,18 @@ export function pickVoice(voices: VoiceLike[]): number {
   return ok.findIndex(t => t !== null);
 }
 
-export function createSpeech(synth: SpeechSynthesis | undefined, enabled: boolean): Speech {
+/** Errors that are not a broken speech engine: our own cut-offs, and speech before the first tap. */
+const EXPECTED_ERRORS = new Set(['interrupted', 'canceled', 'not-allowed']);
+
+/**
+ * onFail runs once, on the first utterance the browser fails to speak for any other reason
+ * (Android Chrome can get stuck failing every one with 'synthesis-failed' until it is restarted).
+ */
+export function createSpeech(
+  synth: SpeechSynthesis | undefined, enabled: boolean, onFail?: (error: string) => void,
+): Speech {
   let on = enabled;
+  let failReported = false;
   let voice: SpeechSynthesisVoice | null = null;
   /** Set once any of our utterances has actually started: the browser allows speech now. */
   let unlocked = false;
@@ -100,7 +110,14 @@ export function createSpeech(synth: SpeechSynthesis | undefined, enabled: boolea
       if (!finished) { clearTimeout(timer); timer = setTimeout(() => finish(false), maxMs); }
     };
     u.onend = () => finish(true);
-    u.onerror = () => finish(false);
+    u.onerror = e => {
+      const error = (e as SpeechSynthesisErrorEvent | undefined)?.error;
+      if (error && !EXPECTED_ERRORS.has(error) && !failReported) {
+        failReported = true;
+        try { onFail?.(error); } catch { /* the hint must never break speech */ }
+      }
+      finish(false);
+    };
     return () => finish(false);
   };
 

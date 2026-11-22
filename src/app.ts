@@ -74,6 +74,8 @@ export function startApp(root: HTMLElement): void {
   const speech = createSpeech(
     typeof window !== 'undefined' ? window.speechSynthesis : undefined,
     game.state.settings.speech,
+    // layout exists by the time anything is spoken (every utterance follows a tap)
+    () => layout.toast('🔇 唸不出聲音，請把瀏覽器關掉再打開', 6000),
   );
   const say = (text: string): void => speech.say(text);
   const sfx = createSfx(() => {

@@ -4,7 +4,7 @@ import { createSpeech, pickVoice } from '../../src/ui/speech';
 type V = { lang: string; name: string };
 type U = {
   text: string; rate: number; volume: number;
-  onstart: (() => void) | null; onend: (() => void) | null; onerror: (() => void) | null;
+  onstart: (() => void) | null; onend: (() => void) | null; onerror: ((e?: { error: string }) => void) | null;
 };
 
 function fakeSynth(initial: V[]) {
@@ -193,5 +193,42 @@ describe('createSpeech', () => {
     const p = sp.sayAndWait('二二得四', 3000);
     sp.say('二乘三');
     expect(await state(p)).toBe('done');
+  });
+});
+
+describe('speech failure hint', () => {
+  const zh = [{ lang: 'zh-TW', name: 'a' }];
+
+  it('reports a failed utterance once, however often it fails', () => {
+    const fake = fakeSynth(zh);
+    const fails: string[] = [];
+    const sp = createSpeech(fake as any, true, e => fails.push(e));
+    sp.say('二乘三');
+    fake.last().onerror?.({ error: 'synthesis-failed' });
+    sp.say('二乘四');
+    fake.last().onerror?.({ error: 'synthesis-failed' });
+    expect(fails).toEqual(['synthesis-failed']);
+  });
+
+  it('counts a failed unlock too', () => {
+    const fake = fakeSynth(zh);
+    const fails: string[] = [];
+    const sp = createSpeech(fake as any, true, e => fails.push(e));
+    void sp.unlock();
+    fake.last().onerror?.({ error: 'audio-busy' });
+    expect(fails).toEqual(['audio-busy']);
+  });
+
+  it('ignores speech we cut off ourselves and speech blocked before the first tap', () => {
+    const fake = fakeSynth(zh);
+    const fails: string[] = [];
+    const sp = createSpeech(fake as any, true, e => fails.push(e));
+    for (const error of ['interrupted', 'canceled', 'not-allowed']) {
+      sp.say('二乘三');
+      fake.last().onerror?.({ error });
+    }
+    sp.say('二乘三');
+    fake.last().onerror?.();
+    expect(fails).toEqual([]);
   });
 });
