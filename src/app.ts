@@ -6,9 +6,13 @@ import { nextPracticeRow } from './core/practice';
 import type { Mode } from './core/mastery';
 import { SAVE_KEY, exportFileName, loadFrom, parseSave, saveTo, serialize, type LoadResult } from './core/save';
 import {
-  addProfile, editProfile, loadProfiles, removeProfile, saveKeyOf, storeProfiles, type Profiles,
+  MAX_PROFILES, addProfile, editProfile, loadProfiles, nameFromFile, removeProfile, saveKeyOf, storeProfiles,
+  type Profiles,
 } from './core/profiles';
+import { backupKeyOf, readBackup, writeBackup } from './core/importBackup';
+import { createTabLock } from './core/tabLock';
 import { createProfileUi } from './ui/profileUi';
+import { showTabCover } from './ui/tabCover';
 import { systemClock, systemRng } from './core/clock';
 import { chantText, questionText, toChineseNumber } from './core/chant';
 import { createLayout, type Tab } from './ui/layout';
@@ -113,6 +117,15 @@ export function startApp(root: HTMLElement): void {
   try { void navigator.storage?.persist?.()?.catch(() => {}); } catch { /* ignore */ }
 
   const layout = createLayout(root, game.state);
+  // The tab opened last owns the saves: an older tab is covered and never saves again.
+  const tabLock = store
+    ? createTabLock(store, window, document, () => {
+      speech.cancel();
+      showTabCover(root, () => location.reload());
+    })
+    : null;
+  /** False (and the tab covered) once another tab has opened the game. */
+  const ownsTab = (): boolean => tabLock?.check() ?? true;
   const panel = createPanel(layout.panel);
   const scene = new FieldScene();
   const ranchScene = new RanchScene();
@@ -150,6 +163,7 @@ export function startApp(root: HTMLElement): void {
   function save(): void {
     if (readOnly) return;
     if (profiles && current === null) return; // that player was just deleted: never write it back
+    if (!ownsTab()) return; // another tab is playing: its saves win
     const s = game.state;
     s.lastSeenAt = Math.max(s.lastSeenAt, clock.now());
     try {
@@ -365,13 +379,14 @@ export function startApp(root: HTMLElement): void {
   }
 
   function storePlayers(): void {
-    if (!store || !profiles) return;
+    if (!store || !profiles || !ownsTab()) return;
     try { storeProfiles(store, profiles); } catch { /* the list is rebuilt from defaults if lost */ }
   }
 
   function syncPlayers(): void {
     layout.setPlayer(currentProfile());
     if (profiles) profileUi.renderManage(profiles);
+    syncUndo();
   }
 
   /** Saves the current farm (unless told not to), then loads player id's farm, on the field page. */
@@ -425,7 +440,7 @@ export function startApp(root: HTMLElement): void {
     profiles = next;
     if (id === current) current = null; // before anything can save: that farm must not come back
     storePlayers();
-    for (const k of [saveKeyOf(id), `${saveKeyOf(id)}-corrupt`]) {
+    for (const k of [saveKeyOf(id), `${saveKeyOf(id)}-corrupt`, backupKeyOf(saveKeyOf(id))]) {
       try { store.removeItem(k); } catch { /* ignore */ }
     }
     syncPlayers();
@@ -438,17 +453,105 @@ export function startApp(root: HTMLElement): void {
     }
   });
 
-  layout.onImport(text => {
+  // ---------------------------------------------------------------- import
+
+  /** A save file that was read and is waiting for 「換掉」 or 「新增成新玩家」. */
+  let pendingImport: { state: GameState; ranchReset?: true } | null = null;
+
+  // The file's ranch was unreadable: the field progress came in, the ranch starts over.
+  const importedToast = (ranchReset?: true): void =>
+    layout.toast(ranchReset ? '✅ 已匯入存檔（牧場重新開始）' : '✅ 已匯入存檔');
+
+  /** The current farm as stored (after saving it), or null when there is none. */
+  function storedFarm(): string | null {
+    if (!store) return null;
+    save();
+    try { return store.getItem(keyOf(current)); } catch { return null; }
+  }
+
+  function syncUndo(): void {
+    const b = store && current !== null ? readBackup(store, keyOf(current)) : null;
+    layout.setUndo(b === null ? null : b.kind === 'before' ? '↩️ 復原匯入前的農場' : '↪️ 回到匯入的農場');
+  }
+
+  layout.onImport((text, fileName) => {
     const r = parseSave(text);
     if (!r.ok) {
       layout.toast('檔案無法讀取');
       return;
     }
+    pendingImport = r;
+    const who = currentProfile();
+    if (profiles && who) profileUi.showImport(who, profiles.list.length < MAX_PROFILES, nameFromFile(fileName));
+    else importReplace(); // no storage: nothing to keep apart, and nothing is saved anyway
+  });
+
+  /** Puts the pending file in the current player's farm, keeping the farm it replaces. */
+  function importReplace(): void {
+    const r = pendingImport;
+    pendingImport = null;
+    if (!r || !ownsTab()) return;
+    const before = storedFarm();
+    if (store && before !== null) {
+      try {
+        writeBackup(store, keyOf(current), { kind: 'before', text: before });
+      } catch {
+        layout.toast('存不下備份，沒有匯入');
+        return;
+      }
+    }
     replaceGame(r.state);
     readOnly = false; // importing is an explicit choice to use this progress: saving resumes
     save();
-    // The file's ranch was unreadable: the field progress came in, the ranch starts over.
-    layout.toast(r.ranchReset ? '✅ 已匯入存檔（牧場重新開始）' : '✅ 已匯入存檔');
+    syncUndo();
+    importedToast(r.ranchReset);
+  }
+  profileUi.onImportReplace(importReplace);
+
+  profileUi.onImportNew((name, icon) => {
+    const r = pendingImport;
+    pendingImport = null;
+    if (!r || !store || !profiles || !ownsTab()) return;
+    const added = addProfile(profiles, name, icon);
+    if (!added) return;
+    try {
+      saveTo(store, r.state, saveKeyOf(added.id));
+    } catch {
+      layout.toast('存檔失敗，沒有匯入');
+      return;
+    }
+    profiles = added.profiles;
+    storePlayers();
+    switchTo(added.id);
+    layout.closeSettings();
+    importedToast(r.ranchReset);
+  });
+
+  // 「↩️ 復原」 swaps the farm and its backup, so tapping it again swaps back: nothing is lost.
+  layout.onUndo(() => {
+    if (!store || current === null || !ownsTab()) return;
+    const key = keyOf(current);
+    const b = readBackup(store, key);
+    if (!b) {
+      syncUndo();
+      return;
+    }
+    const r = parseSave(b.text);
+    if (!r.ok) {
+      layout.toast('檔案無法讀取');
+      return;
+    }
+    const now = storedFarm();
+    replaceGame(r.state);
+    readOnly = false;
+    save();
+    try {
+      if (now !== null) writeBackup(store, key, { kind: b.kind === 'before' ? 'after' : 'before', text: now });
+      else store.removeItem(backupKeyOf(key));
+    } catch { /* the farm is back either way */ }
+    syncUndo();
+    layout.closeSettings();
+    layout.toast(b.kind === 'before' ? '↩️ 已換回匯入前的農場' : '↪️ 已回到匯入的農場');
   });
 
   // Keep the canvas fitted: the stage shrinks when the question panel opens.
