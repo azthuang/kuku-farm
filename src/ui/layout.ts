@@ -24,6 +24,12 @@ export interface Layout {
   onImport(cb: (text: string) => void): void;
   onSpeechToggle(cb: (on: boolean) => void): void;
   onSoundToggle(cb: (on: boolean) => void): void;
+  /** The settings slot for the 「👥 玩家」 list (filled by the profile UI). */
+  players: HTMLElement;
+  /** Shows the player badge at the top left; null hides it (no players without storage). */
+  setPlayer(p: { name: string; icon: string } | null): void;
+  onPlayerTap(cb: () => void): void;
+  closeSettings(): void;
   /** Shows a short message for `ms` (default 2 s). */
   toast(msg: string, ms?: number): void;
 }
@@ -35,10 +41,12 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   let importCb: (text: string) => void = () => {};
   let speechCb: (on: boolean) => void = () => {};
   let soundCb: (on: boolean) => void = () => {};
+  let playerCb: () => void = () => {};
 
   root.innerHTML = `
     <div class="app">
       <header class="hud">
+        <button type="button" class="hud-player" aria-label="換玩家" hidden><span class="hud-player-icon"></span><span class="hud-player-name"></span></button>
         <div class="hud-crops"></div>
         <div class="hud-level"></div>
         <button type="button" class="hud-gear" aria-label="設定">⚙️</button>
@@ -59,6 +67,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
           <h2>⚙️ 設定</h2>
           <label class="set-row"><span>🔊 語音</span><input type="checkbox" class="set-speech" /></label>
           <label class="set-row"><span>🔈 音效</span><input type="checkbox" class="set-sound" /></label>
+          <div class="set-players"></div>
           <button type="button" class="set-btn set-export">💾 匯出存檔</button>
           <label class="set-btn set-import">📂 匯入存檔
             <input type="file" accept=".json,application/json" class="set-file" hidden />
@@ -106,6 +115,8 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   const sound = q<HTMLInputElement>('.set-sound');
   const credits = q<HTMLElement>('.set-credits');
   const file = q<HTMLInputElement>('.set-file');
+  const players = q<HTMLElement>('.set-players');
+  const playerBtn = q<HTMLButtonElement>('.hud-player');
 
   const counts = new Map<CropId | ProductId, HTMLElement>();
   let lastState = s;
@@ -178,6 +189,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   q<HTMLElement>('.set-close').addEventListener('click', () => { settings.hidden = true; });
   q<HTMLElement>('.set-credits-btn').addEventListener('click', () => { credits.hidden = !credits.hidden; });
   settings.addEventListener('click', e => { if (e.target === settings) settings.hidden = true; });
+  playerBtn.addEventListener('click', () => playerCb());
   speech.addEventListener('change', () => speechCb(speech.checked));
   sound.addEventListener('change', () => soundCb(sound.checked));
   q<HTMLElement>('.set-export').addEventListener('click', () => exportCb());
@@ -207,7 +219,15 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   updateHud(s);
 
   return {
-    stage, panel, ranch, ranchNav, updateHud, bumpCrop, toast,
+    stage, panel, ranch, ranchNav, updateHud, bumpCrop, toast, players,
+    setPlayer(p) {
+      playerBtn.hidden = p === null;
+      q<HTMLElement>('.hud-player-icon').textContent = p ? p.icon : '';
+      q<HTMLElement>('.hud-player-name').textContent = p ? p.name : '';
+      playerBtn.setAttribute('aria-label', p ? `換玩家（現在是${p.name}）` : '換玩家');
+    },
+    onPlayerTap: cb => { playerCb = cb; },
+    closeSettings: () => { settings.hidden = true; },
     onTab: cb => { tabCb = cb; },
     setTab: selectTab,
     onExport: cb => { exportCb = cb; },
