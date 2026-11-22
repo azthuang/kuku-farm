@@ -53,17 +53,29 @@ describe('mastery', () => {
   it('stockWeights: a crop weighs its share times (room left)², so a nearly full crop rarely comes', () => {
     // empty barn: shares unchanged
     expect(stockWeights([0.2, 0.3, 0.5], [0, 0, 0])).toEqual([0.2, 0.3, 0.5]);
-    // half full -> a quarter; full -> only the small minimum
+    // half full -> a quarter; full -> nothing while another crop has room
     const w = stockWeights([0.2, 0.3, 0.5], [0, 0.5, 1]);
     expect(w[0]).toBeCloseTo(0.2);
     expect(w[1]).toBeCloseTo(0.3 * 0.25);
-    expect(w[2]).toBeCloseTo(0.5 * STOCK_MIN);
+    expect(w[2]).toBe(0);
+    // nearly full -> the small minimum, still more than a full crop
+    const near = stockWeights([0.2, 0.3, 0.5], [0.99, 1, 1]);
+    expect(near[0]).toBeCloseTo(0.2 * STOCK_MIN);
+    expect(near[1]).toBe(0);
+    expect(near[2]).toBe(0);
     // everything full: back to the plain shares (same ratios)
     const full = stockWeights([0.2, 0.3, 0.5], [1, 1, 1]);
     expect(full[1] / full[0]).toBeCloseTo(1.5);
     expect(full[2] / full[0]).toBeCloseTo(2.5);
     // past the cap counts as full
     expect(stockWeights([1], [1.2])[0]).toBeCloseTo(STOCK_MIN);
+  });
+  it('pickCrop with fullness: the one crop with room comes even when nearly full itself', () => {
+    // every crop at 999 but wheat (950): a 9× question still grows wheat, whatever the roll
+    const pool = cropPoolForRow(9);
+    const fullness = Object.fromEntries(pool.map(c => [c.id, 1]));
+    fullness.wheat = 950 / 999;
+    for (const roll of [0, 0.3, 0.6, 0.999]) expect(pickCrop(pool, 3, () => roll, fullness)).toBe('wheat');
   });
   it('pickCrop with fullness: a full own crop gives way to the emptier ones', () => {
     const pool = cropPoolForRow(2); // wheat, carrot

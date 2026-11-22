@@ -65,17 +65,22 @@ export function cropWeights(poolSize: number, stars: number): number[] {
   }
 }
 
-/** A full crop keeps this much of its share, so with every crop full the odds are the plain ones. */
+/** A nearly full crop keeps at least this much of its share. */
 export const STOCK_MIN = 0.02;
 
 /**
  * Challenge mode leans toward what the barn is short of: each share is multiplied by
  * (room left)², `fullness` being stock / cap per crop (0 empty, 1 full), never below STOCK_MIN.
+ * A full crop (no room at all) gets nothing while another crop still has room, so a nearly full
+ * crop always beats the full ones (before, both got STOCK_MIN and a crop past 86% came less often
+ * than the full ones); with every crop full the odds are the plain ones.
  * Measured (late game, 3 challenge rounds a day): no harvest lost to the cap while the ranch fills,
  * against 8% with the plain odds; the row's own crop still leads while it has room.
  */
 export function stockWeights(weights: number[], fullness: number[]): number[] {
-  return weights.map((w, i) => w * Math.max(STOCK_MIN, Math.max(0, 1 - fullness[i]) ** 2));
+  const room = fullness.map(f => Math.max(0, 1 - f));
+  if (room.every(r => r === 0)) return weights.map(w => w * STOCK_MIN);
+  return weights.map((w, i) => (room[i] === 0 ? 0 : w * Math.max(STOCK_MIN, room[i] ** 2)));
 }
 
 /** A crop for a question; with `fullness` (challenge mode) a nearly full crop rarely comes. */
