@@ -15,6 +15,14 @@ export interface ProfileUi {
   onEdit(cb: (id: string, name: string, icon: string) => void): void;
   /** 「確定刪除」 was typed and 🗑️ 刪除 pressed. */
   onDelete(cb: (id: string) => void): void;
+  /**
+   * After a save file was read: replace `who`'s farm, or (when canAdd) put it in a new player,
+   * whose name starts as `name` (from the file name; null leaves it empty).
+   */
+  showImport(who: Profile, canAdd: boolean, name: string | null): void;
+  onImportReplace(cb: () => void): void;
+  /** The 匯入成新玩家 editor was confirmed. */
+  onImportNew(cb: (name: string, icon: string) => void): void;
   /** Fills the settings slot: 「👥 玩家」 and a row per player (✏️, and 🗑️ with two or more). */
   renderManage(p: Profiles): void;
 }
@@ -43,6 +51,8 @@ export function createProfileUi(root: HTMLElement, manageSlot: HTMLElement): Pro
   let createCb: (name: string, icon: string) => void = () => {};
   let editCb: (id: string, name: string, icon: string) => void = () => {};
   let deleteCb: (id: string) => void = () => {};
+  let importReplaceCb: () => void = () => {};
+  let importNewCb: (name: string, icon: string) => void = () => {};
   let profiles: Profiles | null = null;
 
   // ---------------------------------------------------------------- picker
@@ -94,6 +104,8 @@ export function createProfileUi(root: HTMLElement, manageSlot: HTMLElement): Pro
   const cancel = el('button', 'set-btn set-close pf-cancel', '取消');
   editor.card.append(edTitle, nameRow, icons, ok, cancel);
   let editing: Profile | null = null;
+  /** The editor was opened from the import dialog: confirming imports into a new player. */
+  let importing = false;
   let chosen = ICONS[0];
 
   function syncEditor(): void {
@@ -101,10 +113,12 @@ export function createProfileUi(root: HTMLElement, manageSlot: HTMLElement): Pro
     ok.disabled = cleanName(nameInput.value) === null;
   }
 
-  function openEditor(p: Profile | null): void {
+  /** `importName` (a string or null) opens it for 匯入成新玩家, with that name filled in. */
+  function openEditor(p: Profile | null, importName?: string | null): void {
     editing = p;
-    edTitle.textContent = p ? '編輯玩家' : '新增玩家';
-    nameInput.value = p ? p.name : '';
+    importing = importName !== undefined;
+    edTitle.textContent = p ? '編輯玩家' : importing ? '匯入成新玩家' : '新增玩家';
+    nameInput.value = p ? p.name : (importName ?? '');
     chosen = p ? p.icon : profiles ? freeIcon(profiles) : ICONS[0];
     syncEditor();
     editor.box.hidden = false;
@@ -117,6 +131,7 @@ export function createProfileUi(root: HTMLElement, manageSlot: HTMLElement): Pro
     if (name === null) return;
     editor.box.hidden = true;
     if (editing) editCb(editing.id, name, chosen);
+    else if (importing) importNewCb(name, chosen);
     else createCb(name, chosen);
   });
 
@@ -150,6 +165,31 @@ export function createProfileUi(root: HTMLElement, manageSlot: HTMLElement): Pro
     deleteCb(deleting.id);
   });
 
+  // ---------------------------------------------------------------- import
+  const imp = overlay(root, 'pf-import');
+
+  function choice(cls: string, label: string, note: string): HTMLButtonElement {
+    const b = el('button', `set-btn pf-imp-btn ${cls}`);
+    b.append(el('span', 'pf-imp-label', label), el('span', 'pf-imp-note', note));
+    return b;
+  }
+
+  function showImport(who: Profile, canAdd: boolean, name: string | null): void {
+    const replace = choice('pf-imp-replace', `${who.icon} 換掉「${who.name}」的農場`,
+      `${who.name}現在的進度會被取代（可以在 ⚙️ 復原）`);
+    replace.addEventListener('click', () => { imp.box.hidden = true; importReplaceCb(); });
+    imp.card.replaceChildren(el('h2', '', '📂 這個存檔要放在哪裡？'), replace);
+    if (canAdd) {
+      const add = choice('pf-imp-new', '➕ 新增成新玩家', '不會動到任何人');
+      add.addEventListener('click', () => { imp.box.hidden = true; openEditor(null, name); });
+      imp.card.append(add);
+    }
+    const cancel = el('button', 'set-btn set-close pf-imp-cancel', '取消');
+    cancel.addEventListener('click', () => { imp.box.hidden = true; });
+    imp.card.append(cancel);
+    imp.box.hidden = false;
+  }
+
   // ---------------------------------------------------------------- settings list
   function renderManage(p: Profiles): void {
     profiles = p;
@@ -182,6 +222,9 @@ export function createProfileUi(root: HTMLElement, manageSlot: HTMLElement): Pro
     onCreate: cb => { createCb = cb; },
     onEdit: cb => { editCb = cb; },
     onDelete: cb => { deleteCb = cb; },
+    showImport,
+    onImportReplace: cb => { importReplaceCb = cb; },
+    onImportNew: cb => { importNewCb = cb; },
     renderManage,
   };
 }

@@ -619,3 +619,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 .hud-player-icon { font-size: clamp(18px, 3vmin, 24px); }
 .hud-player-name { max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 380px) { .hud-player-name { display: none; } }
+
+/* ---------------------------------------------------------------- import dialog, tab cover */
+.pf-import { z-index: 31; }
+.pf-imp-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; height: auto; padding: 10px 12px; }
+.pf-imp-label { font-size: 18px; }
+.pf-imp-note { font-size: 13px; font-weight: 600; opacity: 0.75; }
+.tab-cover { z-index: 40; }
+.tab-cover-icon { font-size: 64px; line-height: 1; text-align: center; }

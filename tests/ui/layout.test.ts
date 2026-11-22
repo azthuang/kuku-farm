@@ -36,3 +36,20 @@ describe('layout player badge', () => {
     expect(root.querySelector<HTMLElement>('.settings')!.hidden).toBe(true);
   });
 });
+
+describe('layout import undo', () => {
+  it('shows the undo button only when there is something to undo', () => {
+    const { root, layout } = setup();
+    const btn = root.querySelector<HTMLButtonElement>('.set-undo')!;
+    expect(btn.hidden).toBe(true);
+    let taps = 0;
+    layout.onUndo(() => { taps++; });
+    layout.setUndo('↩️ 復原匯入前的農場');
+    expect(btn.hidden).toBe(false);
+    expect(btn.textContent).toBe('↩️ 復原匯入前的農場');
+    btn.click();
+    expect(taps).toBe(1);
+    layout.setUndo(null);
+    expect(btn.hidden).toBe(true);
+  });
+});

@@ -21,7 +21,11 @@ export interface Layout {
   /** Switches tab as if its button was pressed (fires onTab when it changes). */
   setTab(t: Tab): void;
   onExport(cb: () => void): void;
-  onImport(cb: (text: string) => void): void;
+  /** The picked file's text ('' when unreadable) and its name. */
+  onImport(cb: (text: string, fileName: string) => void): void;
+  /** Shows the undo-import button with this label; null hides it. */
+  setUndo(label: string | null): void;
+  onUndo(cb: () => void): void;
   onSpeechToggle(cb: (on: boolean) => void): void;
   onSoundToggle(cb: (on: boolean) => void): void;
   /** The settings slot for the 「👥 玩家」 list (filled by the profile UI). */
@@ -38,7 +42,8 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   let tabCb: (t: Tab) => void = () => {};
   let tab: Tab = 'field';
   let exportCb: () => void = () => {};
-  let importCb: (text: string) => void = () => {};
+  let importCb: (text: string, fileName: string) => void = () => {};
+  let undoCb: () => void = () => {};
   let speechCb: (on: boolean) => void = () => {};
   let soundCb: (on: boolean) => void = () => {};
   let playerCb: () => void = () => {};
@@ -72,6 +77,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
           <label class="set-btn set-import">📂 匯入存檔
             <input type="file" accept=".json,application/json" class="set-file" hidden />
           </label>
+          <button type="button" class="set-btn set-undo" hidden></button>
           <button type="button" class="set-btn set-credits-btn">📜 素材來源</button>
           <div class="set-credits" hidden>
             <h3>🎮 遊戲設計與製作</h3>
@@ -116,6 +122,8 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   const credits = q<HTMLElement>('.set-credits');
   const file = q<HTMLInputElement>('.set-file');
   const players = q<HTMLElement>('.set-players');
+  const undo = q<HTMLButtonElement>('.set-undo');
+  undo.addEventListener('click', () => undoCb());
   const playerBtn = q<HTMLButtonElement>('.hud-player');
 
   const counts = new Map<CropId | ProductId, HTMLElement>();
@@ -205,7 +213,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
     } finally {
       file.value = ''; // allow picking the same file again
     }
-    importCb(text);
+    importCb(text, f.name);
   });
 
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -232,6 +240,11 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
     setTab: selectTab,
     onExport: cb => { exportCb = cb; },
     onImport: cb => { importCb = cb; },
+    setUndo(label) {
+      undo.hidden = label === null;
+      undo.textContent = label ?? '';
+    },
+    onUndo: cb => { undoCb = cb; },
     onSpeechToggle: cb => { speechCb = cb; },
     onSoundToggle: cb => { soundCb = cb; },
   };

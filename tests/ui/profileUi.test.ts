@@ -157,3 +157,77 @@ describe('profile delete', () => {
     expect(q<HTMLButtonElement>('.pf-del-ok')!.disabled).toBe(true);
   });
 });
+
+describe('import dialog', () => {
+  function withImport() {
+    const s = setup();
+    s.ui.onImportReplace(() => s.log.push(['replace']));
+    s.ui.onImportNew((name, icon) => s.log.push(['importNew', name, icon]));
+    return s;
+  }
+  const xiaoming = { id: 'p1', name: '小明', icon: '🐰' };
+
+  it('asks where the file goes, naming the player whose farm would be replaced', () => {
+    const { ui, log } = withImport();
+    ui.showImport(xiaoming, true, '小華');
+    expect(visible('.pf-import')).toBe(true);
+    expect(q('.pf-import h2')!.textContent).toBe('📂 這個存檔要放在哪裡？');
+    expect(q('.pf-imp-replace')!.textContent).toContain('🐰 換掉「小明」的農場');
+    expect(q('.pf-imp-new')!.textContent).toContain('➕ 新增成新玩家');
+    q<HTMLElement>('.pf-imp-replace')!.click();
+    expect(log).toEqual([['replace']]);
+    expect(visible('.pf-import')).toBe(false);
+  });
+
+  it('has no 新增 button when four players already exist', () => {
+    const { ui } = withImport();
+    ui.showImport(xiaoming, false, null);
+    expect(q('.pf-imp-new')).toBeNull();
+    expect(q('.pf-imp-replace')).not.toBeNull();
+  });
+
+  it('新增成新玩家 opens the editor with the name from the file', () => {
+    const { ui, log } = withImport();
+    ui.showPicker(named(), false); // gives the editor the list for a free icon
+    ui.hidePicker();
+    ui.showImport(xiaoming, true, '小華');
+    q<HTMLElement>('.pf-imp-new')!.click();
+    expect(visible('.pf-import')).toBe(false);
+    expect(visible('.pf-editor')).toBe(true);
+    expect(q('.pf-editor h2')!.textContent).toBe('匯入成新玩家');
+    expect(q<HTMLInputElement>('.pf-name')!.value).toBe('小華');
+    q<HTMLElement>('.pf-ok')!.click();
+    expect(log).toEqual([['importNew', '小華', '🐼']]);
+  });
+
+  it('without a name in the file the editor waits for one', () => {
+    const { ui, log } = withImport();
+    ui.showImport(xiaoming, true, null);
+    q<HTMLElement>('.pf-imp-new')!.click();
+    expect(q<HTMLInputElement>('.pf-name')!.value).toBe('');
+    expect(q<HTMLButtonElement>('.pf-ok')!.disabled).toBe(true);
+    q<HTMLElement>('.pf-cancel')!.click();
+    expect(log).toEqual([]);
+  });
+
+  it('取消 imports nothing', () => {
+    const { ui, log } = withImport();
+    ui.showImport(xiaoming, true, '小華');
+    q<HTMLElement>('.pf-imp-cancel')!.click();
+    expect(visible('.pf-import')).toBe(false);
+    expect(log).toEqual([]);
+  });
+
+  it('➕ 新增 in the picker still creates an empty player after an import editor', () => {
+    const { ui, log } = withImport();
+    ui.showImport(xiaoming, true, '小華');
+    q<HTMLElement>('.pf-imp-new')!.click();
+    q<HTMLElement>('.pf-cancel')!.click();
+    ui.showPicker(named(), false);
+    q<HTMLElement>('.pf-add')!.click();
+    expect(q('.pf-editor h2')!.textContent).toBe('新增玩家');
+    type(q<HTMLInputElement>('.pf-name')!, '阿三');
+    q<HTMLElement>('.pf-ok')!.click();
+    expect(log).toEqual([['create', '阿三', '🐼']]);
+  });
+});
