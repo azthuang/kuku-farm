@@ -31,6 +31,15 @@ export function cleanName(raw: string): string | null {
   return n >= 1 && n <= MAX_NAME ? name : null;
 }
 
+/**
+ * The player name an export put in its file name (`kuku-farm-save-<name>-YYYYMMDD.json`, maybe
+ * with a browser's 「 (1)」), or null for an older export without one or any other file.
+ */
+export function nameFromFile(fileName: string): string | null {
+  const m = /^kuku-farm-save-(.+)-\d{8}\s*(?:\(\d+\))?\.json$/i.exec(fileName);
+  return m ? cleanName(m[1]) : null;
+}
+
 function validProfile(v: unknown): v is Profile {
   if (typeof v !== 'object' || v === null) return false;
   const p = v as Record<string, unknown>;
