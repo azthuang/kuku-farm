@@ -567,3 +567,55 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 .slot-icon { font-size: 64px; line-height: 1; }
 .slot-name { font-size: 15px; font-weight: 800; }
 .slot-cancel { align-self: center; margin-top: 6px; }
+
+/* Players: the 誰要玩？ picker, the editor and the delete dialog (over the settings), the HUD badge */
+.pf-picker { z-index: 30; }
+.pf-editor, .pf-delete { z-index: 31; }
+.pf-cards {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+}
+.pf-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 110px; padding: 8px;
+  border: 0; border-radius: 18px;
+  background: var(--white); color: var(--ink);
+  font: inherit; font-size: 20px; font-weight: 800;
+  box-shadow: 0 4px 0 #d9c9a0;
+  cursor: pointer;
+}
+.pf-card-icon { font-size: 52px; line-height: 1; }
+.pf-card-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-add { background: var(--sun); box-shadow: 0 4px 0 var(--sun-deep); }
+.pf-card:active { transform: translateY(2px); }
+.pf-name { flex: 1; min-width: 0; margin-left: 12px; height: 36px; font: inherit; font-size: 18px; padding: 0 8px; border: 2px solid #e6d8b5; border-radius: 10px; }
+.pf-icons { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.pf-icon {
+  aspect-ratio: 1; border: 3px solid transparent; border-radius: 12px;
+  background: var(--white); font-size: 26px; cursor: pointer; padding: 0;
+}
+.pf-icon.chosen { border-color: var(--sun-deep); background: #fff1c2; }
+.set-btn:disabled { opacity: 0.45; cursor: default; }
+.pf-del-msg { margin: 0; font-size: 18px; font-weight: 800; text-align: center; }
+.pf-del-hint { margin: 0; text-align: center; }
+.pf-del-input { height: 44px; font: inherit; font-size: 18px; padding: 0 10px; border: 2px solid #e6d8b5; border-radius: 12px; }
+.pf-del-ok { background: var(--berry); color: var(--white); box-shadow: 0 4px 0 var(--berry-deep); }
+.set-players { display: flex; flex-direction: column; gap: 8px; }
+.set-players:empty { display: none; }
+.pf-manage-title { margin: 4px 0 0; font-size: 18px; }
+.pf-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-row-btns { display: flex; gap: 6px; flex: 0 0 auto; }
+.pf-edit, .pf-del { width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--cream); font-size: 20px; cursor: pointer; }
+.hud-player {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 36px; padding: 0 10px;
+  border: 0; border-radius: 999px;
+  background: var(--white); color: var(--ink);
+  font: inherit; font-weight: 800; font-size: clamp(14px, 2.4vmin, 18px);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.hud-player[hidden] { display: none; }
+.hud-player-icon { font-size: clamp(18px, 3vmin, 24px); }
+.hud-player-name { max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 380px) { .hud-player-name { display: none; } }
