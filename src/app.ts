@@ -1,10 +1,14 @@
 import Phaser from 'phaser';
 import { CHALLENGE_MULTIPLIER, Game, type AnswerResult, type Question } from './core/game';
-import { createNewState } from './core/state';
+import { createNewState, type GameState } from './core/state';
 import { CROP_BY_ROW, unlockedRows } from './core/levels';
 import { nextPracticeRow } from './core/practice';
 import type { Mode } from './core/mastery';
-import { exportFileName, loadFrom, parseSave, saveTo, serialize, type LoadResult } from './core/save';
+import { SAVE_KEY, exportFileName, loadFrom, parseSave, saveTo, serialize, type LoadResult } from './core/save';
+import {
+  addProfile, editProfile, loadProfiles, removeProfile, saveKeyOf, storeProfiles, type Profiles,
+} from './core/profiles';
+import { createProfileUi } from './ui/profileUi';
 import { systemClock, systemRng } from './core/clock';
 import { chantText, questionText, toChineseNumber } from './core/chant';
 import { createLayout, type Tab } from './ui/layout';
@@ -66,7 +70,12 @@ export function startApp(root: HTMLElement): void {
   const rng = systemRng;
 
   const store = storage();
-  const loaded: LoadResult = store ? loadFrom(store) : { kind: 'empty' };
+  /** The players on this device; null without storage (one farm, no badge, no picker). */
+  let profiles: Profiles | null = store ? loadProfiles(store) : null;
+  /** The player whose farm is loaded; null only right after the playing player was deleted. */
+  let current: string | null = profiles ? profiles.last : null;
+  const keyOf = (id: string | null): string => (id === null ? SAVE_KEY : saveKeyOf(id));
+  const loaded: LoadResult = store ? loadFrom(store, keyOf(current)) : { kind: 'empty' };
   /** A newer version's save is in storage: play on a fresh state but never overwrite it. */
   let readOnly = loaded.kind === 'newer';
   let game = new Game(loaded.kind === 'ok' ? loaded.state : createNewState(clock.now()), clock, rng);
@@ -140,11 +149,12 @@ export function startApp(root: HTMLElement): void {
 
   function save(): void {
     if (readOnly) return;
+    if (profiles && current === null) return; // that player was just deleted: never write it back
     const s = game.state;
     s.lastSeenAt = Math.max(s.lastSeenAt, clock.now());
     try {
       if (!store) throw new Error('no storage');
-      saveTo(store, s);
+      saveTo(store, s, keyOf(current));
     } catch {
       if (!saveFailShown) {
         saveFailShown = true;
@@ -315,11 +325,117 @@ export function startApp(root: HTMLElement): void {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = exportFileName(new Date(clock.now()));
+    link.download = exportFileName(new Date(clock.now()), currentProfile()?.name);
     document.body.appendChild(link);
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), EXPORT_URL_TTL_MS);
+  });
+
+  /**
+   * Puts another farm in play (an imported file, another player): ends any round and stops its
+   * answer sequence, speech and ranch sheets, then redraws everything from the new state.
+   */
+  function replaceGame(state: GameState): void {
+    if (game.mode !== null) game.endRound();
+    epoch++;
+    busy = false;
+    speech.cancel();
+    ranchUi.closeShop(); // the shop may be open on the old ranch's species
+    decorUi.close();
+    game = new Game(state, clock, rng);
+    speech.setEnabled(game.state.settings.speech);
+    sfx.setEnabled(game.state.settings.sound);
+    settle(game.state.ranch, clock.now());
+    syncGlow();
+    scene.render(game);
+    renderRanch();
+    ranchUi.update(game.state);
+    goPage(START_PAGE, false); // a different ranch: start at the coop again, not the overview
+    layout.updateHud(game.state);
+    showIdle();
+  }
+
+  // ---------------------------------------------------------------- players
+
+  const profileUi = createProfileUi(root, layout.players);
+
+  function currentProfile() {
+    return profiles?.list.find(x => x.id === current) ?? null;
+  }
+
+  function storePlayers(): void {
+    if (!store || !profiles) return;
+    try { storeProfiles(store, profiles); } catch { /* the list is rebuilt from defaults if lost */ }
+  }
+
+  function syncPlayers(): void {
+    layout.setPlayer(currentProfile());
+    if (profiles) profileUi.renderManage(profiles);
+  }
+
+  /** Saves the current farm (unless told not to), then loads player id's farm, on the field page. */
+  function switchTo(id: string, saveFirst = true): void {
+    if (!store || !profiles) return;
+    if (saveFirst) save();
+    const r = loadFrom(store, saveKeyOf(id));
+    // Before the swap: anything below that saves (the tab change does) writes to the new player.
+    current = id;
+    readOnly = r.kind === 'newer';
+    replaceGame(r.kind === 'ok' ? r.state : createNewState(clock.now()));
+    layout.setTab('field');
+    profiles = { ...profiles, last: id };
+    storePlayers();
+    syncPlayers();
+    save();
+    if (readOnly) layout.toast('請重新整理頁面', 6000);
+  }
+
+  profileUi.onPick(id => {
+    if (id !== current) switchTo(id);
+    profileUi.hidePicker();
+  });
+  profileUi.onResume(() => profileUi.hidePicker());
+  layout.onPlayerTap(() => {
+    if (!profiles) return;
+    layout.closeSettings();
+    profileUi.showPicker(profiles, true);
+  });
+  profileUi.onCreate((name, icon) => {
+    if (!profiles) return;
+    const r = addProfile(profiles, name, icon);
+    if (!r) return;
+    profiles = r.profiles;
+    storePlayers();
+    switchTo(r.id);
+    profileUi.hidePicker();
+  });
+  profileUi.onEdit((id, name, icon) => {
+    if (!profiles) return;
+    const next = editProfile(profiles, id, name, icon);
+    if (!next) return;
+    profiles = next;
+    storePlayers();
+    syncPlayers();
+  });
+  profileUi.onDelete(id => {
+    if (!store || !profiles) return;
+    const next = removeProfile(profiles, id);
+    if (!next) return;
+    profiles = next;
+    if (id === current) current = null; // before anything can save: that farm must not come back
+    storePlayers();
+    for (const k of [saveKeyOf(id), `${saveKeyOf(id)}-corrupt`]) {
+      try { store.removeItem(k); } catch { /* ignore */ }
+    }
+    syncPlayers();
+    if (current === null) {
+      switchTo(profiles.list[0].id, false);
+      if (profiles.list.length >= 2) {
+        layout.closeSettings();
+        profileUi.showPicker(profiles, false);
+      }
+    }
   });
 
   layout.onImport(text => {
@@ -328,25 +444,9 @@ export function startApp(root: HTMLElement): void {
       layout.toast('檔案無法讀取');
       return;
     }
-    if (game.mode !== null) game.endRound();
-    epoch++;
-    busy = false;
-    speech.cancel();
-    ranchUi.closeShop(); // the shop may be open on the old ranch's species
-    decorUi.close();
-    game = new Game(r.state, clock, rng);
+    replaceGame(r.state);
     readOnly = false; // importing is an explicit choice to use this progress: saving resumes
-    speech.setEnabled(game.state.settings.speech);
-    sfx.setEnabled(game.state.settings.sound);
-    settle(game.state.ranch, clock.now());
     save();
-    syncGlow();
-    scene.render(game);
-    renderRanch();
-    ranchUi.update(game.state);
-    goPage(START_PAGE, false); // a different ranch: start at the coop again, not the overview
-    layout.updateHud(game.state);
-    showIdle();
     // The file's ranch was unreadable: the field progress came in, the ranch starts over.
     layout.toast(r.ranchReset ? '✅ 已匯入存檔（牧場重新開始）' : '✅ 已匯入存檔');
   });
@@ -794,7 +894,11 @@ export function startApp(root: HTMLElement): void {
   });
   window.addEventListener('pagehide', save);
 
+  storePlayers(); // a first run writes the list with 「我的農場」
+  syncPlayers();
   save();
   showIdle();
   if (readOnly) layout.toast('請重新整理頁面', 6000); // shown at boot: keep it up long enough to be seen
+  // a shared device: ask who is playing (only when there is someone to choose between)
+  if (profiles && profiles.list.length >= 2) profileUi.showPicker(profiles, false);
 }
