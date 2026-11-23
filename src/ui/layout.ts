@@ -96,7 +96,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
             <p>[LPC] Farm：bluecarrot16、Wolthera van Hövell tot Westerflier (TheraHedwig)、Ivan Voirol（CC-BY 4.0）
               <span class="set-url">opengameart.org/content/lpc-farm</span></p>
             <h3>🐶 狗、貓、稻草人、水井、南瓜堆、白鴿、錦鯉、兔子與驚喜物件</h3>
-            <p>Azt 以 Google Antigravity（Gemini 圖像模型）生成，再整理成像素圖。</p>
+            <p>以 Google Antigravity 生成。</p>
             <h3>🌾 作物與小圖示</h3>
             <p>裝置內建的 emoji 與程式繪製的圖形。</p>
             <p class="set-note">每個素材包的完整作者名單見
