@@ -93,12 +93,12 @@ describe('updater', () => {
     expect(applied).toEqual([]);
   });
 
-  it('asks at most once every 10 minutes', async () => {
+  it('asks at most once a minute', async () => {
     const { u, log, advance } = setup(() => ({ ok: true, text: html('index-OLD111') }));
     await u.check();
-    advance(9 * 60_000);
+    advance(59_000);
     expect(await u.check()).toBe('skip');
-    advance(60_000);
+    advance(1_000);
     expect(await u.check()).toBe('same');
     expect(log).toHaveLength(2);
   });
@@ -179,7 +179,7 @@ describe('updater', () => {
     });
     expect(await u.check()).toBe('unsafe');
     safe = true;
-    t += 10 * 60_000;
+    t += 60_000;
     expect(await u.check()).toBe('applied');
     expect(applied).toHaveLength(1);
   });

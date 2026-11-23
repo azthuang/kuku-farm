@@ -9,8 +9,11 @@
 
 /** The address mark of a reload onto a new version (removed again on load). */
 export const UPDATE_PARAM = 'u';
-/** At most one question to the site per this many ms (GitHub Pages caches the page 10 minutes). */
-export const CHECK_GAP_MS = 10 * 60_000;
+/**
+ * At most one question to the site per this many ms. Each asks at a fresh address, so no cache
+ * answers it; the gap only keeps a child flipping between apps from asking again and again.
+ */
+export const CHECK_GAP_MS = 60_000;
 /** The page is small: give up on it quickly. */
 export const CHECK_TIMEOUT_MS = 5_000;
 /** The new script is large (about 1.5 MB): give a slow connection longer. */

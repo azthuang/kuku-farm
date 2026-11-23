@@ -11,6 +11,7 @@ import {
 } from './core/profiles';
 import { backupKeyOf, readBackup, writeBackup } from './core/importBackup';
 import { createTabLock } from './core/tabLock';
+import { createUpdater, updatedFrom } from './core/updater';
 import { createProfileUi } from './ui/profileUi';
 import { showTabCover } from './ui/tabCover';
 import { systemClock, systemRng } from './core/clock';
@@ -72,6 +73,12 @@ function storage(): Storage | null {
 export function startApp(root: HTMLElement): void {
   const clock = systemClock;
   const rng = systemRng;
+
+  // A reload onto a new version carries a mark in the address: note it and take it out again.
+  const { updated, clean } = updatedFrom(location.href);
+  if (updated) {
+    try { history.replaceState(history.state, '', clean); } catch { /* the mark just stays */ }
+  }
 
   const store = storage();
   /** The players on this device; null without storage (one farm, no badge, no picker). */
@@ -990,9 +997,34 @@ export function startApp(root: HTMLElement): void {
     save();
   });
 
+  // ---------------------------------------------------------------- updates
+
+  // Only the built game has an entry script to compare (not the dev server, not tests).
+  const entry = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]');
+  const updater = import.meta.env.PROD && entry
+    ? createUpdater({
+      fetch: (input, init) => window.fetch(input, init),
+      now: () => Date.now(),
+      online: () => navigator.onLine !== false,
+      // Only between rounds on the field, with no dialog open: the reload lands there too.
+      isSafe: () => game.mode === null && !busy && tab === 'field'
+        && !root.querySelector('.settings:not([hidden])') && (tabLock?.owns() ?? true),
+      currentJs: entry.src,
+      pageUrl: () => location.href,
+      apply: url => {
+        save();
+        location.replace(url);
+      },
+    })
+    : null;
+  const checkForUpdate = (): void => { void updater?.check(); };
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') save();
-    else sfx.unlock(); // may be refused without a gesture; the next tap's resumeSfx retries
+    else {
+      sfx.unlock(); // may be refused without a gesture; the next tap's resumeSfx retries
+      checkForUpdate(); // a tab left open for days: back on screen is when to look for a new version
+    }
     syncRanchTick();
   });
   window.addEventListener('pagehide', save);
@@ -1002,6 +1034,10 @@ export function startApp(root: HTMLElement): void {
   save();
   showIdle();
   if (readOnly) layout.toast('請重新整理頁面', 6000); // shown at boot: keep it up long enough to be seen
-  // a shared device: ask who is playing (only when there is someone to choose between)
-  if (profiles && profiles.list.length >= 2) profileUi.showPicker(profiles, false);
+  if (updated) layout.toast('✨ 遊戲更新好了');
+  // a shared device: ask who is playing (only when there is someone to choose between); not after
+  // an update reload, which comes back to the same player
+  else if (profiles && profiles.list.length >= 2) profileUi.showPicker(profiles, false);
+  // No check here: one now would hold off the check when the child comes back to the game. A page
+  // that came from a cache (up to 10 minutes old) is updated on that next return.
 }
