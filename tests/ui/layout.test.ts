@@ -53,3 +53,22 @@ describe('layout import undo', () => {
     expect(btn.hidden).toBe(true);
   });
 });
+
+describe('layout ranch holiday', () => {
+  it('a settings switch shows whether the ranch is on holiday and reports changes', () => {
+    const { root, layout } = setup();
+    const box = root.querySelector<HTMLInputElement>('.set-holiday')!;
+    expect(root.querySelector('.settings-card')!.contains(box)).toBe(true);
+    expect(box.checked).toBe(false);
+    const got: boolean[] = [];
+    layout.onHolidayToggle(on => { got.push(on); });
+    box.checked = true;
+    box.dispatchEvent(new Event('change'));
+    expect(got).toEqual([true]);
+    const s = createNewState(0);
+    s.ranch.paused = true;
+    box.checked = false;
+    layout.updateHud(s);
+    expect(box.checked).toBe(true);
+  });
+});

@@ -68,6 +68,11 @@ export interface RanchState {
   products: Record<ProductId, number>;
   settledAt: number;
   nextId: number;
+  /**
+   * On holiday (set from the settings before a trip): time on the ranch stands still, so the
+   * animals are just as they were when it ends. Absent when off.
+   */
+  paused?: true;
 }
 
 export type CareResult =
@@ -137,6 +142,7 @@ export function settle(r: RanchState, now: number): void {
   let remaining = now - r.settledAt;
   if (remaining <= 0) return; // clock went back or no time passed: keep settledAt
   r.settledAt = now;
+  if (r.paused) return; // on holiday: no hunger, mood, sickness, poop or products
   remaining = Math.min(remaining, MAX_SETTLE_MS);
   if (r.animals.length === 0) return;
   while (remaining > 0) {
@@ -146,6 +152,17 @@ export function settle(r: RanchState, now: number): void {
     }
     remaining -= dt;
   }
+}
+
+export function isPaused(r: RanchState): boolean {
+  return r.paused === true;
+}
+
+/** Starts or ends a holiday: the time until `now` still counts, the holiday itself never does. */
+export function setPaused(r: RanchState, on: boolean, now: number): void {
+  settle(r, now);
+  if (on) r.paused = true;
+  else delete r.paused;
 }
 
 function withAnimal(

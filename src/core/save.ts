@@ -152,7 +152,9 @@ function validateRanch(data: unknown, version: number): RanchState {
 
   const settledAt = finite(o.settledAt);
   if (!isIntIn(o.nextId, 1, Number.MAX_SAFE_INTEGER)) fail();
-  return { houses, animals, pets, decor: parseDecor(o.decor), supplies, products, settledAt, nextId: o.nextId };
+  const ranch: RanchState = { houses, animals, pets, decor: parseDecor(o.decor), supplies, products, settledAt, nextId: o.nextId };
+  if (o.paused === true) ranch.paused = true;
+  return ranch;
 }
 
 /**

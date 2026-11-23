@@ -27,6 +27,17 @@ describe('save', () => {
     expect(parseSave(JSON.stringify(noVersion)).ok).toBe(false);
   });
 
+  it('keeps a ranch on holiday, and reads anything but true as not on holiday', () => {
+    const s = createNewState(5);
+    s.ranch.paused = true;
+    expect(parseSave(serialize(s))).toEqual({ ok: true, state: s });
+    const odd = JSON.parse(serialize(s));
+    odd.ranch.paused = 'yes';
+    const r = parseSave(JSON.stringify(odd));
+    expect(r.ok && r.state.ranch.paused).toBeFalsy();
+    expect(r.ok && 'paused' in r.state.ranch).toBe(false);
+  });
+
   it('round trips a populated state and drops unknown fields', () => {
     const s = createNewState(5);
     s.unlocked = 3;

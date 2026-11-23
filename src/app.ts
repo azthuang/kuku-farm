@@ -24,7 +24,7 @@ import { FieldScene, VIEW } from './scenes/FieldScene';
 import { RanchScene, type RanchView } from './scenes/RanchScene';
 import { ASSET_RES } from './scenes/assets';
 import {
-  brush, cleanPoop, collect, feed, giveMedicine, giveSnack, giveTreat, pageStatus, pet, settle, type CareResult,
+  brush, cleanPoop, collect, feed, giveMedicine, giveSnack, giveTreat, pageStatus, pet, setPaused, settle, type CareResult,
 } from './core/ranch';
 import { buy, isLocked, lockHint, nextName, type ShopItemId } from './core/shop';
 import {
@@ -975,6 +975,17 @@ export function startApp(root: HTMLElement): void {
       sfx.play('cluck');
     }
     save();
+  });
+
+  // A holiday stops time on this player's ranch (before a trip); the animals still run about.
+  layout.onHolidayToggle(on => {
+    setPaused(game.state.ranch, on, clock.now());
+    ranchChanged();
+    layout.toast(on ? '🏖️ 牧場放假中，回來記得關掉' : '🐔 牧場開工囉！', 2500);
+  });
+  ranchUi.onHolidayTap(() => {
+    layout.toast('🏖️ 動物在放假：不會餓、不會大便，也不會生產喔', 3000);
+    sfx.play('collect'); // a gentle cue, as for the other hints
   });
 
   layout.onTab(t => {

@@ -43,6 +43,8 @@ export interface RanchUi {
   setFollow(label: string | null): void;
   /** The ✕ of the follow view. */
   onFollowClose(cb: () => void): void;
+  /** The 🏖️ 牧場放假中 sign (shown while `state.ranch.paused`) was tapped. */
+  onHolidayTap(cb: () => void): void;
 }
 
 /**
@@ -158,6 +160,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   let overviewCb: () => void = () => {};
   let goFieldCb: () => void = () => {};
   let followCloseCb: () => void = () => {};
+  let holidayCb: () => void = () => {};
   let followLabel: string | null = null;
   let tool: Tool = 'hand';
   let state: GameState | null = null;
@@ -241,7 +244,10 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
   prev.addEventListener('click', () => { if (page > 0) pageCb(page - 1); });
   next.addEventListener('click', () => { if (page < LOT_COUNT - 1) pageCb(page + 1); });
   mapBtn.addEventListener('click', () => overviewCb());
-  nav?.replaceChildren(title, mapBtn, closeFollow, prev, next, dotsEl);
+  const holiday = button('rn-holiday', '🏖️ 牧場放假中');
+  holiday.hidden = true;
+  holiday.addEventListener('click', () => holidayCb());
+  nav?.replaceChildren(title, holiday, mapBtn, closeFollow, prev, next, dotsEl);
 
   function renderNav(): void {
     const sp = pageSpecies();
@@ -472,6 +478,7 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
     state = s;
     renderTools(s);
     if (!shop.hidden) renderShop(s);
+    holiday.hidden = s.ranch.paused !== true;
   }
 
   function openShop(focus?: ShopItemId): void {
@@ -544,5 +551,6 @@ export function createRanchUi(root: HTMLElement, nav?: HTMLElement): RanchUi {
       renderNav();
     },
     onFollowClose: cb => { followCloseCb = cb; },
+    onHolidayTap: cb => { holidayCb = cb; },
   };
 }

@@ -28,6 +28,8 @@ export interface Layout {
   onUndo(cb: () => void): void;
   onSpeechToggle(cb: (on: boolean) => void): void;
   onSoundToggle(cb: (on: boolean) => void): void;
+  /** The 🏖️ 牧場放假 switch in the settings (it shows `state.ranch.paused`). */
+  onHolidayToggle(cb: (on: boolean) => void): void;
   /** The settings slot for the 「👥 玩家」 list (filled by the profile UI). */
   players: HTMLElement;
   /** Shows the player badge at the top left; null hides it (no players without storage). */
@@ -46,6 +48,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   let undoCb: () => void = () => {};
   let speechCb: (on: boolean) => void = () => {};
   let soundCb: (on: boolean) => void = () => {};
+  let holidayCb: (on: boolean) => void = () => {};
   let playerCb: () => void = () => {};
 
   root.innerHTML = `
@@ -72,6 +75,8 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
           <h2>⚙️ 設定</h2>
           <label class="set-row"><span>🔊 語音</span><input type="checkbox" class="set-speech" /></label>
           <label class="set-row"><span>🔈 音效</span><input type="checkbox" class="set-sound" /></label>
+          <label class="set-row"><span>🏖️ 牧場放假</span><input type="checkbox" class="set-holiday" /></label>
+          <p class="set-hint">出遠門時打開：動物不會餓、不會大便，也不會生產。回來記得關掉。</p>
           <div class="set-players"></div>
           <button type="button" class="set-btn set-export">💾 匯出存檔</button>
           <label class="set-btn set-import">📂 匯入存檔
@@ -119,6 +124,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   const settings = q<HTMLElement>('.settings');
   const speech = q<HTMLInputElement>('.set-speech');
   const sound = q<HTMLInputElement>('.set-sound');
+  const holiday = q<HTMLInputElement>('.set-holiday');
   const credits = q<HTMLElement>('.set-credits');
   const file = q<HTMLInputElement>('.set-file');
   const players = q<HTMLElement>('.set-players');
@@ -164,6 +170,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
     levelEl.textContent = newest === 1 ? '教學' : `${newest} 級`;
     speech.checked = st.settings.speech;
     sound.checked = st.settings.sound;
+    holiday.checked = st.ranch.paused === true;
   }
 
   function bumpCrop(id: CropId | ProductId): void {
@@ -200,6 +207,7 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
   playerBtn.addEventListener('click', () => playerCb());
   speech.addEventListener('change', () => speechCb(speech.checked));
   sound.addEventListener('change', () => soundCb(sound.checked));
+  holiday.addEventListener('change', () => holidayCb(holiday.checked));
   q<HTMLElement>('.set-export').addEventListener('click', () => exportCb());
   file.addEventListener('change', async () => {
     const f = file.files?.[0];
@@ -247,5 +255,6 @@ export function createLayout(root: HTMLElement, s: GameState): Layout {
     onUndo: cb => { undoCb = cb; },
     onSpeechToggle: cb => { speechCb = cb; },
     onSoundToggle: cb => { soundCb = cb; },
+    onHolidayToggle: cb => { holidayCb = cb; },
   };
 }

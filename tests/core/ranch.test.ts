@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FEED_FULL_AT, HUNGRY_SHOW_AT, createRanch, settle, feed, pet, brush, giveTreat, giveMedicine, cleanPoop, collect,
-  giveSnack, pageStatus, type RanchState, type Animal,
+  giveSnack, pageStatus, setPaused, isPaused, type RanchState, type Animal,
 } from '../../src/core/ranch';
 
 const H = 3_600_000;
@@ -17,6 +17,63 @@ function mk(over: Partial<Animal> = {}): RanchState {
   });
   return r;
 }
+
+describe('holiday (setPaused)', () => {
+  it('is off on a new ranch', () => {
+    expect(isPaused(createRanch(T0))).toBe(false);
+  });
+
+  it('stops time on the ranch: nothing changes however long it lasts', () => {
+    const r = mk({ satiety: 40, mood: 50 });
+    r.houses[0].poop = 2;
+    setPaused(r, true, T0);
+    expect(isPaused(r)).toBe(true);
+    settle(r, T0 + 10 * 24 * H);
+    expect(r.animals[0]).toMatchObject({ satiety: 40, mood: 50, waiting: 0, sick: false, neglectMs: 0, produceMs: 0, poopMs: 0 });
+    expect(r.houses[0].poop).toBe(2);
+  });
+
+  it('counts the time before the holiday began', () => {
+    const r = mk();
+    setPaused(r, true, T0 + 3 * H);
+    expect(r.houses[0].poop).toBe(1);
+    settle(r, T0 + 100 * H);
+    expect(r.houses[0].poop).toBe(1);
+  });
+
+  it('picks up from the moment it ends, not from when it began', () => {
+    const r = mk();
+    setPaused(r, true, T0);
+    settle(r, T0 + 5 * 24 * H); // a look at the ranch mid-holiday
+    setPaused(r, false, T0 + 7 * 24 * H);
+    expect(isPaused(r)).toBe(false);
+    expect(r.animals[0].satiety).toBe(100);
+    settle(r, T0 + 7 * 24 * H + 3 * H);
+    expect(r.houses[0].poop).toBe(1);
+    expect(r.animals[0].satiety).toBeCloseTo(76);
+  });
+
+  it('a hungry animal in a dirty house never falls sick on holiday', () => {
+    const r = mk({ satiety: 0 });
+    r.houses[0].poop = 6;
+    setPaused(r, true, T0);
+    settle(r, T0 + 30 * 24 * H);
+    expect(r.animals[0].sick).toBe(false);
+  });
+
+  it('care still works on holiday', () => {
+    const r = mk({ satiety: 0, waiting: 2 });
+    r.supplies.feed = 1;
+    r.houses[0].poop = 2;
+    setPaused(r, true, T0);
+    expect(feed(r, 'a1', T0 + H).ok).toBe(true);
+    expect(r.animals[0].satiety).toBe(50);
+    expect(cleanPoop(r, 'h1').ok).toBe(true);
+    expect(r.houses[0].poop).toBe(1);
+    expect(collect(r, 'a1')).toBe(2);
+    expect(pet(r, 'a1', T0 + 2 * H).ok).toBe(true);
+  });
+});
 
 describe('settle', () => {
   it('hunger, mood and poop over time', () => {

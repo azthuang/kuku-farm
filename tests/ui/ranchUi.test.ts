@@ -557,3 +557,23 @@ describe('ranch shop', () => {
     });
   });
 });
+
+describe('ranch holiday sign', () => {
+  it('shows 牧場放假中 over the ranch only while on holiday, and reports taps', () => {
+    const s = st();
+    const { nav, ui } = setup(s);
+    const sign = nav.querySelector<HTMLButtonElement>('.rn-holiday')!;
+    expect(sign.hidden).toBe(true);
+    s.ranch.paused = true;
+    ui.update(s);
+    expect(sign.hidden).toBe(false);
+    expect(sign.textContent).toBe('🏖️ 牧場放假中');
+    let taps = 0;
+    ui.onHolidayTap(() => { taps++; });
+    sign.click();
+    expect(taps).toBe(1);
+    delete s.ranch.paused;
+    ui.update(s);
+    expect(sign.hidden).toBe(true);
+  });
+});
