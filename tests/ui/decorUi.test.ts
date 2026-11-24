@@ -115,7 +115,9 @@ describe('decoration picker', () => {
     const ui = setup();
     const p = ui.askSlot(['ufo', 'rocket']);
     vi.advanceTimersByTime(400);
-    expect(root.querySelector('.slot-ask .shop-title')!.textContent).toBe('要換掉哪一個？');
+    // the one taken down is stored, never lost: the wording must not sound like it goes away
+    expect(root.querySelector('.slot-ask .shop-title')!.textContent).toBe('📦 要把哪一個收起來？');
+    expect(root.querySelector('.slot-ask .slot-note')!.textContent).toBe('收起來的還是你的，在 🛒 商店按「擺出來」就能再拿出來');
     expect(root.querySelector('[data-slot="0"]')!.textContent).toContain('🛸');
     expect(root.querySelector('[data-slot="1"]')!.textContent).toContain('🚀');
     root.querySelector<HTMLElement>('[data-slot="1"]')!.click();

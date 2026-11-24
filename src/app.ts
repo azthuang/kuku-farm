@@ -37,7 +37,7 @@ import { createSfx, voiceOf, type SfxName } from './ui/sfx';
 const petVoice = (kind: PetKind): SfxName => (kind === 'dog' ? 'woof' : 'meow');
 import { createRanchUi, lockText, type Tool } from './ui/ranchUi';
 import {
-  buySpecial, hasTrick, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
+  SPECIALS, buySpecial, hasTrick, placeDecor, showSpecial, spotOpen, storeDecor, type SpecialId, type SpotId,
 } from './core/decor';
 import { createDecorUi, decorTapOpens } from './ui/decorUi';
 import { careFeedback, TOAST_PET_EATS } from './ui/ranchFeedback';
@@ -949,6 +949,8 @@ export function startApp(root: HTMLElement): void {
       const slot = a && b ? await decorUi.askSlot([a, b]) : null;
       if (slot === null) return; // 取消: it waits in storage (擺出來 later)
       res = showSpecial(game.state, id, slot);
+      const away = slot === 0 ? a : b;
+      if (res.ok && away) layout.toast(`📦 ${SPECIALS[away].name}收起來了，商店可以再擺出來`, 3000);
     }
     if (!res.ok) return;
     ranchChanged();

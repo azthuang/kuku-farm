@@ -37,7 +37,7 @@ export interface DecorUi {
   isOpen(): boolean;
   onPick(cb: (spot: SpotId, id: DecorId) => void): void;
   onStore(cb: (spot: SpotId) => void): void;
-  /** 「要換掉哪一個？」 between the two specials on the map: the slot, or null for 取消. */
+  /** 「📦 要把哪一個收起來？」 between the two specials on the map: the slot, or null for 取消. */
   askSlot(shown: [SpecialId, SpecialId]): Promise<0 | 1 | null>;
 }
 
@@ -78,7 +78,8 @@ export function createDecorUi(root: HTMLElement): DecorUi {
 
   const pick = sheet('decor-pick');
   const ask = sheet('slot-ask');
-  ask.title.textContent = '要換掉哪一個？';
+  // The one taken down goes to storage: say so, or a child thinks it is thrown away.
+  ask.title.textContent = '📦 要把哪一個收起來？';
   root.append(pick.box, ask.box);
 
   const ready = (): boolean => Date.now() >= ignoreUntil;
@@ -193,7 +194,8 @@ export function createDecorUi(root: HTMLElement): DecorUi {
       });
       const cancel = button('buy slot-cancel', '取消');
       cancel.addEventListener('click', () => finishAsk(null));
-      ask.list.replaceChildren(choices, cancel);
+      const note = el('p', 'slot-note', '收起來的還是你的，在 🛒 商店按「擺出來」就能再拿出來');
+      ask.list.replaceChildren(choices, note, cancel);
       ignoreUntil = Date.now() + GHOST_CLICK_MS;
       ask.box.hidden = false;
       return new Promise(resolve => { answer = resolve; });

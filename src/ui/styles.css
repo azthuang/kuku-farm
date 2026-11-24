@@ -583,6 +583,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 .slot-icon { font-size: 64px; line-height: 1; }
 .slot-name { font-size: 15px; font-weight: 800; }
 .slot-cancel { align-self: center; margin-top: 6px; }
+.slot-note { margin: 10px 4px 0; text-align: center; font-size: 14px; opacity: 0.8; }
 
 /* Players: the 誰要玩？ picker, the editor and the delete dialog (over the settings), the HUD badge */
 .pf-picker { z-index: 30; }
