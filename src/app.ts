@@ -11,7 +11,7 @@ import {
 } from './core/profiles';
 import { backupKeyOf, readBackup, writeBackup } from './core/importBackup';
 import { createTabLock } from './core/tabLock';
-import { createUpdater, updatedFrom } from './core/updater';
+import { createUpdater, takeResume, updatedFrom, writeResume } from './core/updater';
 import { createProfileUi } from './ui/profileUi';
 import { showTabCover } from './ui/tabCover';
 import { systemClock, systemRng } from './core/clock';
@@ -1019,18 +1019,24 @@ export function startApp(root: HTMLElement): void {
       fetch: (input, init) => window.fetch(input, init),
       now: () => Date.now(),
       online: () => navigator.onLine !== false,
-      // Only between rounds on the field, with no dialog open: the reload lands there too.
-      isSafe: () => game.mode === null && !busy && tab === 'field'
-        && !root.querySelector('.settings:not([hidden])') && (tabLock?.owns() ?? true),
+      // Only between rounds with no dialog or sheet open (the player picker may be: it comes
+      // back after the reload); the reload returns to the same tab and ranch page.
+      isSafe: () => game.mode === null && !busy
+        && !root.querySelector('.settings:not([hidden]):not(.pf-picker), .shop:not([hidden])')
+        && (tabLock?.owns() ?? true),
       currentJs: entry.src,
       pageUrl: () => location.href,
       apply: url => {
+        writeResume(sessionStore(), { tab, page: ranchPage, pick: profileUi.pickerOpen() });
         save();
         location.replace(url);
       },
     })
     : null;
   const checkForUpdate = (): void => { void updater?.check(); };
+  function sessionStore(): Storage | null {
+    try { return window.sessionStorage; } catch { return null; }
+  }
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') save();
@@ -1047,10 +1053,16 @@ export function startApp(root: HTMLElement): void {
   save();
   showIdle();
   if (readOnly) layout.toast('請重新整理頁面', 6000); // shown at boot: keep it up long enough to be seen
+  // An update reload comes back to the same player, tab and ranch page.
+  const resume = updated ? takeResume(sessionStore()) : null;
+  if (resume?.tab === 'ranch') {
+    layout.setTab('ranch');
+    goPage(resume.page, false);
+  }
   if (updated) layout.toast('✨ 遊戲更新好了');
-  // a shared device: ask who is playing (only when there is someone to choose between); not after
-  // an update reload, which comes back to the same player
-  else if (profiles && profiles.list.length >= 2) profileUi.showPicker(profiles, false);
-  // No check here: one now would hold off the check when the child comes back to the game. A page
-  // that came from a cache (up to 10 minutes old) is updated on that next return.
+  // a shared device: ask who is playing (only when there is someone to choose between); after an
+  // update reload only if the picker was open when it began
+  if (profiles && profiles.list.length >= 2 && (!updated || resume?.pick)) profileUi.showPicker(profiles, false);
+  // A reopened browser may restore this page from its cache (up to 10 minutes old): look now too.
+  checkForUpdate();
 }

@@ -1,6 +1,7 @@
 /**
  * Moves an open game onto a new deploy. A tab left open for days keeps running the code it loaded,
- * so when the game comes back on screen this asks the site for its page (past every cache) and
+ * and a reopened browser may restore an old page from its cache, so when the game opens and each
+ * time it comes back on screen this asks the site for its page (past every cache) and
  * compares the entry script's name, which changes with every build. If it differs, the new page,
  * script and stylesheet are downloaded first and only then does the game reload onto them: a
  * network that drops halfway leaves the old version playing instead of a browser error page.
@@ -43,6 +44,37 @@ function markedUrl(pageUrl: string, id: string): string {
   const url = new URL(updatedFrom(pageUrl).clean);
   const mark = `${UPDATE_PARAM}=${encodeURIComponent(id)}`;
   return `${url.origin}${url.pathname}${url.search ? `${url.search}&${mark}` : `?${mark}`}${url.hash}`;
+}
+
+/** Where the game was when an update reload began (kept in sessionStorage for the reload). */
+export const RESUME_KEY = 'kuku-farm-resume';
+export interface Resume {
+  tab: 'field' | 'ranch';
+  /** The ranch page shown (0 the garden, 1 ... 5 the pens). */
+  page: number;
+  /** The 誰要玩？ picker was open: ask again after the reload. */
+  pick: boolean;
+}
+type SessionStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+export function writeResume(store: SessionStore | null, r: Resume): void {
+  try { store?.setItem(RESUME_KEY, JSON.stringify(r)); } catch { /* the reload starts on the field */ }
+}
+
+/** The place written before an update reload, removed as it is read; null when none or unreadable. */
+export function takeResume(store: SessionStore | null): Resume | null {
+  try {
+    const raw = store?.getItem(RESUME_KEY) ?? null;
+    if (raw === null) return null;
+    store?.removeItem(RESUME_KEY);
+    const o = JSON.parse(raw) as Partial<Resume>;
+    if (o.tab !== 'field' && o.tab !== 'ranch') return null;
+    if (!Number.isInteger(o.page) || (o.page as number) < 0) return null;
+    if (typeof o.pick !== 'boolean') return null;
+    return { tab: o.tab, page: o.page as number, pick: o.pick };
+  } catch {
+    return null;
+  }
 }
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;

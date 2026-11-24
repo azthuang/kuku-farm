@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { UPDATE_PARAM, createUpdater, entryOf, updatedFrom } from '../../src/core/updater';
+import { RESUME_KEY, UPDATE_PARAM, createUpdater, entryOf, takeResume, updatedFrom, writeResume } from '../../src/core/updater';
 
 const PAGE = 'https://example.org/kuku-farm/';
 const OLD_JS = 'https://example.org/kuku-farm/assets/index-OLD111.js';
@@ -182,5 +182,44 @@ describe('updater', () => {
     t += 60_000;
     expect(await u.check()).toBe('applied');
     expect(applied).toHaveLength(1);
+  });
+});
+
+describe('where the game was before an update reload', () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return {
+      m,
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => { m.set(k, v); },
+      removeItem: (k: string) => { m.delete(k); },
+    };
+  };
+
+  it('is written before the reload and taken (once) after it', () => {
+    const s = mem();
+    writeResume(s, { tab: 'ranch', page: 3, pick: false });
+    expect(takeResume(s)).toEqual({ tab: 'ranch', page: 3, pick: false });
+    expect(takeResume(s)).toBeNull();
+    expect(s.m.has(RESUME_KEY)).toBe(false);
+  });
+
+  it('remembers that the player picker was open', () => {
+    const s = mem();
+    writeResume(s, { tab: 'field', page: 1, pick: true });
+    expect(takeResume(s)).toEqual({ tab: 'field', page: 1, pick: true });
+  });
+
+  it('reads anything broken as nothing, and never throws', () => {
+    const s = mem();
+    for (const bad of ['not json', '{}', '{"tab":"moon","page":1,"pick":false}', '{"tab":"ranch","page":-1,"pick":false}',
+      '{"tab":"ranch","page":1.5,"pick":false}', '{"tab":"ranch","page":1,"pick":"yes"}']) {
+      s.setItem(RESUME_KEY, bad);
+      expect(takeResume(s)).toBeNull();
+    }
+    const broken = { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); }, removeItem: () => { throw new Error('no'); } };
+    expect(() => writeResume(broken, { tab: 'field', page: 1, pick: false })).not.toThrow();
+    expect(takeResume(broken)).toBeNull();
+    expect(takeResume(null)).toBeNull();
   });
 });
